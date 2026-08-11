@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 
 PRESETS_PATH = Path(__file__).resolve().parent / "data" / "presets.json"
 
-# castorGUI/ 和 castor/ 是 src/ 底下的兩個平行套件，這個套件本身不是用
-# pip 安裝的（pyproject.toml 沒有 build-system），所以要手動把 src/ 塞進
-# sys.path，"from castor import schema" 才找得到人。
+# castorGUI/ and castor/ are two sibling packages under src/; this package itself isn't
+# pip-installed (pyproject.toml has no build-system), so src/ has to be pushed onto
+# sys.path manually before "from castor import schema" can find it.
 _SRC_DIR = Path(__file__).resolve().parent.parent
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
@@ -19,10 +19,10 @@ from pydantic import ValidationError  # noqa: E402
 
 class AppState:
     """
-    集中管理 GUI 表單資料。所有欄位都用 dotted path（例如
-    "instrument.telescope.focal_length"）存取，直接對應
-    castor.schema.ObservationRequest 的巢狀結構，也跟 data/presets.json
-    的 key 格式一致，之後接計算引擎或 LOAD/SAVE JSON 都方便。
+    Centralized store for the GUI form data. Every field is accessed via a dotted path
+    (e.g. "instrument.telescope.focal_length"), which maps directly onto the nested
+    structure of castor.schema.ObservationRequest and matches the key format used in
+    data/presets.json, making it easy to wire up to the calculation engine or LOAD/SAVE JSON.
     """
 
     def __init__(self):
@@ -54,12 +54,12 @@ class AppState:
                 "type": "vega_mag",
                 "target_mag": 15.0,
                 "zero_point_flux": 3.63e-9,
-                # 供 jansky_flux / wavelength_flux 切換時使用，vega_mag/ab_mag 模式下會被忽略
+                # Used when switching to jansky_flux / wavelength_flux; ignored in vega_mag/ab_mag mode
                 "flux_value": 100.0
             },
             "sed": {
                 "type": "flat",
-                # 供 Temp（黑體）SED 切換時使用，flat 模式下會被忽略
+                # Used when switching to the Temp (blackbody) SED; ignored in flat mode
                 "temperature_k": 5800.0
             },
             "ra": 180.0,
@@ -87,14 +87,14 @@ class AppState:
             "aperture_factor": 1.5,
             "single_exp_time": 300.0,
             "num_exposures": 1,
-            # 供 solve_time 模式使用，solve_snr 模式下會被忽略
+            # Used in solve_time mode; ignored in solve_snr mode
             "target_snr": 10.0
         }
 
         self.presets = self._load_presets()
 
     # ==========================================
-    # Dotted-path 存取
+    # Dotted-path access
     # ==========================================
     def get(self, path: str):
         parts = path.split(".")
@@ -111,7 +111,7 @@ class AppState:
         node[parts[-1]] = value
 
     # ==========================================
-    # 硬體 Preset（data/presets.json）
+    # Hardware presets (data/presets.json)
     # ==========================================
     def _load_presets(self) -> dict:
         if not PRESETS_PATH.exists():
@@ -121,8 +121,9 @@ class AppState:
 
     def apply_preset(self, category: str, key: str) -> list[str]:
         """
-        套用 preset（例如 category="telescopes", key="LOT"）。
-        回傳被改動的 dotted path 清單，方便呼叫端同步更新對應輸入框的顯示值。
+        Applies a preset (e.g. category="telescopes", key="LOT").
+        Returns the list of changed dotted paths, so the caller can sync the
+        corresponding input fields' displayed values.
         """
         preset = self.presets.get(category, {}).get(key)
         if not preset:
@@ -132,8 +133,8 @@ class AppState:
         return list(preset.keys())
 
     # ==========================================
-    # 計算引擎 Payload（給 LOAD/SAVE JSON 用的攤平版本，
-    # 保留所有分流欄位，不篩選）
+    # Calculation engine payload (flattened version for LOAD/SAVE JSON,
+    # keeps every branch's fields, no filtering)
     # ==========================================
     def get_api_payload(self) -> dict:
         return {
@@ -144,13 +145,14 @@ class AppState:
         }
 
     # ==========================================
-    # LOAD：用存檔內容覆蓋目前狀態
+    # LOAD: overwrite the current state with saved content
     # ==========================================
     def load_from_dict(self, data: dict) -> None:
         """
-        用存檔（get_api_payload() 存出來的格式）覆蓋目前狀態。
-        用 deep-merge 而不是整段取代：存檔裡缺欄位（例如舊檔案沒有新加的
-        throughput_correction）就保留目前的預設值，不會整組炸掉。
+        Overwrites the current state with a save file (in the format produced by
+        get_api_payload()). Uses a deep-merge rather than a wholesale replace: fields
+        missing from the save file (e.g. an old file predating throughput_correction)
+        keep their current default values instead of blowing away the whole state.
         """
         for section in ("instrument", "target", "environment", "options"):
             incoming = data.get(section)
@@ -166,14 +168,15 @@ class AppState:
                 base[key] = value
 
     # ==========================================
-    # 組成 castor.schema.ObservationRequest
+    # Builds a castor.schema.ObservationRequest
     # ==========================================
     def build_observation_request(self) -> schema.ObservationRequest:
         """
-        把 dict 形式的表單狀態，依照目前選到的 type（discriminator）只挑出
-        相關欄位，組成一份合法的 strict Pydantic ObservationRequest。
-        欄位缺漏或型別不對時，會直接讓 pydantic 的 ValidationError 往外拋，
-        交給 recalculate() 統一接住。
+        Takes the dict-shaped form state and, based on the currently selected type
+        (discriminator), picks out only the relevant fields to assemble a valid strict
+        Pydantic ObservationRequest.
+        Missing fields or wrong types let pydantic's ValidationError propagate outward
+        directly, to be caught centrally by recalculate().
         """
         inst = self.instrument
         instrument = schema.InstrumentProfile(
@@ -204,8 +207,9 @@ class AppState:
                 raise ValueError(f"Unknown brightness type: {b['type']!r}")
 
         if tgt["sed"]["type"] == "Temp":
-            # castor.calculator 目前不會讀取 sed，temperature_k 尚未影響任何計算結果，
-            # 這裡先讓表單存在，之後補上光譜計算時再串接。
+            # castor.calculator doesn't currently read sed; temperature_k doesn't affect
+            # any calculation result yet — this just lets the form hold the value until
+            # spectral calculations are wired up later.
             sed = schema.TempSED()
         else:
             sed = schema.FlatSED()
@@ -254,12 +258,12 @@ class AppState:
         )
 
     # ==========================================
-    # 即時運算：永遠不讓例外往外炸，交給呼叫端顯示
+    # Live calculation: never let exceptions escape, hand them to the caller to display
     # ==========================================
     def recalculate(self) -> tuple[schema.ObservationResponse | None, str | None]:
         """
-        回傳 (response, None) 表示成功；(None, error_message) 表示失敗
-        （輸入不合法、或計算過程中的物理邊界錯誤）。
+        Returns (response, None) on success; (None, error_message) on failure
+        (invalid input, or a physical boundary error raised during calculation).
         """
         try:
             request = self.build_observation_request()
@@ -269,7 +273,7 @@ class AppState:
             return None, self._format_validation_error(e)
         except ValueError as e:
             return None, str(e)
-        except Exception as e:  # noqa: BLE001 - GUI 這層寧可顯示錯誤也不要整個崩掉
+        except Exception as e:  # noqa: BLE001 - at the GUI layer, showing an error beats crashing outright
             return None, f"Unexpected error: {e}"
 
     @staticmethod

@@ -4,16 +4,17 @@ from constant import Design
 
 class RightPanel(ft.Container):
     """
-    右側即時結果面板。不接按鈕——由 AppState.recalculate() 算出來的結果
-    透過 render() 灌進來，成功就畫指標卡片，失敗就顯示錯誤訊息（不會讓
-    整個 GUI 崩掉）。
+    Right-side live results panel. No buttons here — results computed by
+    AppState.recalculate() are pushed in via render(); on success it draws
+    metric cards, on failure it shows an error message (without crashing
+    the whole GUI).
     """
 
     def __init__(self):
         super().__init__()
         self.expand = 12
 
-        # 套用共用的玻璃卡樣式（見 constant.Design.GLASS_CARD）
+        # Apply the shared glass card style (see constant.Design.GLASS_CARD)
         for key, value in Design.GLASS_CARD.items():
             setattr(self, key, value)
 
@@ -22,7 +23,7 @@ class RightPanel(ft.Container):
 
         self.hero_label = ft.Text("Primary Result", color=Design.TEXT_MUTED, size=14, weight=ft.FontWeight.BOLD)
         self.hero_value = ft.Text("--", color=Design.PRIMARY, size=56, weight=ft.FontWeight.BOLD)
-        self.hero_desc = ft.Text("等待輸入…", color=Design.TEXT_MUTED, size=12)
+        self.hero_desc = ft.Text("Waiting for input…", color=Design.TEXT_MUTED, size=12)
 
         self.error_text = ft.Text("", color=Design.ERROR, size=12, selectable=True)
         self.error_box = ft.Container(
@@ -30,7 +31,7 @@ class RightPanel(ft.Container):
             bgcolor=Design.ERROR_BG,
             border_radius=Design.RADIUS_BASE,
             padding=Design.GAP_FIELD,
-            width=480,  # 長訊息用換行撐高度，不要用拉寬去容納
+            width=480,  # Long messages wrap and grow taller instead of stretching wider
             visible=False,
         )
 
@@ -55,8 +56,9 @@ class RightPanel(ft.Container):
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=4,
                 ),
-                # 用一層 Row 包住，讓這兩個小提示框照自己內容的寬度顯示，
-                # 不要被外層 Column 的 STRETCH 拉成一條跟卡片一樣寬的扁長條。
+                # Wrapped in a Row so these two hint boxes size to their own
+                # content width, instead of being stretched by the outer
+                # Column's STRETCH into a bar as wide as the card.
                 ft.Row([self.error_box], alignment=ft.MainAxisAlignment.START),
                 ft.Row([self.warning_box], alignment=ft.MainAxisAlignment.START),
                 self._section_title("Signal & Noise Budget"),
@@ -72,7 +74,7 @@ class RightPanel(ft.Container):
         )
 
     # ==========================================
-    # 共用小工具
+    # Shared helpers
     # ==========================================
     def _section_title(self, text: str) -> ft.Text:
         return ft.Text(text, color=Design.PRIMARY, size=Design.SECTION_TITLE_SIZE, weight=ft.FontWeight.BOLD)
@@ -104,7 +106,7 @@ class RightPanel(ft.Container):
             self.update()
 
     # ==========================================
-    # 主要入口：AppState.recalculate() 的結果灌進來
+    # Main entry point: results from AppState.recalculate() flow in here
     # ==========================================
     def render(self, response, error: str | None) -> None:
         if error is not None:
@@ -113,7 +115,7 @@ class RightPanel(ft.Container):
             self.warning_box.visible = False
             self.hero_label.value = "Primary Result"
             self.hero_value.value = "--"
-            self.hero_desc.value = "輸入不合法，請檢查左側欄位"
+            self.hero_desc.value = "Invalid input, please check the fields on the left"
             self.budget_grid.controls = []
             self.diagnostics_grid.controls = []
             self.limits_grid.controls = []

@@ -9,11 +9,11 @@ from castor.moon import (
 )
 
 # ==========================================
-# 1. 核心物理引擎測試 (KS91 模型)
+# 1. Core physics engine tests (KS91 model)
 # ==========================================
 
 def test_ks91_vectorization():
-    """確保 KS91 經驗模型能完美支援 NumPy 陣列運算"""
+    """Ensure the KS91 empirical model fully supports NumPy array operations"""
     alpha = np.array([0.0, 90.0, 180.0])
     rho = np.array([30.0, 60.0, 90.0])
     z_moon = np.array([30.0, 45.0, 60.0])
@@ -25,7 +25,8 @@ def test_ks91_vectorization():
     assert len(result) == 3
 
 def test_ks91_physical_limits():
-    """物理極限：確保滿月與新月、距離遠近的亮度關係符合真實物理"""
+    """Physical limits: ensure full moon vs. new moon, and near vs. far distance,
+    brightness relationships match real physics"""
     base_args = {"z_moon_deg": 45.0, "z_target_deg": 45.0}
     
     b_full_moon = krisciunas_schaefer_1991(alpha_deg=0.0, rho_deg=60.0, **base_args)
@@ -37,11 +38,12 @@ def test_ks91_physical_limits():
     assert b_close > b_far
 
 # ==========================================
-# 2. 天光整合邏輯測試 (月球升降防呆)
+# 2. Sky brightness integration logic tests (moon rise/set edge cases)
 # ==========================================
 
 def test_sky_brightness_moon_below_horizon(monkeypatch):
-    """防呆測試：月亮在地平線下時，總天光必須精確等於無月夜的暗空星等"""
+    """Edge-case test: when the moon is below the horizon, total sky brightness must
+    exactly equal the moonless dark-sky magnitude"""
     def mock_geometry(*args, **kwargs):
         return (0.0, 60.0, 95.0, 45.0)
     
@@ -58,7 +60,7 @@ def test_sky_brightness_moon_below_horizon(monkeypatch):
     assert result_mag == pytest.approx(base_dark_sky)
 
 def test_sky_brightness_moon_above_horizon(monkeypatch):
-    """邏輯測試：月亮在地平線上時，總天光一定會變亮"""
+    """Logic test: when the moon is above the horizon, total sky brightness must brighten"""
     def mock_geometry(*args, **kwargs):
         return (0.0, 30.0, 30.0, 30.0)
     
@@ -75,11 +77,11 @@ def test_sky_brightness_moon_above_horizon(monkeypatch):
     assert result_mag < base_dark_sky
 
 # ==========================================
-# 3. 曆書引擎執行測試 (Ephemeris Sanity Check & Vectorization)
+# 3. Ephemeris engine execution tests (Ephemeris Sanity Check & Vectorization)
 # ==========================================
 
 def test_ephemeris_execution_scalar():
-    """確保 Astropy 曆書運算單點執行，沒有型別報錯"""
+    """Ensure Astropy ephemeris computation runs for a single point without type errors"""
     result = get_moon_and_target_geometry(
         target_ra=10.68, target_dec=41.27, 
         obs_time_utc="2026-07-23T12:00:00" 
@@ -87,26 +89,26 @@ def test_ephemeris_execution_scalar():
     
     assert len(result) == 4
     for val in result:
-        # numpy.where 和 astropy 在解開封印後可能回傳 float, np.float64 或 0-d 陣列
+        # numpy.where and astropy may return a float, np.float64, or a 0-d array once unwrapped
         assert np.isscalar(val) or (isinstance(val, np.ndarray) and val.ndim == 0)
 
 def test_ephemeris_time_series_vectorization():
-    """確保核心曆書引擎能完美吞吐時間陣列 (List[str] -> NDArray)"""
-    # 給定三個連續的時間點
+    """Ensure the core ephemeris engine correctly handles a time array (List[str] -> NDArray)"""
+    # Given three consecutive time points
     time_series = [
         "2026-07-23T12:00:00",
         "2026-07-23T13:00:00",
         "2026-07-23T14:00:00"
     ]
     
-    # 1. 測試幾何計算是否輸出長度為 3 的陣列
+    # 1. Test that the geometry calculation outputs an array of length 3
     alpha, rho, z_moon, z_target = get_moon_and_target_geometry(
         target_ra=10.68, target_dec=41.27, obs_time_utc=time_series
     )
     assert isinstance(z_moon, np.ndarray)
     assert len(z_moon) == 3
     
-    # 2. 測試天光計算是否輸出長度為 3 的陣列
+    # 2. Test that the sky brightness calculation outputs an array of length 3
     mu_sky_array = calculate_sky_brightness(
         target_ra=10.68, target_dec=41.27, 
         obs_time_utc=time_series, 

@@ -13,8 +13,8 @@ __all__ = [
     "krisciunas_schaefer_1991"
 ]
 
-# 光度學單位轉換常數
-# 參考資料：Krisciunas and Schaefer (1991), conversion from foot-candles/sr to nanoLamberts
+# Photometric unit conversion constant
+# Reference: Krisciunas and Schaefer (1991), conversion from foot-candles/sr to nanoLamberts
 KS91_FC_TO_NL_CONVERSION = 1e5
 
 # ==========================================

@@ -11,16 +11,16 @@ class LeftPanel(ft.Container):
         super().__init__()
         self.expand = 10  # 1fr
         self.state = state
-        # 任何欄位變動後呼叫（觸發右側 live preview 重新計算）
+        # Called after any field changes (triggers the right-side live preview recalculation)
         self.on_change = on_change
 
-        # dotted-path -> Control，preset 套用時用來同步更新畫面上的值
+        # dotted-path -> Control, used to sync displayed values when a preset is applied
         self.field_refs: dict[str, ft.TextField] = {}
 
         self.current_tab_index = 0
         self.tab_names = ["Instrument", "Target", "Environment", "Options"]
 
-        # 引入常數
+        # Pull in shared constants
         self.border_side = ft.BorderSide(Design.BORDER_WIDTH, Design.BORDER_COLOR)
         self.panel_border = ft.Border(
             top=self.border_side,
@@ -29,12 +29,7 @@ class LeftPanel(ft.Container):
             left=self.border_side
         )
 
-        # 每次切分頁都會重建 top bar（見 build_top_bar），所以狀態文字用字串記，
-        # 實際 Text control 每次重建都會重新生成，self.status_text 永遠指向「當前畫面上那個」
-        self._status_message = ""
-        self.status_text = ft.Text(self._status_message, color=Design.TEXT_MUTED, size=11)
-
-        # 分頁內容（依序對應 tab_names）
+        # Tab contents (in the same order as tab_names)
         self.views = self._build_views()
 
         self.inner_content = ft.Container(
@@ -52,14 +47,14 @@ class LeftPanel(ft.Container):
 
         self.content = ft.Column([
             self.build_top_bar(),
-            # 頂部列與內部框的間距
+            # Spacing between the top bar and the inner frame
             ft.Container(height=Design.PADDING_TAB_H),
             self.inner_content
         ])
 
     def _build_views(self) -> list[ft.Column]:
-        """建立四個分頁的內容。LOAD 之後會重新呼叫一次，讓所有欄位重新綁定到
-        （被存檔內容覆蓋過的）最新 state 值。"""
+        """Builds the content for all four tabs. Called again after LOAD, so every field
+        rebinds to the latest state values (which may have been overwritten by a loaded save)."""
         return [
             self.build_instrument_tab(),
             self.build_target_tab(),
@@ -68,7 +63,7 @@ class LeftPanel(ft.Container):
         ]
 
     # ==========================================
-    # 頂部 Tab Bar（分頁切換 + LOAD / SAVE）
+    # Top Tab Bar (tab switching + LOAD / SAVE)
     # ==========================================
     def build_top_bar(self):
         tabs = []
@@ -77,7 +72,8 @@ class LeftPanel(ft.Container):
 
             text_color = Design.PRIMARY if is_active else Design.TEXT_MUTED
 
-            # 永遠保留邊框佔位（只改顏色，不改寬度），避免切換分頁時版面跳動
+            # Always reserve the border space (only color changes, not width), to avoid
+            # layout jumping when switching tabs.
             top_color = Design.PRIMARY if is_active else "transparent"
             right_color = Design.PRIMARY if is_active else "transparent"
             left_color = Design.PRIMARY if is_active else "transparent"
@@ -110,8 +106,8 @@ class LeftPanel(ft.Container):
         tabs_row = ft.Row(
             tabs,
             spacing=0,
-            expand=True,               # 撐滿整行寬度，把 LOAD/SAVE 推到最右邊
-            scroll=ft.ScrollMode.AUTO  # 視窗太窄時允許橫向滑動
+            expand=True,               # Fills the row width, pushing LOAD/SAVE to the far right
+            scroll=ft.ScrollMode.AUTO  # Allows horizontal scrolling when the window is too narrow
         )
 
         action_buttons = ft.Row([
@@ -123,7 +119,7 @@ class LeftPanel(ft.Container):
                 border_radius=Design.RADIUS_BASE,
                 alignment=ft.Alignment(0, 0),
                 ink=True,
-                tooltip="匯入 JSON",
+                tooltip="Import JSON",
                 on_click=self._on_load_click,
             ),
             ft.Container(
@@ -134,21 +130,18 @@ class LeftPanel(ft.Container):
                 border_radius=Design.RADIUS_BASE,
                 alignment=ft.Alignment(0, 0),
                 ink=True,
-                tooltip="匯出 JSON",
+                tooltip="Export JSON",
                 on_click=self._on_save_click,
             ),
         ], spacing=Design.GAP_ACTION_BTN)
 
-        # 每次重建 top bar 都重新生成這個 Text（見 __init__ 註解），
-        # self.status_text 永遠指向目前畫面上那一個，方便 LOAD/SAVE handler 直接改字。
-        self.status_text = ft.Text(self._status_message, color=Design.TEXT_MUTED, size=11)
-
-        # 分頁列（expand 撐滿）+ LOAD/SAVE + 狀態文字维持單行，SPACE_BETWEEN
-        # 推到兩端；窄視窗時分頁列改靠橫向捲動（scroll=AUTO）而不是換行——
-        # Flet 的 wrap=True 目前跟 expand=True 不相容，換行版本曾經整個面板
-        # 空白，穩定性優先於自動響應式排版。
+        # Tabs row (expand-filled) + LOAD/SAVE kept on a single line via SPACE_BETWEEN,
+        # pushed to both ends. On narrow windows the tabs row scrolls horizontally
+        # (scroll=AUTO) instead of wrapping — Flet's wrap=True currently doesn't play well
+        # with expand=True, and the wrapping version once left the whole panel blank, so
+        # stability wins over automatic responsive layout here.
         return ft.Row(
-            [tabs_row, action_buttons, self.status_text],
+            [tabs_row, action_buttons],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
 
@@ -163,16 +156,11 @@ class LeftPanel(ft.Container):
     # ==========================================
     # LOAD / SAVE JSON
     # ==========================================
-    def _set_status(self, message: str) -> None:
-        self._status_message = message
-        self.status_text.value = message
-        self._safe_update(self.status_text)
-
-    # LOAD/SAVE 刻意不用 ft.FilePicker：Flet 0.86.5 在 web 模式下有已知的
-    # 上游問題（掛上 page.overlay 後回報「Unknown control: FilePicker」，
-    # pick_files()/save_file() 的 1 小時 timeout 還會卡住整個 session）：
+    # LOAD/SAVE deliberately avoid ft.FilePicker: Flet 0.86.5 has a known upstream issue in
+    # web mode (attaching to page.overlay reports "Unknown control: FilePicker", and the
+    # 1-hour timeout on pick_files()/save_file() can hang the whole session):
     # https://github.com/flet-dev/flet/issues/6040
-    # 改用「貼上/複製 JSON 文字」的對話框，只依賴 AlertDialog + TextField。
+    # Using a "paste/copy JSON text" dialog instead, relying only on AlertDialog + TextField.
 
     def _close_dialog(self) -> None:
         try:
@@ -183,12 +171,13 @@ class LeftPanel(ft.Container):
             page.pop_dialog()
 
     def _themed_dialog(self, title: str, body: list[ft.Control], actions: list[ft.Control]) -> ft.AlertDialog:
-        """LOAD/SAVE 對話框共用的樣式殼。AlertDialog 預設是 Material 的白底黑字，
-        套用跟其他面板一致的深色卡片樣式，避免跟整個 App 的深色主題脫節。"""
+        """Shared styled shell for the LOAD/SAVE dialogs. AlertDialog defaults to Material's
+        white background/black text; this applies the same dark card style as the rest of the
+        panels so it doesn't clash with the app's dark theme."""
         return ft.AlertDialog(
             modal=True,
-            # 一定要比背景亮一階（Surface 2），不然浮在最上層的對話框跟
-            # 底下的頁面背景同色，看起來就會很扁平/抽象。
+            # Must be one step brighter than the background (Surface 2), otherwise a dialog
+            # floating on top would match the page background behind it and look flat/washed out.
             bgcolor=Design.SURFACE_2,
             shape=ft.RoundedRectangleBorder(
                 radius=Design.RADIUS_CARD,
@@ -240,20 +229,20 @@ class LeftPanel(ft.Container):
         async def copy_to_clipboard(_):
             try:
                 await self.page.clipboard.set(content)
-                self._set_status("已複製到剪貼簿")
-            except Exception as ex:  # noqa: BLE001
-                # Clipboard 失敗也沒關係，上面的 TextField 本身就是可以手動全選複製的備援。
-                self._set_status(f"自動複製失敗，請手動選取複製（{ex}）")
+            except Exception:  # noqa: BLE001
+                # Clipboard failure is fine — the TextField above can still be selected and
+                # copied manually as a fallback.
+                pass
 
         dialog = self._themed_dialog(
-            title="匯出 CASTOR 設定",
+            title="Export CASTOR Settings",
             body=[
-                self._dialog_hint("複製下面內容存成 .json 檔（或按「複製」）："),
+                self._dialog_hint("Copy the content below into a .json file (or click \"Copy\"):"),
                 text_field,
             ],
             actions=[
-                self._dialog_button("複製", copy_to_clipboard, primary=True),
-                self._dialog_button("關閉", lambda _: self._close_dialog()),
+                self._dialog_button("Copy", copy_to_clipboard, primary=True),
+                self._dialog_button("Close", lambda _: self._close_dialog()),
             ],
         )
 
@@ -265,7 +254,7 @@ class LeftPanel(ft.Container):
 
     async def _on_load_click(self, e) -> None:
         paste_field = ft.TextField(
-            label="貼上 JSON 內容",
+            label="Paste JSON content",
             multiline=True,
             min_lines=12,
             max_lines=18,
@@ -289,38 +278,37 @@ class LeftPanel(ft.Container):
             try:
                 data = json.loads(raw)
             except Exception as ex:  # noqa: BLE001
-                show_error(f"不是合法的 JSON：{ex}")
+                show_error(f"Not valid JSON: {ex}")
                 return
 
             try:
                 self.state.load_from_dict(data)
             except Exception as ex:  # noqa: BLE001
-                show_error(f"匯入失敗：{ex}")
+                show_error(f"Import failed: {ex}")
                 return
 
             self._close_dialog()
 
-            # 存檔可能改到任何分頁的欄位，最簡單可靠的做法就是整個重建左側表單，
-            # 而不是逐一同步每個 TextField/Dropdown 的顯示值。
+            # A loaded save can touch fields on any tab, so the simplest and most reliable
+            # approach is to rebuild the entire left-side form, rather than syncing each
+            # TextField/Dropdown's displayed value one by one.
             self.field_refs.clear()
             self.views = self._build_views()
             self.inner_content.content = self.views[self.current_tab_index]
             self.content.controls[0] = self.build_top_bar()
-            self._status_message = "已匯入 JSON"
-            self.status_text.value = self._status_message
             self._safe_update(self)
             self._notify_change()
 
         dialog = self._themed_dialog(
-            title="匯入 CASTOR 設定",
+            title="Import CASTOR Settings",
             body=[
-                self._dialog_hint("把 SAVE 匯出的 JSON 內容貼在下面："),
+                self._dialog_hint("Paste the JSON exported by SAVE below:"),
                 paste_field,
                 error_box,
             ],
             actions=[
-                self._dialog_button("匯入", do_import, primary=True),
-                self._dialog_button("取消", lambda _: self._close_dialog()),
+                self._dialog_button("Import", do_import, primary=True),
+                self._dialog_button("Cancel", lambda _: self._close_dialog()),
             ],
         )
 
@@ -331,7 +319,7 @@ class LeftPanel(ft.Container):
         page.show_dialog(dialog)
 
     # ==========================================
-    # 共用欄位小工具
+    # Shared field helpers
     # ==========================================
     def _section_title(self, text: str) -> ft.Text:
         return ft.Text(text, color=Design.PRIMARY, size=Design.SECTION_TITLE_SIZE, weight=ft.FontWeight.BOLD)
@@ -340,8 +328,9 @@ class LeftPanel(ft.Container):
         return ft.Divider(color=Design.BORDER_COLOR, height=1)
 
     def _safe_update(self, control) -> None:
-        """在 Control 還沒被加進 page 前呼叫 .update() 會丟 RuntimeError（例如
-        __init__ 階段建構分頁時），這裡統一吃掉，只在真的已經上畫面時才更新。"""
+        """Calling .update() on a Control before it's been added to the page raises a
+        RuntimeError (e.g. while building tabs during __init__). This swallows that case and
+        only updates when the control is actually mounted."""
         try:
             mounted = control.page is not None
         except RuntimeError:
@@ -350,9 +339,10 @@ class LeftPanel(ft.Container):
             control.update()
 
     def _notify_change(self) -> None:
-        """欄位真的變動之後呼叫，觸發外部（右側 live preview）重新計算。
-        故意用 try/except 包起來：這裡的例外多半是計算引擎丟出來的錯誤，
-        不該讓輸入事件本身連帶炸掉整個表單。"""
+        """Called once a field has actually changed, to trigger the external (right-side
+        live preview) recalculation. Wrapped in try/except on purpose: exceptions here are
+        mostly errors raised by the calculation engine, and an input event shouldn't be
+        allowed to take down the whole form with it."""
         if self.on_change is None:
             return
         try:
@@ -412,7 +402,7 @@ class LeftPanel(ft.Container):
             try:
                 value = int(raw) if integer else float(raw)
             except (TypeError, ValueError):
-                return  # 使用者還在輸入中途（例如 "1." 或 "-"），先不動 state
+                return  # User is still mid-typing (e.g. "1." or "-"), leave state untouched
             self.state.set(path, value)
             self._notify_change()
         return handler
@@ -445,7 +435,7 @@ class LeftPanel(ft.Container):
         return ft.Dropdown(
             label=label,
             label_style=ft.TextStyle(color=Design.TEXT_MUTED, size=12),
-            hint_text="套用預設值…",
+            hint_text="Apply a preset…",
             options=[ft.dropdown.Option(key=k, text=k.replace("_", " ")) for k in keys],
             color=Design.TEXT_MAIN,
             border_color=Design.BORDER_COLOR,
@@ -583,8 +573,9 @@ class LeftPanel(ft.Container):
     # Tab 3: Environment
     # ==========================================
     def build_environment_tab(self) -> ft.Column:
-        # mu_dark 永遠是必填的基礎值，不會因為開關而被停用——auto_calc_background
-        # 只決定要不要在這個基礎值上疊加即時月光/幾何貢獻。
+        # mu_dark is always a required baseline value and is never disabled by the switch —
+        # auto_calc_background only decides whether to layer the real-time moon/geometry
+        # contribution on top of this baseline value.
         self.mu_dark_field = self._num_field("environment.mu_dark", "Dark Sky Brightness (mu_dark, baseline)", "mag/arcsec²")
 
         auto_switch = ft.Switch(
@@ -623,7 +614,8 @@ class LeftPanel(ft.Container):
         )
 
     def _on_auto_calc_toggle(self, e):
-        # mu_dark 不受這個開關影響，維持可編輯——這裡只單純寫回 state。
+        # mu_dark is unaffected by this switch and stays editable — this just writes the
+        # toggle value back to state.
         self.state.set("environment.auto_calc_background", e.control.value)
         self._notify_change()
 

@@ -24,7 +24,7 @@ def main(page: ft.Page):
     main_layout = ft.Row([left_panel, right_panel], expand=True, spacing=Design.GAP_MAIN)
     page.add(main_layout)
 
-    # 進場先算一次，右側才不會空著等使用者動第一次滑鼠
+    # Run one calculation up front so the right side isn't empty while waiting for the user's first move
     recalculate_and_render()
 
 ft.run(main=main)

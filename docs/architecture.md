@@ -16,36 +16,36 @@ To maintain the purity and high performance of the core engine, a strict divisio
 
 ```mermaid
 flowchart TD
-    %% 定義終端使用者
+    %% Define the end user
     User((User / Astronomer))
 
-    %% 定義 Client Layer 節點
+    %% Define Client Layer nodes
     KinderClient["<b>Kinder Frontend</b><br>• Renders UI/UX<br>• Collects user inputs for target & environment"]
     OtherClient["<b>Other Web Apps / Scripts</b><br>• Custom data collection"]
 
-    %% 定義 API Layer 節點
+    %% Define API Layer nodes
     KinderAPI["<b>Kinder Backend API</b><br>• Routing, Auth & Rate Limiting<br>• Queries database for Hardware Presets<br>• Constructs final payload"]
     OtherAPI["<b>Custom / 3rd Party APIs</b><br>• Alternative backend logic<br>• Constructs final payload"]
 
-    %% 定義 Core Engine 節點
+    %% Define Core Engine node
     CASTOR["<b>CASTOR (Core Engine)</b><br>• Strict Type & Mutex Validation<br>• Pre-computation & Batch Orchestration<br>• Pure Physics Equation Solver"]
 
-    %% 資料流向：使用者到前端
+    %% Data flow: user to frontend
     User -- "UI Input / Web Forms" --> KinderClient
     User -- "Custom Inputs" --> OtherClient
 
-    %% 資料流向：前端到 API
+    %% Data flow: frontend to API
     KinderClient -- "HTTP Request: JSON Payload" --> KinderAPI
     OtherClient -- "HTTP Request: JSON Payload" --> OtherAPI
     
-    %% (選用) 外部 Client 也可以直接打 Kinder 的 API
+    %% (Optional) External clients can also hit Kinder's API directly
     OtherClient -. "HTTP Request (Optional)" .-> KinderAPI
 
-    %% 資料流向：API 到 CASTOR 核心
+    %% Data flow: API to CASTOR core
     KinderAPI -- "Python Function Call:<br>Pydantic Object" --> CASTOR
     OtherAPI -- "Python Function Call:<br>Pydantic Object" --> CASTOR
 
-    %% 設定視覺樣式
+    %% Set visual styles
     style CASTOR fill:transparent,stroke:#a871ff,stroke-width:3px
     style KinderClient fill:transparent,stroke:#2b8cff,stroke-width:2px
     style KinderAPI fill:transparent,stroke:#2b8cff,stroke-width:2px
@@ -161,10 +161,10 @@ CASTOR processes each calculation request through a straightforward, step-by-ste
 sequenceDiagram
     autonumber
     
-    %% 將過長的名字加上 <br/> 來節省橫向空間
+    %% Add <br/> to overly long names to save horizontal space
     actor Client as External Caller<br/>(API/Web)
     
-    %% 使用 rgba 產生淡淡的紫色光暈，對齊 Flowchart 的 CASTOR 外框
+    %% Use rgba for a faint purple glow, matching the CASTOR outline in the flowchart
     box rgba(168, 113, 255, 0.05) CASTOR Core Engine
         participant Calc as calculator.py
         participant Schema as schema.py
@@ -180,17 +180,17 @@ sequenceDiagram
     Schema-->>Calc: Validated Pydantic Object
     deactivate Schema
 
-    %% Phase 2: Context Enrichment (Kinder 藍色背景)
+    %% Phase 2: Context Enrichment (Kinder blue background)
     rect rgba(43, 140, 255, 0.1)
         Note over Calc, Domain: Phase 2: Context Enrichment<br/>(Resolving missing physical & environmental data)
         
-        %% 將過長的動作標籤折行
+        %% Wrap overly long action labels
         Calc->>Domain: Compute Environment -> Airmass, Moon Phase
         Calc->>Domain: Compute Hardware -> Effective Area, Read Noise
         Domain-->>Calc: Aggregated Parameters
     end
 
-    %% Phase 3: Core Computation (CASTOR 紫色背景)
+    %% Phase 3: Core Computation (CASTOR purple background)
     rect rgba(168, 113, 255, 0.1)
         Note over Calc, Physics: Phase 3: Core Computation
         

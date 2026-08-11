@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 from datetime import datetime, timezone
 
-# 假設你的 schema 存在 schema.py 中
+# Assumes your schema lives in schema.py
 from castor.schema import (
     TargetProfile,
     EnvironmentCondition,
@@ -14,15 +14,15 @@ from castor.schema import (
 )
 
 # ==========================================
-# Fixtures: 準備合法的基礎測資，避免重複造輪子
+# Fixtures: prepare valid baseline test data to avoid reinventing the wheel
 # ==========================================
 @pytest.fixture
 def valid_target_payload():
     return {
         "ra": 180.5,
         "dec": -45.0,
-        "morphology": {"type": "point"},  # <--- 從 "point" 改成 {"type": "point"}
-        "sed": {"type": "flat"},          # <--- 從 "flat" 改成 {"type": "flat"}
+        "morphology": {"type": "point"},  # <--- changed from "point" to {"type": "point"}
+        "sed": {"type": "flat"},          # <--- changed from "flat" to {"type": "flat"}
         "brightness": {
             "type": "vega_mag",
             "target_mag": 15.0,
@@ -36,7 +36,7 @@ def valid_environment_payload():
         "location": {
             "latitude_deg": 23.5,
             "longitude_deg": 120.0,
-            "elevation_m": 2862.0  # 鹿林天文台高度
+            "elevation_m": 2862.0  # Lulin Observatory elevation
         },
         "observing_time_utc": "2026-07-22T12:00:00Z",
         "auto_calc_background": False,
@@ -50,56 +50,57 @@ def valid_environment_payload():
 
 
 # ==========================================
-# 測試重點 1: 物理與數學邊界的絕對防護
+# Test focus 1: absolute enforcement of physical and mathematical bounds
 # ==========================================
 class TestPhysicalBoundaries:
     def test_ra_dec_out_of_bounds_rejected(self, valid_target_payload):
-        """測試天球座標是否被嚴格限制在物理範圍內"""
+        """Tests that celestial coordinates are strictly constrained to their physical range"""
         payload = valid_target_payload.copy()
         
-        # RA 不可等於或超過 360
+        # RA must not equal or exceed 360
         payload["ra"] = 360.0 
         with pytest.raises(ValidationError, match="Input should be less than 360"):
             TargetProfile(**payload)
 
-        # DEC 不可超過 90
+        # DEC must not exceed 90
         payload["ra"] = 180.0
         payload["dec"] = 90.1
         with pytest.raises(ValidationError, match="Input should be less than or equal to 90"):
             TargetProfile(**payload)
 
     def test_earth_location_out_of_bounds_rejected(self, valid_environment_payload):
-        """測試地球經緯度與海拔高度的防呆機制"""
+        """Tests the guard rails on Earth latitude, longitude, and elevation"""
         payload = valid_environment_payload.copy()
         
-        # 緯度防呆
+        # Latitude guard
         payload["location"]["latitude_deg"] = -95.0
         with pytest.raises(ValidationError):
             EnvironmentCondition(**payload)
 
-        # 經度防呆
+        # Longitude guard
         payload["location"]["latitude_deg"] = 23.5
         payload["location"]["longitude_deg"] = 181.0
         with pytest.raises(ValidationError):
             EnvironmentCondition(**payload)
 
     def test_naive_datetime_rejected(self, valid_environment_payload):
-        """測試是否成功擋下沒有時區資訊的危險時間格式"""
+        """Tests that a dangerous timezone-naive time format is correctly rejected"""
         payload = valid_environment_payload.copy()
-        payload["observing_time_utc"] = "2026-07-22T12:00:00"  # 缺少 Z 或 +08:00
+        payload["observing_time_utc"] = "2026-07-22T12:00:00"  # missing Z or +08:00
         
         with pytest.raises(ValidationError, match="Input should have timezone info"):
             EnvironmentCondition(**payload)
 
 
 # ==========================================
-# 測試重點 2: 多型路由與契約正確性
+# Test focus 2: polymorphic routing and contract correctness
 # ==========================================
 class TestPolymorphicRouting:
     def test_brightness_routing(self, valid_target_payload):
-        """測試系統是否能根據 type 標籤，正確綁定對應的亮度模型與必填欄位"""
+        """Tests that the system correctly binds the matching brightness model and
+        required fields based on the type tag"""
         
-        # 1. 測試 AB 星等 (不需要 zero_point_flux)
+        # 1. Test AB magnitude (doesn't need zero_point_flux)
         ab_payload = valid_target_payload.copy()
         ab_payload["brightness"] = {
             "type": "ab_mag",
@@ -108,29 +109,30 @@ class TestPolymorphicRouting:
         target = TargetProfile(**ab_payload)
         assert isinstance(target.brightness, ABMagnitude)
 
-        # 2. 測試 Vega 星等若缺少 zero_point_flux 必須報錯
+        # 2. Test that Vega magnitude raises an error when zero_point_flux is missing
         vega_payload = valid_target_payload.copy()
         vega_payload["brightness"] = {
             "type": "vega_mag",
             "target_mag": 15.0
-            # 刻意遺漏 zero_point_flux
+            # deliberately omit zero_point_flux
         }
         with pytest.raises(ValidationError, match="Field required"):
             TargetProfile(**vega_payload)
 
     def test_calculation_options_mutual_exclusion(self):
-        """測試運算策略是否真的互斥，無法將兩個模式的參數混搭"""
+        """Tests that calculation strategies are truly mutually exclusive, and their
+        parameters can't be mixed"""
         from castor.schema import CalculationOptions
         from pydantic import TypeAdapter
         
         adapter = TypeAdapter(CalculationOptions)
         
-        # 混搭錯誤測試：宣告要求解 SNR，卻不給張數而給了 target_snr
+        # Mixed-mode error test: declares solving for SNR, but instead of num_exposures gives target_snr
         invalid_options = {
             "type": "solve_snr",
             "aperture_factor": 1.5,
             "single_exp_time": 60.0,
-            "target_snr": 100.0  # 這是 solve_time 才有的欄位
+            "target_snr": 100.0  # this field only exists in solve_time
         }
         
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
@@ -138,16 +140,16 @@ class TestPolymorphicRouting:
 
 
 # ==========================================
-# 測試重點 3: Strict 模式的封殺能力
+# Test focus 3: strict mode's rejection power
 # ==========================================
 class TestStrictModelDefenses:
     def test_forbid_extra_garbage_fields(self, valid_target_payload):
-        """確保打字錯誤或未知的垃圾參數會被直接擋在門外，不會被默默吃掉"""
+        """Ensures typos or unknown junk parameters are rejected outright, not silently swallowed"""
         payload = valid_target_payload.copy()
         payload["ra"] = 180.0
         payload["dec"] = 45.0
         
-        # 刻意塞入一個未定義的欄位
+        # deliberately inject an undefined field
         payload["what_is_this_field"] = "some_garbage_data"
         
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
