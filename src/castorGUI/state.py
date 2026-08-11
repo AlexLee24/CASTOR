@@ -1,7 +1,7 @@
 import sys
 import json
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 PRESETS_PATH = Path(__file__).resolve().parent / "data" / "presets.json"
 
@@ -14,6 +14,7 @@ if str(_SRC_DIR) not in sys.path:
 
 from castor import schema  # noqa: E402
 from castor.calculator import run_calculation  # noqa: E402
+from castor.batch_calculator import run_batch_calculation  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
 
@@ -91,6 +92,23 @@ class AppState:
             "target_snr": 10.0
         }
 
+        # Batch is not a separate mode — it's an optional extra: when True, the GUI also
+        # runs BatchObservationRequest / recalculate_batch() alongside the always-on single
+        # calculation, and the Options tab swaps environment.observing_time_utc for the
+        # start/end/step trio in batch_time. instrument/target/options are shared as-is
+        # either way (field-for-field identical schemas); environment's
+        # location/mu_dark/extinction_coeff/FWHM fields are shared too — only the time axis
+        # differs. TimeSeriesEnvironment has no auto_calc_background equivalent — the batch
+        # path always layers the dynamic moon/geometry contribution, regardless of that
+        # switch's value.
+        self.batch_enabled = False
+        _now = datetime.now(timezone.utc)
+        self.batch_time = {
+            "start_time_utc": _now.isoformat(),
+            "end_time_utc": (_now + timedelta(hours=6)).isoformat(),
+            "time_step_minutes": 15.0,
+        }
+
         self.presets = self._load_presets()
 
     # ==========================================
@@ -141,7 +159,9 @@ class AppState:
             "instrument": self.instrument,
             "target": self.target,
             "environment": self.environment,
-            "options": self.options
+            "options": self.options,
+            "batch_time": self.batch_time,
+            "batch_enabled": self.batch_enabled,
         }
 
     # ==========================================
@@ -154,10 +174,16 @@ class AppState:
         missing from the save file (e.g. an old file predating throughput_correction)
         keep their current default values instead of blowing away the whole state.
         """
-        for section in ("instrument", "target", "environment", "options"):
+        for section in ("instrument", "target", "environment", "options", "batch_time"):
             incoming = data.get(section)
             if isinstance(incoming, dict):
                 self._deep_update(getattr(self, section), incoming)
+
+        # batch_enabled is a plain bool, not a dict to deep-merge — validate it rather than
+        # trusting an arbitrary value from a hand-edited save file
+        batch_enabled = data.get("batch_enabled")
+        if isinstance(batch_enabled, bool):
+            self.batch_enabled = batch_enabled
 
     @staticmethod
     def _deep_update(base: dict, incoming: dict) -> None:
@@ -168,24 +194,22 @@ class AppState:
                 base[key] = value
 
     # ==========================================
-    # Builds a castor.schema.ObservationRequest
+    # Shared builders — instrument/target/options are field-for-field identical between
+    # single and batch mode, so both build_observation_request() and
+    # build_batch_observation_request() assemble them the same way. Only environment
+    # differs (a single observing_time_utc vs. a start/end/step time series), so it's
+    # built separately by each.
     # ==========================================
-    def build_observation_request(self) -> schema.ObservationRequest:
-        """
-        Takes the dict-shaped form state and, based on the currently selected type
-        (discriminator), picks out only the relevant fields to assemble a valid strict
-        Pydantic ObservationRequest.
-        Missing fields or wrong types let pydantic's ValidationError propagate outward
-        directly, to be caught centrally by recalculate().
-        """
+    def _build_instrument(self) -> schema.InstrumentProfile:
         inst = self.instrument
-        instrument = schema.InstrumentProfile(
+        return schema.InstrumentProfile(
             telescope=schema.TelescopeSchema(**inst["telescope"]),
             camera=schema.CameraSchema(**inst["camera"]),
             optic_filter=schema.FilterSchema(**inst["optic_filter"]),
             throughput_correction=inst["throughput_correction"],
         )
 
+    def _build_target(self) -> schema.TargetProfile:
         tgt = self.target
 
         if tgt["morphology"]["type"] == "extended":
@@ -214,7 +238,7 @@ class AppState:
         else:
             sed = schema.FlatSED()
 
-        target = schema.TargetProfile(
+        return schema.TargetProfile(
             morphology=morphology,
             brightness=brightness,
             sed=sed,
@@ -222,14 +246,48 @@ class AppState:
             dec=tgt["dec"],
         )
 
-        env = self.environment
-        observing_time = datetime.fromisoformat(env["observing_time_utc"])
-        if observing_time.tzinfo is None:
-            observing_time = observing_time.replace(tzinfo=timezone.utc)
+    def _build_options(self, batch: bool):
+        """batch=False builds SolveForSNR/SolveForTime; batch=True builds their
+        BatchSolveForSNR/BatchSolveForTime equivalents. Same source dict either way —
+        the two schema families share the exact same field names."""
+        opt = self.options
+        snr_cls = schema.BatchSolveForSNR if batch else schema.SolveForSNR
+        time_cls = schema.BatchSolveForTime if batch else schema.SolveForTime
 
+        if opt["type"] == "solve_time":
+            return time_cls(
+                aperture_factor=opt["aperture_factor"],
+                single_exp_time=opt["single_exp_time"],
+                target_snr=opt["target_snr"],
+            )
+        return snr_cls(
+            aperture_factor=opt["aperture_factor"],
+            single_exp_time=opt["single_exp_time"],
+            num_exposures=opt["num_exposures"],
+        )
+
+    @staticmethod
+    def _parse_aware(value: str) -> datetime:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    # ==========================================
+    # Builds a castor.schema.ObservationRequest
+    # ==========================================
+    def build_observation_request(self) -> schema.ObservationRequest:
+        """
+        Takes the dict-shaped form state and, based on the currently selected type
+        (discriminator), picks out only the relevant fields to assemble a valid strict
+        Pydantic ObservationRequest.
+        Missing fields or wrong types let pydantic's ValidationError propagate outward
+        directly, to be caught centrally by recalculate().
+        """
+        env = self.environment
         environment = schema.EnvironmentCondition(
             location=schema.ObservatoryLocation(**env["location"]),
-            observing_time_utc=observing_time,
+            observing_time_utc=self._parse_aware(env["observing_time_utc"]),
             auto_calc_background=env["auto_calc_background"],
             mu_dark=env["mu_dark"],
             extinction_coeff=env["extinction_coeff"],
@@ -239,22 +297,42 @@ class AppState:
             tracking_fwhm=env["tracking_fwhm"],
         )
 
-        opt = self.options
-        if opt["type"] == "solve_time":
-            options: schema.CalculationOptions = schema.SolveForTime(
-                aperture_factor=opt["aperture_factor"],
-                single_exp_time=opt["single_exp_time"],
-                target_snr=opt["target_snr"],
-            )
-        else:
-            options = schema.SolveForSNR(
-                aperture_factor=opt["aperture_factor"],
-                single_exp_time=opt["single_exp_time"],
-                num_exposures=opt["num_exposures"],
-            )
-
         return schema.ObservationRequest(
-            instrument=instrument, target=target, environment=environment, options=options
+            instrument=self._build_instrument(),
+            target=self._build_target(),
+            environment=environment,
+            options=self._build_options(batch=False),
+        )
+
+    # ==========================================
+    # Builds a castor.schema.BatchObservationRequest
+    # ==========================================
+    def build_batch_observation_request(self) -> schema.BatchObservationRequest:
+        """
+        Same idea as build_observation_request(), but for batch/time-series mode.
+        environment.location/mu_dark/extinction_coeff/FWHM fields are shared with single
+        mode (self.environment); only the time axis comes from self.batch_time.
+        """
+        env = self.environment
+        bt = self.batch_time
+        environment = schema.TimeSeriesEnvironment(
+            location=schema.ObservatoryLocation(**env["location"]),
+            start_time_utc=self._parse_aware(bt["start_time_utc"]),
+            end_time_utc=self._parse_aware(bt["end_time_utc"]),
+            time_step_minutes=bt["time_step_minutes"],
+            mu_dark=env["mu_dark"],
+            extinction_coeff=env["extinction_coeff"],
+            seeing_fwhm=env["seeing_fwhm"],
+            diffraction_fwhm=env["diffraction_fwhm"],
+            optical_fwhm=env["optical_fwhm"],
+            tracking_fwhm=env["tracking_fwhm"],
+        )
+
+        return schema.BatchObservationRequest(
+            instrument=self._build_instrument(),
+            target=self._build_target(),
+            environment=environment,
+            options=self._build_options(batch=True),
         )
 
     # ==========================================
@@ -274,6 +352,20 @@ class AppState:
         except ValueError as e:
             return None, str(e)
         except Exception as e:  # noqa: BLE001 - at the GUI layer, showing an error beats crashing outright
+            return None, f"Unexpected error: {e}"
+
+    def recalculate_batch(self) -> tuple[schema.BatchObservationResponse | None, str | None]:
+        """Batch/time-series counterpart to recalculate(). Same error-handling shape:
+        never raises, hands (None, message) back on any failure."""
+        try:
+            request = self.build_batch_observation_request()
+            response = run_batch_calculation(request)
+            return response, None
+        except ValidationError as e:
+            return None, self._format_validation_error(e)
+        except ValueError as e:
+            return None, str(e)
+        except Exception as e:  # noqa: BLE001
             return None, f"Unexpected error: {e}"
 
     @staticmethod

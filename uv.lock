@@ -91,6 +91,7 @@ dependencies = [
     { name = "astropy" },
     { name = "fastapi" },
     { name = "flet" },
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "pydantic" },
     { name = "pywebview" },
@@ -102,7 +103,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "matplotlib" },
     { name = "pyinstaller" },
     { name = "pytest" },
 ]
@@ -112,6 +112,7 @@ requires-dist = [
     { name = "astropy", specifier = ">=8.0.0" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "flet", specifier = ">=0.86.5" },
+    { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pydantic", specifier = ">=2.13.3" },
     { name = "pywebview", specifier = ">=6.2.1" },
@@ -123,7 +124,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "pyinstaller", specifier = ">=6.0.0" },
     { name = "pytest", specifier = ">=9.0.3" },
 ]

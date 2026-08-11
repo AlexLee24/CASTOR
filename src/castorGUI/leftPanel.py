@@ -40,10 +40,15 @@ class LeftPanel(ft.Container):
             expand=True
         )
 
-        self.border = self.panel_border
-        self.border_radius = Design.RADIUS_BASE
-        self.padding = Design.PADDING_PANEL
-        self.bgcolor = Design.PANEL_BG
+        # Apply the shared glass card style (see constant.Design.GLASS_CARD) — the exact
+        # same dict RightPanel applies to itself. They're sibling "big surfaces" and need
+        # to read as the same kind of thing; hand-copying the individual properties here
+        # (as a previous version of this file did) let them silently drift apart — it set
+        # bgcolor/border/border_radius/padding but missed "blur", so this card rendered
+        # with crisp edges while RightPanel's had a soft frosted-glass edge, and the two
+        # cards' rounded corners read as different even once both were the same 16px value.
+        for key, value in Design.GLASS_CARD.items():
+            setattr(self, key, value)
 
         self.content = ft.Column([
             self.build_top_bar(),
@@ -140,6 +145,11 @@ class LeftPanel(ft.Container):
         # (scroll=AUTO) instead of wrapping — Flet's wrap=True currently doesn't play well
         # with expand=True, and the wrapping version once left the whole panel blank, so
         # stability wins over automatic responsive layout here.
+        #
+        # There's deliberately no top-level Single/Batch switch living up here alongside
+        # the tabs/LOAD/SAVE — batch is not a peer "mode" of this row's content-navigation
+        # and one-off actions, it's an extra toggle scoped to the Options tab (see
+        # build_options_tab), right next to the fields it reveals. See docs/gui_architecture.md.
         return ft.Row(
             [tabs_row, action_buttons],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -181,7 +191,7 @@ class LeftPanel(ft.Container):
             bgcolor=Design.SURFACE_2,
             shape=ft.RoundedRectangleBorder(
                 radius=Design.RADIUS_CARD,
-                side=ft.BorderSide(1, Design.BORDER_COLOR),
+                side=ft.BorderSide(Design.BORDER_WIDTH, Design.BORDER_COLOR),
             ),
             title=ft.Text(title, color=Design.PRIMARY, size=16, weight=ft.FontWeight.BOLD),
             content=ft.Column(body, tight=True, width=480, spacing=Design.GAP_FIELD),
@@ -223,7 +233,7 @@ class LeftPanel(ft.Container):
             bgcolor=Design.PANEL_BG,
             border_color=Design.BORDER_COLOR,
             focused_border_color=Design.PRIMARY,
-            border_radius=Design.RADIUS_INPUT,
+            border_radius=Design.RADIUS_BASE,
         )
 
         async def copy_to_clipboard(_):
@@ -264,7 +274,7 @@ class LeftPanel(ft.Container):
             label_style=ft.TextStyle(color=Design.TEXT_MUTED, size=12),
             border_color=Design.BORDER_COLOR,
             focused_border_color=Design.PRIMARY,
-            border_radius=Design.RADIUS_INPUT,
+            border_radius=Design.RADIUS_BASE,
         )
         error_box = self._dialog_error_box()
 
@@ -327,6 +337,22 @@ class LeftPanel(ft.Container):
     def _divider(self) -> ft.Divider:
         return ft.Divider(color=Design.BORDER_COLOR, height=1)
 
+    def _switch_row(self, value: bool, on_change, label: str, tooltip: str = "") -> ft.Row:
+        """ft.Switch's own `label` renders at full Material size — next to this form's
+        13px fields it reads oversized. Scaling the switch down and pairing it with a
+        plain 12px ft.Text (same size as everything else's labels) keeps it in proportion."""
+        return ft.Row(
+            [
+                ft.Switch(
+                    value=value, active_color=Design.PRIMARY, on_change=on_change,
+                    scale=0.65, tooltip=tooltip or None,
+                ),
+                ft.Text(label, color=Design.TEXT_MUTED, size=12),
+            ],
+            spacing=0,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
     def _safe_update(self, control) -> None:
         """Calling .update() on a Control before it's been added to the page raises a
         RuntimeError (e.g. while building tabs during __init__). This swallows that case and
@@ -362,7 +388,7 @@ class LeftPanel(ft.Container):
             label_style=ft.TextStyle(color=Design.TEXT_MUTED, size=12),
             border_color=Design.BORDER_COLOR,
             focused_border_color=Design.PRIMARY,
-            border_radius=Design.RADIUS_INPUT,
+            border_radius=Design.RADIUS_BASE,
             content_padding=ft.Padding(left=12, right=12, top=10, bottom=10),
             width=width,
             expand=(width is None),
@@ -381,7 +407,7 @@ class LeftPanel(ft.Container):
             label_style=ft.TextStyle(color=Design.TEXT_MUTED, size=12),
             border_color=Design.BORDER_COLOR,
             focused_border_color=Design.PRIMARY,
-            border_radius=Design.RADIUS_INPUT,
+            border_radius=Design.RADIUS_BASE,
             content_padding=ft.Padding(left=12, right=12, top=10, bottom=10),
             width=width,
             expand=(width is None),
@@ -414,7 +440,7 @@ class LeftPanel(ft.Container):
             options=[ft.dropdown.Option(key=k, text=label) for k, label in options],
             color=Design.TEXT_MAIN,
             border_color=Design.BORDER_COLOR,
-            border_radius=Design.RADIUS_INPUT,
+            border_radius=Design.RADIUS_BASE,
             width=width,
             expand=(width is None),
             on_select=self._make_select_handler(path, on_change_extra),
@@ -439,7 +465,7 @@ class LeftPanel(ft.Container):
             options=[ft.dropdown.Option(key=k, text=k.replace("_", " ")) for k in keys],
             color=Design.TEXT_MAIN,
             border_color=Design.BORDER_COLOR,
-            border_radius=Design.RADIUS_INPUT,
+            border_radius=Design.RADIUS_BASE,
             expand=True,
             on_select=self._make_preset_handler(category),
         )
@@ -573,17 +599,19 @@ class LeftPanel(ft.Container):
     # Tab 3: Environment
     # ==========================================
     def build_environment_tab(self) -> ft.Column:
-        # mu_dark is always a required baseline value and is never disabled by the switch —
-        # auto_calc_background only decides whether to layer the real-time moon/geometry
-        # contribution on top of this baseline value.
+        # Fixed, mode-independent characteristics of the observing site and atmosphere —
+        # "when" you're observing (a single instant, or a swept time range) lives on the
+        # Options tab instead, alongside the other per-run strategy knobs. See
+        # docs/gui_architecture.md for why: keeping the batch on/off switch next to the
+        # fields it reveals matters more here than matching the engine's own schema
+        # grouping (environment.observing_time_utc there vs. this tab's shape here).
         self.mu_dark_field = self._num_field("environment.mu_dark", "Dark Sky Brightness (mu_dark, baseline)", "mag/arcsec²")
 
-        auto_switch = ft.Switch(
-            label="Layer real-time moon/geometry contribution on top of mu_dark",
-            label_text_style=ft.TextStyle(color=Design.TEXT_MUTED, size=12),
+        auto_switch = self._switch_row(
             value=self.state.get("environment.auto_calc_background"),
-            active_color=Design.PRIMARY,
             on_change=self._on_auto_calc_toggle,
+            label="Auto sky background",
+            tooltip="Layers the real-time moon/geometry contribution on top of the mu_dark baseline",
         )
 
         return ft.Column(
@@ -603,8 +631,7 @@ class LeftPanel(ft.Container):
                 self.mu_dark_field,
                 self._num_field("environment.extinction_coeff", "Extinction Coefficient", "mag/airmass"),
                 self._divider(),
-                self._section_title("Spatiotemporal Context (Airmass & Moon)"),
-                self._text_field("environment.observing_time_utc", "Observation Time (UTC, ISO 8601)"),
+                self._section_title("Observatory Location"),
                 self._num_field("environment.location.latitude_deg", "Latitude", "deg"),
                 self._num_field("environment.location.longitude_deg", "Longitude", "deg"),
                 self._num_field("environment.location.elevation_m", "Elevation", "m"),
@@ -626,6 +653,16 @@ class LeftPanel(ft.Container):
         self.options_dynamic = ft.Column(spacing=Design.GAP_FIELD)
         self._refresh_options_fields(self.state.get("options.type"))
 
+        self.time_dynamic = ft.Column(spacing=Design.GAP_FIELD)
+        self._refresh_time_fields(self.state.batch_enabled)
+
+        batch_switch = self._switch_row(
+            value=self.state.batch_enabled,
+            on_change=self._on_batch_toggle,
+            label="Sweep time range",
+            tooltip="Compute across a start/end/step time range instead of a single instant",
+        )
+
         return ft.Column(
             controls=[
                 self._section_title("Base Configuration"),
@@ -642,6 +679,15 @@ class LeftPanel(ft.Container):
                     on_change_extra=self._refresh_options_fields,
                 ),
                 self.options_dynamic,
+                self._divider(),
+                # "When" lives here rather than on the Environment tab: it's not a fixed
+                # site/atmosphere characteristic, it's the other half of "what are you
+                # asking" — same shape as the solve_snr/solve_time choice above. Keeping
+                # the switch and the fields it reveals in the same tab also means turning
+                # it on always has a visible, adjacent effect — see docs/gui_architecture.md.
+                self._section_title("When"),
+                batch_switch,
+                self.time_dynamic,
             ],
             spacing=Design.GAP_FIELD,
             scroll=ft.ScrollMode.AUTO,
@@ -657,3 +703,21 @@ class LeftPanel(ft.Container):
                 self._num_field("options.num_exposures", "Number of Exposures", integer=True),
             ]
         self._safe_update(self.options_dynamic)
+
+    def _refresh_time_fields(self, batch_enabled: bool):
+        if batch_enabled:
+            self.time_dynamic.controls = [
+                self._text_field("batch_time.start_time_utc", "Start Time (UTC, ISO 8601)"),
+                self._text_field("batch_time.end_time_utc", "End Time (UTC, ISO 8601)"),
+                self._num_field("batch_time.time_step_minutes", "Time Step", "min"),
+            ]
+        else:
+            self.time_dynamic.controls = [
+                self._text_field("environment.observing_time_utc", "Observation Time (UTC, ISO 8601)"),
+            ]
+        self._safe_update(self.time_dynamic)
+
+    def _on_batch_toggle(self, e):
+        self.state.batch_enabled = e.control.value
+        self._refresh_time_fields(self.state.batch_enabled)
+        self._notify_change()

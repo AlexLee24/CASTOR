@@ -86,8 +86,10 @@ def test_expand_time_series():
     # Test 1: normal expansion (one hour, every 10 minutes, 7 points total)
     times = _expand_time_series(start, end, 10.0)
     assert len(times) == 7
-    assert times[0] == "2026-01-01T18:00:00+00:00"
-    
+    # No UTC offset suffix: astropy's Time(..., format="isot") rejects "+00:00" outright,
+    # see test_expand_time_series_is_astropy_isot_compatible below.
+    assert times[0] == "2026-01-01T18:00:00"
+
     # Test 2: bound enforcement (tests the max_points = 1000 limit)
     end_far = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc) # one month later
     times_far = _expand_time_series(start, end_far, 1.0)
@@ -105,7 +107,14 @@ def test_batch_pipeline_solve_time(mock_moon_batch, batch_base_request):
     # 2. Ensure the Pydantic conversion is correct (the return value must be a native Python list, not a numpy array)
     assert isinstance(response.core.total_snr, list)
     assert isinstance(response.core.total_snr[0], float)
-    
+
+    # 2b. Ephemeris is elevation (90 - zenith angle), derived from the mocked z_target (30deg -> 60deg)
+    # and constant z_moon (45deg)
+    assert len(response.ephemeris.target_elevation_deg) == 13
+    assert response.ephemeris.target_elevation_deg[0] == pytest.approx(60.0)
+    assert response.ephemeris.target_elevation_deg[-1] == pytest.approx(30.0)
+    assert all(m == pytest.approx(45.0) for m in response.ephemeris.moon_elevation_deg)
+
     # 3. Ensure every computed SNR meets the target (100.0)
     for snr in response.core.total_snr:
         assert snr >= 100.0
@@ -144,3 +153,22 @@ def test_batch_pipeline_warning_flag(mock_moon_batch, batch_base_request):
     # Must trigger the warning
     assert len(response.flags.warnings) > 0
     assert "Airmass > 2.0" in response.flags.warnings[0]
+
+def test_batch_pipeline_real_astropy_path(batch_base_request):
+    """
+    Deliberately does NOT use mock_moon_batch: every other test in this file mocks
+    castor.moon out entirely, which means the real astropy call path
+    (moon.get_moon_and_target_geometry -> astropy.time.Time(..., format="isot") and
+    moon.calculate_sky_brightness's full argument list) was never actually exercised
+    end-to-end. It previously broke two ways that only showed up here:
+      1. _expand_time_series fed astropy an ISO string with a "+00:00" offset suffix,
+         which the strict "isot" format parser rejects.
+      2. batch_calculator's call to moon.calculate_sky_brightness omitted the required
+         extinction_coeff argument.
+    Regression coverage for both — this just has to run without raising.
+    """
+    response = run_batch_calculation(batch_base_request)
+
+    assert len(response.core.timestamps_iso) == 13
+    assert len(response.core.total_snr) == 13
+    assert all(snr > 0 for snr in response.core.total_snr)

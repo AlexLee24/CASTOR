@@ -31,6 +31,11 @@ class Design:
     SUCCESS = "#4ade80"
     SUCCESS_BG = "#122019"
 
+    # Batch chart (chart.py): a second categorical identity for the moon-elevation series,
+    # sharing an axis with the (PRIMARY-colored) target-elevation series. Picked and
+    # validated against PRIMARY with the dataviz skill's CVD checker (ΔE ~18, floor is 8).
+    MOON = "#6FA8DC"
+
     # ==========================================
     # Spacing — 4px baseline scale (spacing-system: always use a value on the scale,
     # never an arbitrary number)
@@ -39,8 +44,13 @@ class Design:
     GAP_MAIN = 32          # xl — between the two main panels / page outer margin
     BORDER_WIDTH = 2
     TAB_FONT_SIZE = 13
-    RADIUS_BASE = 5
-    RADIUS_INPUT = 6
+    # One radius for every small nested element (tabs, buttons, metric cards, text
+    # fields, dropdowns) — used to be split into RADIUS_BASE=5 vs RADIUS_INPUT=6, two
+    # tokens 1px apart that nobody could actually tell apart, just two names for "small
+    # element corner" that happened to drift to different numbers. RADIUS_CARD stays
+    # separate on purpose: it's for the two outer "big surface" cards, and corner radius
+    # should scale with element size, not be one global value everywhere.
+    RADIUS_BASE = 6
     RADIUS_CARD = 16
 
     PADDING_PANEL = 24     # lg
@@ -64,7 +74,10 @@ class Design:
     GAP_ACTION_BTN = 8     # sm
 
     # Flet 0.80+ Border syntax, replaces the old border.all()
-    _card_side = ft.BorderSide(1, BORDER_COLOR)
+    # BORDER_WIDTH, not a bare 1px: this is the outer card's border, a peer surface to
+    # LeftPanel's own outer container (which uses BORDER_WIDTH directly) — they need to
+    # match, not just each independently look fine.
+    _card_side = ft.BorderSide(BORDER_WIDTH, BORDER_COLOR)
 
     # Shared card style
     GLASS_CARD = {

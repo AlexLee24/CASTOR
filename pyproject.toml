@@ -8,6 +8,7 @@ dependencies = [
     "astropy>=8.0.0",
     "fastapi>=0.139.0",
     "flet>=0.86.5",
+    "matplotlib>=3.11.0",
     "numpy>=2.4.4",
     "pydantic>=2.13.3",
     "pywebview>=6.2.1",
@@ -21,7 +22,6 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",
     "pyinstaller>=6.0.0",
-    "matplotlib>=3.11.0",
 ]
 
 [tool.pytest.ini_options]

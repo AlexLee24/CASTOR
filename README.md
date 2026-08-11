@@ -46,6 +46,7 @@ For more details on batch processing and data schemas, check the `src/castor/` s
 
 ## Useful Resources
 
-- **[System Architecture](docs/architecture.md):** Core components, modular design, and data flow pipeline.
+- **[System Architecture](docs/architecture.md):** Core engine components, modular design, and data flow pipeline.
+- **[CASTOR GUI Architecture](docs/gui_architecture.md):** The reference UI product built on top of the engine (`src/castorGUI/`), and its planned integration into Kinder.
 - **[Algorithm Theoretical Basis Document (ATBD)](docs/ATBD.md):** Mathematical formulations for photon count rates, SNR, and ephemeris.
 - **API Specifications:** CASTOR uses strict Pydantic schemas for data validation. For detailed request and response contracts, please refer directly to [`src/castor/schema.py`](src/castor/schema.py).

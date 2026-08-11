@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from castor import schema
 from castor import physics
@@ -15,17 +15,22 @@ __all__ = ["run_batch_calculation"]
 # ==========================================
 
 def _expand_time_series(start: schema.AwareDatetime, end: schema.AwareDatetime, step_minutes: float) -> list[str]:
-    """Expands the user's start and end time into a discrete array of ISO 8601 strings, stepped by step_minutes."""
+    """Expands the user's start and end time into a discrete array of ISO 8601 strings, stepped by step_minutes.
+
+    Normalizes each point to UTC and formats it without a UTC offset suffix (e.g. "2026-01-01T18:00:00",
+    not "...+00:00"): moon.py hands this straight to astropy's Time(..., format="isot"), and isot's strict
+    parser rejects an offset suffix outright, so datetime.isoformat()'s default output can't be used as-is.
+    """
     times = []
     current = start
     delta = timedelta(minutes=step_minutes)
-    
-    max_points = 1000 
-    
+
+    max_points = 1000
+
     while current <= end and len(times) < max_points:
-        times.append(current.isoformat())
+        times.append(current.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"))
         current += delta
-        
+
     return times
 
 # ==========================================
@@ -68,6 +73,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     mu_sky_arr = moon.calculate_sky_brightness(
         target_ra=tgt.ra, target_dec=tgt.dec,
         obs_time_utc=time_series_iso, mu_dark=env.mu_dark,
+        extinction_coeff=env.extinction_coeff,
         lon=env.location.longitude_deg, lat=env.location.latitude_deg,
         elevation=env.location.elevation_m
     )
@@ -167,6 +173,13 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             total_snr=to_list(total_snr_arr),
             single_snr=to_list(single_snr_arr),
             saturation_time_limit=to_list(t_sat_arr)
+        ),
+        # z_target_arr / z_moon_arr were already computed in Phase 1 for the airmass/sky-brightness
+        # pipeline; elevation is just their complement. Note this uses the raw (unclamped) z_target_arr,
+        # not the z_target_safe used for airmass, so elevation can legitimately read negative.
+        ephemeris=schema.BatchEphemeris(
+            target_elevation_deg=to_list(90.0 - z_target_arr),
+            moon_elevation_deg=to_list(90.0 - z_moon_arr)
         ),
         flags=schema.SystemFlags(
             # is_saturated is True if saturation occurs at any point during the night

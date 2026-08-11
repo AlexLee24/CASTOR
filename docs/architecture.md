@@ -6,6 +6,8 @@
 
 CASTOR is a lightweight, stateless exposure time calculator (ETC) core engine designed specifically for optical astronomical observations. The project completely excludes graphical user interfaces (GUI) and data persistence layers, focusing entirely on implementing underlying physical algorithms—such as optical geometry, atmospheric physics, energy conversion, and signal-to-noise ratio (SNR) calculations—in pure Python. It is engineered to provide precise, high-concurrency computational support for upper-level astronomical web applications.
 
+> This document covers the core engine (`src/castor/`) only. **CASTOR GUI** (`src/castorGUI/`) is a separate product built on top of this engine — see [CASTOR GUI Architecture](gui_architecture.md).
+
 ### 1.2 Core Value
 
 Traditional astronomical exposure time calculators are often tightly coupled with the hardware equipment of specific observatories or exist as monolithic scripts that are difficult to maintain and integrate with modern web services. CASTOR achieves exceptional universality by completely decoupling physical formulas from hardware parameters. Any combination of optical telescopes and sensors can seamlessly invoke this engine for dynamic batch calculations, provided they adhere to the standard data contract.
@@ -96,7 +98,7 @@ To maintain its identity as a lightweight, high-performance computational kernel
 * **No Frontend Components:** It does not generate HTML, CSS, JavaScript, or interactive web forms.
 * **No Graphical Plotting:** It outputs pure mathematical arrays and scalar metrics; it does not render visibility curves or data plots (e.g., Matplotlib/Plotly figures).
 
-> **Note on `src/castorGUI/`:** This repository also contains a Flet-based desktop/web GUI, used by the CASTOR team for local development and manual verification of the core engine — it is not a production frontend and not part of the CASTOR identity described in this document. It integrates with the engine exactly the way an external caller like Kinder would: it imports `castor.calculator` / `castor.schema` as a Python library and calls `run_calculation()` directly, in-process, rather than through any special access the core engine grants it. The "No Frontend Components" boundary above still applies to `src/castor/` itself.
+> **Note on `src/castorGUI/`:** This boundary describes `src/castor/` only. The repository also ships **CASTOR GUI**, a separate, independently-scoped product that owns exactly the UI/visualization responsibilities this engine deliberately excludes. It is not a special caller — it imports `castor.calculator` / `castor.batch_calculator` / `castor.schema` as a plain Python library and calls them in-process, the same contract any external caller like Kinder would use. See [CASTOR GUI Architecture](gui_architecture.md) for its product identity, scope, and component design.
 
 ##### D. High-Level Scheduling & Operations
 

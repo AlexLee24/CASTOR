@@ -1,5 +1,6 @@
 import flet as ft
 from constant import Design
+from chart import render_batch_chart, CHART_ASPECT_RATIO
 
 
 class RightPanel(ft.Container):
@@ -8,6 +9,11 @@ class RightPanel(ft.Container):
     AppState.recalculate() are pushed in via render(); on success it draws
     metric cards, on failure it shows an error message (without crashing
     the whole GUI).
+
+    The batch/time-series chart is not a separate view: when AppState.batch_enabled
+    is on, app.py additionally calls render_batch(), which shows one more section
+    ("Observing Window") after Observation Limits — same section-title style as
+    everything else, not a competing layout. See docs/gui_architecture.md.
     """
 
     def __init__(self):
@@ -18,7 +24,7 @@ class RightPanel(ft.Container):
         for key, value in Design.GLASS_CARD.items():
             setattr(self, key, value)
 
-        card_side = ft.BorderSide(1, Design.BORDER_COLOR)
+        card_side = ft.BorderSide(Design.BORDER_WIDTH, Design.BORDER_COLOR)
         self._card_border = ft.Border(top=card_side, right=card_side, bottom=card_side, left=card_side)
 
         self.hero_label = ft.Text("Primary Result", color=Design.TEXT_MUTED, size=14, weight=ft.FontWeight.BOLD)
@@ -31,7 +37,6 @@ class RightPanel(ft.Container):
             bgcolor=Design.ERROR_BG,
             border_radius=Design.RADIUS_BASE,
             padding=Design.GAP_FIELD,
-            width=480,  # Long messages wrap and grow taller instead of stretching wider
             visible=False,
         )
 
@@ -41,13 +46,34 @@ class RightPanel(ft.Container):
             bgcolor=Design.WARNING_BG,
             border_radius=Design.RADIUS_BASE,
             padding=Design.GAP_FIELD,
-            width=480,
             visible=False,
         )
+        # Single-point and batch results land in the same warning_box (there's only one
+        # on screen) but come from two independent recalculations that can each update at
+        # different times — tracked separately and re-merged by _refresh_warning_box() so
+        # one finishing doesn't clobber whatever the other already put there.
+        self._single_warn_lines: list[str] = []
+        self._batch_warn_lines: list[str] = []
 
         self.budget_grid = ft.Row(wrap=True, spacing=Design.GAP_CARD, run_spacing=Design.GAP_CARD)
         self.diagnostics_grid = ft.Row(wrap=True, spacing=Design.GAP_CARD, run_spacing=Design.GAP_CARD)
         self.limits_grid = ft.Row(wrap=True, spacing=Design.GAP_CARD, run_spacing=Design.GAP_CARD)
+
+        # Batch/time-series chart section — hidden until AppState.batch_enabled is on
+        # (see show_batch_loading()/hide_batch_section()/render_batch(), driven by
+        # app.py). Fixed aspect ratio, scaled to fit the card on resize rather than
+        # regenerated — see chart.py's module docstring on why.
+        self.chart_image = ft.RawImage(fit=ft.BoxFit.CONTAIN, expand=True)
+        self.chart_placeholder = ft.Text("", color=Design.TEXT_MUTED, size=12)
+        self.observing_window_section = ft.Column(
+            controls=[
+                self._section_title("Observing Window"),
+                ft.Container(content=self.chart_image, aspect_ratio=CHART_ASPECT_RATIO),
+                self.chart_placeholder,
+            ],
+            spacing=Design.GAP_GROUP,
+            visible=False,
+        )
 
         self.content = ft.Column(
             controls=[
@@ -56,17 +82,19 @@ class RightPanel(ft.Container):
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=4,
                 ),
-                # Wrapped in a Row so these two hint boxes size to their own
-                # content width, instead of being stretched by the outer
-                # Column's STRETCH into a bar as wide as the card.
-                ft.Row([self.error_box], alignment=ft.MainAxisAlignment.START),
-                ft.Row([self.warning_box], alignment=ft.MainAxisAlignment.START),
+                # Stretched to the panel's full width (the outer Column's STRETCH
+                # alignment), same as the section titles and grids below — a fixed
+                # narrow width here read as a stray leftover box once the content
+                # became multi-line (single + batch warnings can both land in one box).
+                self.error_box,
+                self.warning_box,
                 self._section_title("Signal & Noise Budget"),
                 self.budget_grid,
                 self._section_title("Physical Diagnostics"),
                 self.diagnostics_grid,
                 self._section_title("Observation Limits"),
                 self.limits_grid,
+                self.observing_window_section,
             ],
             spacing=Design.GAP_GROUP,
             scroll=ft.ScrollMode.AUTO,
@@ -105,14 +133,24 @@ class RightPanel(ft.Container):
         if mounted:
             self.update()
 
+    def _refresh_warning_box(self) -> None:
+        lines = self._single_warn_lines + self._batch_warn_lines
+        if lines:
+            self.warning_text.value = "\n".join(lines)
+            self.warning_box.visible = True
+        else:
+            self.warning_box.visible = False
+
     # ==========================================
-    # Main entry point: results from AppState.recalculate() flow in here
+    # Main entry point: results from AppState.recalculate() flow in here. Always runs,
+    # independent of batch_enabled — the hero + three grids are the app's primary view.
     # ==========================================
     def render(self, response, error: str | None) -> None:
         if error is not None:
             self.error_text.value = error
             self.error_box.visible = True
-            self.warning_box.visible = False
+            self._single_warn_lines = []
+            self._refresh_warning_box()
             self.hero_label.value = "Primary Result"
             self.hero_value.value = "--"
             self.hero_desc.value = "Invalid input, please check the fields on the left"
@@ -141,11 +179,8 @@ class RightPanel(ft.Container):
         warn_lines = list(flags.warnings)
         if flags.is_saturated:
             warn_lines.insert(0, "⚠️ Single exposure time exceeds the saturation limit (Full Well Capacity reached).")
-        if warn_lines:
-            self.warning_text.value = "\n".join(warn_lines)
-            self.warning_box.visible = True
-        else:
-            self.warning_box.visible = False
+        self._single_warn_lines = warn_lines
+        self._refresh_warning_box()
 
         self.budget_grid.controls = [
             self._metric_card("Source Rate", f"{budget.source_count_rate:.2f}", "e-/s"),
@@ -169,3 +204,64 @@ class RightPanel(ft.Container):
         ]
 
         self._safe_update()
+
+    # ==========================================
+    # Observing Window section: results from AppState.recalculate_batch() flow in here,
+    # only ever called while AppState.batch_enabled is on (see app.py's debounced
+    # dispatch). async because pushing pixels into ft.RawImage (render_encoded) is
+    # itself awaitable.
+    # ==========================================
+    def show_batch_loading(self) -> None:
+        """Called immediately when the batch switch is turned on (before the debounced
+        recalculation finishes) so the section's appearance itself is the feedback that
+        the switch did something — instead of a silent ~0.4s gap with nothing visible."""
+        self.observing_window_section.visible = True
+        self.chart_image.visible = False
+        self.chart_placeholder.value = "Calculating…"
+        self.chart_placeholder.visible = True
+        self._safe_update()
+
+    def hide_batch_section(self) -> None:
+        """Called when the batch switch is turned off — removes the section outright
+        rather than leaving a stale chart around."""
+        self.observing_window_section.visible = False
+        self._batch_warn_lines = []
+        self._refresh_warning_box()
+        self._safe_update()
+
+    async def render_batch(self, response, error: str | None, single_exp_time: float) -> None:
+        self.observing_window_section.visible = True
+
+        if error is not None:
+            self.chart_placeholder.value = error
+            self.chart_placeholder.visible = True
+            self.chart_image.visible = False
+            self._batch_warn_lines = []
+            self._refresh_warning_box()
+            self._safe_update()
+            return
+
+        # Same warning_box the single-point result uses (see _refresh_warning_box) — the
+        # chart image itself carries no title/warning text of its own, see chart.py.
+        warn_lines = list(response.flags.warnings)
+        if response.flags.is_saturated:
+            warn_lines.insert(0, "⚠️ At least one point in the time series exceeds the saturation limit — see the shaded window(s) below.")
+        self._batch_warn_lines = warn_lines
+        self._refresh_warning_box()
+
+        self.chart_placeholder.visible = False
+        self.chart_image.visible = True
+        self._safe_update()
+
+        # Nothing upstream of this point catches chart-rendering failures — without this,
+        # a matplotlib exception would just be swallowed by Flet's background-task
+        # handler (see app.py's debounced dispatch), leaving the section silently stuck
+        # rather than telling the user anything broke.
+        try:
+            png_bytes = render_batch_chart(response, single_exp_time)
+            await self.chart_image.render_encoded(png_bytes)
+        except Exception as ex:  # noqa: BLE001 - showing an error beats a silently stuck panel
+            self.chart_image.visible = False
+            self.chart_placeholder.value = f"Chart rendering failed: {ex}"
+            self.chart_placeholder.visible = True
+            self._safe_update()

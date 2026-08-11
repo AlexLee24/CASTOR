@@ -421,6 +421,20 @@ class BatchCoreResult(StrictModel):
     single_snr: list[float] = Field(..., description="Single exposure SNR array.")
     saturation_time_limit: list[float] = Field(..., description="Saturation time limit array [s].")
 
+class BatchEphemeris(StrictModel):
+    target_elevation_deg: list[float] = Field(
+        ...,
+        description=(
+            "Target's altitude above the horizon at each timestamp, in degrees. Can go negative "
+            "when the target is below the horizon (unlike the airmass calculation internally used "
+            "for the SNR pipeline, this is not clamped to a minimum elevation)."
+        )
+    )
+    moon_elevation_deg: list[float] = Field(
+        ..., description="Moon's altitude above the horizon at each timestamp, in degrees."
+    )
+
 class BatchObservationResponse(StrictModel):
     core: BatchCoreResult = Field(..., description="Vectorized calculation results over time.")
+    ephemeris: BatchEphemeris = Field(..., description="Target/moon geometry over the time series, for visibility plots.")
     flags: SystemFlags = Field(..., description="System safety flags and boundary warnings.")
