@@ -12,7 +12,8 @@ from castor.physics import (
     calculate_sky_background_rate,
     calculate_single_snr,
     calculate_total_snr,
-    solve_required_exposures
+    solve_required_exposures,
+    calculate_optimal_exposure_time
 )
 
 # ==========================================
@@ -176,8 +177,28 @@ def test_snr_reversibility():
     """完美可逆性：反推所需的曝光張數必須精準"""
     target_snr = 20.0
     single_snr = 10.0
-    
+
     required_exposures = solve_required_exposures(target_snr, single_snr)
-    
+
     # (20 / 10)^2 = 4.0
     assert required_exposures == pytest.approx(4.0)
+
+def test_optimal_exposure_time_crossover_point():
+    """臨界點定義：background_dominance_factor=1.0 時，算出的 t_opt 代入
+    背景 shot noise 公式 sqrt(background_rate * t_opt)，必須剛好等於 RON。"""
+    sky_rate, dark_rate, readout_noise = 2.0, 0.5, 5.0
+
+    t_opt = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise)
+
+    background_shot_noise = np.sqrt((sky_rate + dark_rate) * t_opt)
+    assert background_shot_noise == pytest.approx(readout_noise)
+
+def test_optimal_exposure_time_scales_with_dominance_factor_squared():
+    """k 值是站在標準差比例上定義的，換算到時間（變異數）上要呈平方關係：
+    k 加倍，t_opt 要變成 4 倍。"""
+    sky_rate, dark_rate, readout_noise = 2.0, 0.5, 5.0
+
+    t_k1 = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise, background_dominance_factor=1.0)
+    t_k2 = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise, background_dominance_factor=2.0)
+
+    assert t_k2 == pytest.approx(t_k1 * 4.0)

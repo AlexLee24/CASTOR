@@ -71,6 +71,13 @@ class InstrumentProfile(StrictModel):
     camera: CameraSchema
     optic_filter: FilterSchema
 
+    throughput_correction: float = Field(
+        ..., 
+        ge=0, 
+        le=1, 
+        description="Additional system-level throughput correction factor, as a dimensionless ratio from 0.0 to 1.0."
+    )
+
 class PointMorphology(StrictModel):
     type: Literal["point"] = "point"
 
@@ -160,10 +167,21 @@ class EnvironmentCondition(StrictModel):
         ..., 
         description="Observation timestamp in ISO 8601 UTC format."
     )
-    
+    auto_calc_background: bool = Field(
+        ...,
+        description=(
+            "Boolean toggle for whether to layer the real-time lunar/geometric sky-brightness "
+            "contribution (derived from observing_time_utc, location, and the target's position) "
+            "on top of the user-supplied `mu_dark` baseline. When False, `mu_dark` is used directly "
+            "as the total sky surface brightness. `mu_dark` is required either way — this flag never "
+            "derives mu_dark itself, since moonless-sky brightness (light pollution, airglow, etc.) "
+            "cannot be inferred from time and location alone."
+        )
+    )
+
     mu_dark: float = Field(
-        ..., 
-        description="Intrinsic surface brightness of the moonless night sky in mag/arcsec². (ATBD: mu_dark)"
+        ...,
+        description="Moonless-night baseline surface brightness of the sky in mag/arcsec², used as-is or as the base for auto_calc_background. (ATBD: mu_dark)"
     )
     extinction_coeff: float = Field(
         ..., 
@@ -253,6 +271,13 @@ class CoreResult(StrictModel):
     saturation_time_limit: float = Field(
         ..., 
         description="Time limit before a single pixel reaches its Full Well Capacity. (ATBD: t_sat) [s]"
+    )
+    optimal_exposure_time: float = Field(
+        ...,
+        description=(
+            "Background-limited single exposure time in seconds — the point at which sky + dark "
+            "current shot noise overtakes readout noise. (ATBD: t_opt) [s]"
+        )
     )
 
 class SignalNoiseBudget(StrictModel):

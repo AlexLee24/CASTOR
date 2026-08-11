@@ -49,6 +49,7 @@ flowchart LR
     R_opt([optical_throughput])
     T_filt([filter_transmission])
     QE([quantum_efficiency])
+    C_corr([throughput_correction])
     R_dark([dark_current_rate])
     RON([readout_noise])
     FWC([full_well_capacity])
@@ -88,6 +89,7 @@ flowchart LR
     SNR_single[single_snr]
     N_exp_out[Required num_exposures]
     t_sat[saturation_time]
+    t_opt[optimal_exposure_time]
 
     %% ==========================================
     %% Dependencies
@@ -98,7 +100,7 @@ flowchart LR
     lambda_c --> Ep
     D_pri & D_sec --> A_eff
     f_sys & p_pix --> S_pix
-    R_opt & T_filt & QE --> T_sys
+    R_opt & T_filt & QE & C_corr --> T_sys
 
     kap --> f_enc
     kap & FWHM_tot & S_pix --> N_pix
@@ -117,6 +119,7 @@ flowchart LR
     SNR_tgt & SNR_single --> N_exp_out
     
     FWC & R_peak & R_sky & R_dark --> t_sat
+    R_sky & R_dark & RON --> t_opt
 
     %% ==========================================
     %% Styling Classes
@@ -126,10 +129,10 @@ flowchart LR
     classDef layer3 stroke:#2ecc71,stroke-width:2.5px;
     classDef layer4 stroke:#f39c12,stroke-width:3px;
 
-    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,R_dark,RON,FWC,kap,t_tot,t_single_in,N_exp_in,SNR_tgt layer1;
+    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_tot,t_single_in,N_exp_in,SNR_tgt layer1;
     class X,Flux_moon,mu_sky,FWHM_tot,Ep,A_eff,S_pix,T_sys layer2;
     class f_enc,N_pix,R_sky,R_src,R_peak layer3;
-    class SNR_total,SNR_single,N_exp_out,t_sat layer4;
+    class SNR_total,SNR_single,N_exp_out,t_sat,t_opt layer4;
 ```
 
 ## 3. Input Parameters Definition (Stage 1)
@@ -167,6 +170,12 @@ This profile encapsulates all hardware-specific parameters and is subdivided int
 | `filter_bandwidth` | $\Delta\lambda$ | nm | Effective spectral bandwidth of the chosen filter. |
 | `filter_transmission` | $T_{\text{filt}}$ | dimensionless | Transmission efficiency of the inserted filter. |
 
+#### 3.1.4 Instrument-Level Correction
+
+| Python Field | Math Symbol | Unit | Description |
+| --- | --- | --- | --- |
+| `throughput_correction` | $C_{\text{corr}}$ | dimensionless | Additional system-level throughput correction applied on top of $R_{\text{opt}} \times T_{\text{filt}} \times QE$. Intended for factors not broken out into their own field (e.g. an unresolved instrument-specific efficiency curve); defaults to $1.0$ (no correction). |
+
 ### 3.2 Target Profile (`target`)
 
 This profile defines the intrinsic physical properties of the celestial source. To support multiple observation scenarios, the target is decoupled into independent polymorphic objects: spatial coordinates, morphology, SED (Spectral Energy Distribution), and brightness.
@@ -190,7 +199,8 @@ This profile defines the physical environment, geometric constraints, and atmosp
 | --- | --- | --- | --- |
 | `location` | $Lat, Lon, Elev$ | deg, m | Strict geographic bounds for observer (Latitude: $\pm 90^\circ$, Longitude: $\pm 180^\circ$). |
 | `observing_time_utc` | $t_{\text{obs}}$ | ISO 8601 | Timezone-aware observation timestamp. |
-| `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky. |
+| `auto_calc_background` | - | boolean | Selects the source of $\mu_{\text{sky}}$ (§4.1.1): `true` layers the real-time lunar contribution on top of `mu_dark`; `false` uses `mu_dark` as-is. `mu_dark` is required either way — this flag never derives it. |
+| `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky. Used directly, or as the baseline for `auto_calc_background`. |
 | `extinction_coeff` | $k_{\text{ext}}$ | mag/airmass | Atmospheric attenuation per unit airmass. |
 | `fwhm_components` | $FWHM_{\text{comps}}$ | arcsec | Spatial spreading errors (Seeing, Diffraction, Optical, Tracking). |
 
@@ -219,11 +229,13 @@ The airmass ($X$) is approximated using the secant of the zenith angle ($z$), de
 
 $$X \approx \sec(z) = \frac{1}{\cos(z)}$$
 
-The total sky surface brightness ($\mu_{\text{sky}}$) accounts for both the intrinsic dark sky flux and the contribution from the moon:
+The total sky surface brightness ($\mu_{\text{sky}}$) depends on `auto_calc_background`. When enabled, it accounts for both the intrinsic dark sky flux and the real-time contribution from the moon:
 
 $$\mu_{\text{sky}} = -2.5 \log_{10}(Flux_{\text{dark}} + Flux_{\text{moon}})$$
 
 (Note: $Flux_{\text{moon}}$ calculation is deferred to the Krisciunas and Schaefer model.)
+
+When disabled, no lunar geometry is evaluated and $\mu_{\text{sky}} = \mu_{\text{dark}}$ directly. $\mu_{\text{dark}}$ is a required input in both cases — moonless-sky brightness (light pollution, airglow, etc.) cannot be derived from time and location alone, so this flag only ever adds the lunar term on top of it, never substitutes for it.
 
 **4.1.2 Spatial Resolution**
 The total spatial spreading, represented by the Full Width at Half Maximum ($FWHM_{\text{tot}}$), combines contributions from atmospheric seeing, diffraction, optical aberrations, and tracking errors:
@@ -239,9 +251,9 @@ The energy of a single photon ($E_p$) at the central wavelength ($\lambda_c$) is
 
 $$E_p = \frac{h \cdot c}{\lambda_c}$$
 
-The total system throughput ($T_{\text{sys}}$) is the product of the telescope optics, filter transmission, and detector efficiency:
+The total system throughput ($T_{\text{sys}}$) is the product of the telescope optics, filter transmission, detector efficiency, and the instrument-level correction factor:
 
-$$T_{\text{sys}} = R_{\text{opt}} \times T_{\text{filt}} \times QE$$
+$$T_{\text{sys}} = R_{\text{opt}} \times T_{\text{filt}} \times QE \times C_{\text{corr}}$$
 
 The spatial resolution per pixel, or pixel scale ($S_{\text{pixel}}$), is calculated from the physical pixel pitch and the telescope's focal length:
 
@@ -323,6 +335,13 @@ To ensure the detector operates within its linear regime, the saturation time li
 
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
+**4.3.4 Background-Limited (Optimal) Exposure Time**
+$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
+
+$$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
+
+$k = 1.0$ (the current fixed default) is the literal crossover point, where background shot noise just overtakes readout noise. This default is provisional — it is not yet backed by a specific reference guideline, and $k$ is not currently exposed as a request parameter.
+
 ## 5. Algorithm Limitations & Assumptions
 
 While the Exposure Time Calculator (ETC) is designed to provide robust and efficient performance estimations for observational planning, several physical assumptions and limitations are embedded within the current mathematical model:
@@ -332,6 +351,8 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 * **Airmass Approximation:** The airmass ($X$) assumes a plane-parallel atmosphere modeled via the secant approximation ($X \approx \sec(z)$). This approximation holds well for small to medium zenith angles ($z \lesssim 60^\circ$) but degrades at extreme horizons due to atmospheric curvature.
 
 * **Lunar Contribution Exclusion:** The dynamic computation of moon flux relies on the Krisciunas and Schaefer model. Its detailed mathematical formulation is omitted from the core text because it is a standard formula.
+
+* **Sky Background Extinction:** $Rate_{\text{sky}}$ is currently computed using the same $10^{-0.4 \cdot (k_{\text{ext}} \cdot X)}$ extinction term as target starlight (§4.2.2). Whether airglow-type sky emission should be attenuated by the same atmospheric-extinction model as light arriving from outside the atmosphere has not been confirmed; this is a candidate for future review rather than a settled design decision.
 
 ### 5.2 Optical and PSF Assumptions
 
@@ -348,3 +369,5 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 ### 5.4 Design Rationale and Model Simplification
 
 While this Exposure Time Calculator references the framework of the ESO ETC 2.0, practical constraints—such as the difficulty of acquiring detailed, high-resolution spectral transmission curves for general-purpose telescopes—lead to a model simplification. Consequently, the algorithm adopts a flux-based estimation approach rather than implementing full spectrophotometric calculations.
+
+As a direct consequence, `target.sed` (§3.2) is accepted and validated by the schema but not yet read by the flux-unification step (§4.1.4): every target is currently treated as spectrally flat across the filter bandpass regardless of the selected SED type. This is a placeholder for future spectrophotometric support, not an active part of the current calculation.

@@ -49,7 +49,8 @@ def batch_base_request():
             ),
             optic_filter=schema.FilterSchema(
                 central_wavelength=550.0, filter_bandwidth=100.0, filter_transmission=0.95
-            )
+            ),
+            throughput_correction=1.0
         ),
         target=schema.TargetProfile(
             morphology=schema.PointMorphology(),

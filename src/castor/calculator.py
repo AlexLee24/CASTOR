@@ -78,15 +78,19 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     z_target_safe = min(float(z_target), 89.0)
     airmass = float(physics.calculate_airmass(z_target_safe))
     
-    # 算出包含月光的動態天光表面亮度 (mu_sky)
-    mu_sky = moon.calculate_sky_brightness(
-        target_ra=tgt.ra, target_dec=tgt.dec,
-        obs_time_utc=env.observing_time_utc.strftime('%Y-%m-%dT%H:%M:%S'),
-        mu_dark=env.mu_dark,
-        extinction_coeff=env.extinction_coeff,
-        lon=env.location.longitude_deg, lat=env.location.latitude_deg,
-        elevation=env.location.elevation_m
-    )
+    # auto_calc_background 只決定要不要在 mu_dark 之上疊加即時月光/幾何貢獻，
+    # 兩種模式下 mu_dark 都是必要的基礎值，不會被自動推導出來。
+    if env.auto_calc_background:
+        mu_sky = moon.calculate_sky_brightness(
+            target_ra=tgt.ra, target_dec=tgt.dec,
+            obs_time_utc=env.observing_time_utc.strftime('%Y-%m-%dT%H:%M:%S'),
+            mu_dark=env.mu_dark,
+            extinction_coeff=env.extinction_coeff,
+            lon=env.location.longitude_deg, lat=env.location.latitude_deg,
+            elevation=env.location.elevation_m
+        )
+    else:
+        mu_sky = env.mu_dark
 
     # 1.2 光學與硬體物理量前置計算
     eff_area = float(physics.calculate_effective_area(
@@ -94,11 +98,13 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         inst.telescope.secondary_mirror_diameter
     ))
     photon_energy = float(physics.calculate_photon_energy(inst.optic_filter.central_wavelength))
+    # throughput_correction 是無法拆解到 optical_throughput / filter_transmission /
+    # quantum_efficiency 個別項目時的總體校正乘數，套用在三者的乘積之上。
     total_throughput = float(physics.calculate_total_throughput(
-        inst.telescope.optical_throughput, 
-        inst.optic_filter.filter_transmission, 
+        inst.telescope.optical_throughput,
+        inst.optic_filter.filter_transmission,
         inst.camera.quantum_efficiency
-    ))
+    )) * inst.throughput_correction
     pixel_scale = float(physics.calculate_pixel_scale(inst.camera.pixel_pitch, inst.telescope.focal_length))
     total_fwhm = float(physics.calculate_total_fwhm(
         env.seeing_fwhm, env.diffraction_fwhm, env.optical_fwhm, env.tracking_fwhm
@@ -179,7 +185,12 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     t_sat = float(physics.calculate_saturation_time(
         inst.camera.full_well_capacity, peak_rate, sky_rate, inst.camera.dark_current_rate
     ))
-    
+
+    # background_dominance_factor 沿用預設值 1.0；細節見 calculate_optimal_exposure_time 的 docstring。
+    t_opt = float(physics.calculate_optimal_exposure_time(
+        sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise
+    ))
+
     warnings = []
     if airmass > 2.0:
         warnings.append("Airmass > 2.0: Extinction model accuracy may degrade.")
@@ -190,7 +201,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             total_snr=total_snr,
             single_snr=single_snr,
             required_exposures=final_req_exposures,
-            saturation_time_limit=t_sat
+            saturation_time_limit=t_sat,
+            optimal_exposure_time=t_opt
         ),
         budget=schema.SignalNoiseBudget(
             source_count_rate=source_rate,

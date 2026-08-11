@@ -39,6 +39,7 @@ def valid_environment_payload():
             "elevation_m": 2862.0  # 鹿林天文台高度
         },
         "observing_time_utc": "2026-07-22T12:00:00Z",
+        "auto_calc_background": False,
         "mu_dark": 21.5,
         "extinction_coeff": 0.15,
         "seeing_fwhm": 1.2,

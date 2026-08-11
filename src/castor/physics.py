@@ -26,7 +26,8 @@ __all__ = [
     "calculate_single_snr",
     "calculate_total_snr",
     "solve_required_exposures",
-    "calculate_saturation_time"
+    "calculate_saturation_time",
+    "calculate_optimal_exposure_time"
 ]
 
 # ==========================================
@@ -567,3 +568,56 @@ def calculate_saturation_time(
     """
     total_pixel_rate = peak_pixel_rate + sky_count_rate + dark_current_rate
     return full_well_capacity / total_pixel_rate
+
+def calculate_optimal_exposure_time(
+    sky_count_rate: Numeric,
+    dark_current_rate: Numeric,
+    readout_noise: Numeric,
+    background_dominance_factor: Numeric = 1.0
+) -> Numeric:
+    """
+    Calculate the "background-limited" single exposure time.
+
+    This is the single-exposure integration time at which the combined shot
+    noise from sky background + dark current overtakes the fixed per-frame
+    readout noise, per pixel. Past this point, lengthening a single exposure
+    further gives rapidly diminishing SNR returns per unit of *total*
+    integration time (splitting a fixed total exposure into more sub-frames
+    stops costing meaningful SNR) — so it becomes more efficient to add more
+    exposures than to keep extending a single one.
+
+    Derived from a standard-deviation ratio between the two noise sources:
+    background shot noise reaches `background_dominance_factor` times the
+    readout noise once
+
+        sqrt((sky_count_rate + dark_current_rate) * t_opt) = background_dominance_factor * readout_noise
+
+    which solves to:
+
+        t_opt = (background_dominance_factor * readout_noise)² / (sky_count_rate + dark_current_rate)
+
+    Parameters
+    ----------
+    sky_count_rate : Numeric
+        Background photoelectron count rate per pixel [e-/s/pix].
+    dark_current_rate : Numeric
+        Thermal electron generation rate per pixel [e-/s/pix].
+    readout_noise : Numeric
+        Electronic noise introduced during readout [e-/pix].
+    background_dominance_factor : Numeric, optional
+        Desired ratio of (sky + dark) shot-noise stddev to readout-noise
+        stddev, by default 1.0 — the literal crossover point where
+        background noise just overtakes readout noise. Values > 1.0 push
+        readout noise further into negligibility at the cost of a longer
+        single exposure (more saturation / tracking / cosmic-ray risk).
+        Provisional default — not yet backed by a specific reference
+        guideline, revisit before relying on it for real observation
+        planning.
+
+    Returns
+    -------
+    Numeric
+        Optimal single exposure time (t_opt) [s].
+    """
+    background_rate = sky_count_rate + dark_current_rate
+    return ((background_dominance_factor * readout_noise) ** 2.0) / background_rate

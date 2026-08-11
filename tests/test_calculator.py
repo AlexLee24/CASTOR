@@ -45,9 +45,10 @@ def base_request():
             ),
             optic_filter=schema.FilterSchema(
                 central_wavelength=550.0, # V band 近似
-                filter_bandwidth=100.0, 
+                filter_bandwidth=100.0,
                 filter_transmission=0.95
-            )
+            ),
+            throughput_correction=1.0
         ),
         target=schema.TargetProfile(
             morphology=schema.PointMorphology(),
@@ -61,6 +62,7 @@ def base_request():
                 latitude_deg=23.47, longitude_deg=120.87, elevation_m=2862.0
             ),
             observing_time_utc=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            auto_calc_background=False,
             mu_dark=21.5,
             extinction_coeff=0.17,
             seeing_fwhm=1.5, diffraction_fwhm=0.1, optical_fwhm=0.1, tracking_fwhm=0.1
@@ -123,8 +125,55 @@ def test_pipeline_saturation_warning(mock_moon, base_request):
     # 把星星調得超級亮 (0 等星)，並用超長的單張曝光時間 (1000秒)
     base_request.target.brightness = schema.VegaMagnitude(target_mag=0.0, zero_point_flux=3.6e-9)
     base_request.options.single_exp_time = 1000.0
-    
+
     response = run_calculation(base_request)
-    
+
     # 應該要亮起飽和紅燈
     assert response.flags.is_saturated is True
+
+# ==========================================
+# 測試案例: 系統級透過率修正 (throughput_correction)
+# ==========================================
+
+def test_throughput_correction_scales_output(mock_moon, base_request):
+    """throughput_correction 是乘在 optical/filter/QE 之後的額外修正係數，
+    減半應該讓回報的 total_throughput、以及跟訊號成正比的 source_count_rate
+    都精準減半。"""
+    baseline = run_calculation(base_request)
+
+    base_request.instrument.throughput_correction = 0.5
+    halved = run_calculation(base_request)
+
+    assert halved.diagnostics.total_throughput == pytest.approx(
+        baseline.diagnostics.total_throughput * 0.5
+    )
+    assert halved.budget.source_count_rate == pytest.approx(
+        baseline.budget.source_count_rate * 0.5
+    )
+
+# ==========================================
+# 測試案例: 天空背景來源切換 (auto_calc_background)
+# ==========================================
+
+def test_auto_calc_background_selects_moon_model(monkeypatch, base_request):
+    """auto_calc_background 決定天空亮度的來源：False 時應直接採用 mu_dark，
+    完全跳過月光模型查詢；True 時才會呼叫 calculate_sky_brightness。
+    mu_dark 本身在兩種模式下都必填，這個開關只決定要不要疊加月光。"""
+    sky_brightness_calls = []
+
+    monkeypatch.setattr(
+        "castor.moon.get_moon_and_target_geometry",
+        lambda *a, **k: (0.0, 90.0, 45.0, 30.0),
+    )
+    monkeypatch.setattr(
+        "castor.moon.calculate_sky_brightness",
+        lambda *a, **k: sky_brightness_calls.append(1) or 21.0,
+    )
+
+    base_request.environment.auto_calc_background = False
+    run_calculation(base_request)
+    assert len(sky_brightness_calls) == 0, "關閉時不應該查詢月光模型"
+
+    base_request.environment.auto_calc_background = True
+    run_calculation(base_request)
+    assert len(sky_brightness_calls) == 1, "開啟時應該查詢一次月光模型"

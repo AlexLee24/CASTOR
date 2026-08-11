@@ -96,6 +96,8 @@ To maintain its identity as a lightweight, high-performance computational kernel
 * **No Frontend Components:** It does not generate HTML, CSS, JavaScript, or interactive web forms.
 * **No Graphical Plotting:** It outputs pure mathematical arrays and scalar metrics; it does not render visibility curves or data plots (e.g., Matplotlib/Plotly figures).
 
+> **Note on `src/castorGUI/`:** This repository also contains a Flet-based desktop/web GUI, used by the CASTOR team for local development and manual verification of the core engine — it is not a production frontend and not part of the CASTOR identity described in this document. It integrates with the engine exactly the way an external caller like Kinder would: it imports `castor.calculator` / `castor.schema` as a Python library and calls `run_calculation()` directly, in-process, rather than through any special access the core engine grants it. The "No Frontend Components" boundary above still applies to `src/castor/` itself.
+
 ##### D. High-Level Scheduling & Operations
 
 * **No Queue Optimization:** While optimized to *support* schedulers, CASTOR itself does not decide the optimal observation order for targets or generate automated telescope operation queues.
@@ -103,35 +105,31 @@ To maintain its identity as a lightweight, high-performance computational kernel
 
 ## 2. Component Architecture
 
-> **[TBD / Draft Phase]**
-> *The internal module division is currently in the draft phase and may evolve after further team discussion.*
-
 The CASTOR package is divided into the following core modules:
 
 ```text
 src/castor/
-├── __init__.py        # Package Entry Point
-├── calculator.py      # Main Orchestrator & Batch Processing
-├── schema.py          # Data Contracts & Mutex Validation
-├── ephemeris.py       # Astrometry, Time & Environment Modeling
-├── optics.py          # Hardware & Optical Train Modeling
-├── physics.py         # Pure Mathematical & Physics Engine
-└── exceptions.py      # Custom Domain Exceptions
+├── __init__.py           # Package Entry Point
+├── calculator.py         # Single-Request Orchestrator
+├── batch_calculator.py   # Time-Series Batch Orchestrator
+├── schema.py              # Data Contracts & Mutex Validation
+├── moon.py                 # Astropy-Based Ephemeris & Lunar Sky Brightness
+└── physics.py               # Pure Mathematical & Optical Physics Engine
 ```
 
 ### Module Responsibilities
 
-* **`calculator.py`:** The system's traffic controller. It receives validated requests, gathers missing parameters from domain modules (`ephemeris`, `optics`), feeds the aggregated NumPy arrays into `physics.py`, and packages the final response.
+* **`calculator.py`:** The system's traffic controller for single-request calculations. It receives a validated `ObservationRequest`, calls `moon.py` for airmass/lunar geometry and `physics.py` for the optical and count-rate formulas, and packages the final `ObservationResponse`.
+
+* **`batch_calculator.py`:** Expands a `TimeSeriesEnvironment` (start/end/step) into discrete timestamps and vectorizes the same physics pipeline across the resulting NumPy arrays, returning a `BatchObservationResponse`.
 
 * **`schema.py`:** Defines Pydantic models to block invalid data at the door. It enforces physical boundaries (e.g., transmission rates strictly between $0.0$ and $1.0$) and logical mutual exclusivity (e.g., requiring either exposure time or target SNR, but not both).
 
-* **`ephemeris.py`:** Handles dynamic variables related to time and space using pure local mathematics (no external API calls). It calculates instantaneous Airmass, Moon phase, and sky background based on observation timestamps and coordinates.
+* **`moon.py`:** Handles dynamic variables related to time and space using Astropy (target/moon ephemeris, airmass, and the Krisciunas & Schaefer 1991 lunar sky-brightness model). Unlike the rest of the engine, this module depends on an external astronomy library rather than pure local math.
 
-* **`optics.py`:** Converts hardware specifications into physical parameters. It calculates the effective light-gathering area (accounting for obstruction), total optical throughput, and dynamically adjusts pixel scale and read noise based on sensor binning modes.
+* **`physics.py`:** The computational core. Combines the optical/hardware conversions (effective area, total throughput, pixel scale, aperture geometry) with the count-rate and SNR formulas. It contains no web schemas or API logic — only pure numerical functions operating on scalars or NumPy arrays.
 
-* **`physics.py`:** The lowest-level computational core. It contains no web schemas or API logic. It accepts only pure numerical matrices or scalars to execute deterministic algorithms—such as analytical quadratic solvers—in strict $O(1)$ complexity.
-
-* **`exceptions.py`:** Centralizes CASTOR-specific error classes (e.g., `TargetNotFoundError`, `PhysicsBoundaryError`) to provide clear, actionable error traces for the parent system.
+Error handling currently relies on Pydantic's `ValidationError` at the schema boundary and plain `ValueError` for physics-domain violations raised inside `calculator.py` / `physics.py` (e.g. an unrecognized morphology or calculation-option type). There is no dedicated exception hierarchy yet — see §6.
 
 ## 3. Design Principles
 
@@ -302,3 +300,5 @@ Vectorized Batch Optimization
 TargetProfile to ESO ETC's Form
 
 API Docs
+
+Dedicated exception hierarchy (e.g. `PhysicsBoundaryError`) in place of plain `ValueError`
