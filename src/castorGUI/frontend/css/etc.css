@@ -282,6 +282,41 @@
 }
 .castor-etc .etc-specs:empty { display: none; }
 
+/* Disclosure for the raw hardware numbers. Native <details> rather than a
+   JS-driven panel: it is keyboard-operable and findable by the browser's own
+   in-page search for free, and the inputs inside stay in the form while closed. */
+.castor-etc .etc-details { margin-top: var(--etc-gap-group); }
+.castor-etc .etc-details-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border: var(--etc-border-width) solid var(--etc-border-color);
+    border-radius: var(--etc-radius-base);
+    color: var(--etc-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    list-style: none;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.castor-etc .etc-details-summary::-webkit-details-marker { display: none; }
+.castor-etc .etc-details-summary::before {
+    content: "";
+    flex: 0 0 auto;
+    border-left: 5px solid currentColor;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.15s ease;
+}
+.castor-etc .etc-details[open] > .etc-details-summary::before { transform: rotate(90deg); }
+.castor-etc .etc-details-summary:hover,
+.castor-etc .etc-details[open] > .etc-details-summary {
+    color: var(--etc-accent);
+    border-color: var(--etc-accent);
+}
+.castor-etc .etc-details-summary:focus-visible { outline: 2px solid var(--etc-accent); outline-offset: 2px; }
+.castor-etc .etc-details-body { padding-top: var(--etc-gap-group); }
+
 .castor-etc .dynamic-group[hidden],
 .castor-etc .time-group[hidden] { display: none; }
 

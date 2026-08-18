@@ -44,28 +44,39 @@
 
                     <!-- ══ Instrument ══ -->
                     <div class="etc-tabpanel is-active" data-panel="instrument" role="tabpanel">
-                        <!-- Two cascading selectors rather than three independent ones:
-                             nobody pairs an arbitrary telescope with an arbitrary camera,
-                             and choosing a site can fill in its coordinates and sky at the
-                             same time. Neither carries a name attribute, so neither ends up
-                             in the request payload. -->
-                        <h3 class="etc-section-title">Observing Profile</h3>
+                        <!-- Site first: it is what narrows the telescope and camera lists
+                             below it, and it fills in the site's coordinates and sky at the
+                             same time. Telescope, camera and filter stay independent because
+                             cameras get moved between telescopes and the band changes
+                             between exposures. None of these carry a name attribute, so none
+                             of them reach the request payload. -->
+                        <h3 class="etc-section-title">Observing Setup</h3>
                         <label class="etc-field">
-                            <span class="etc-field-label">Observing Profile</span>
+                            <span class="etc-field-label">Site</span>
                             <select id="select-profile"><option value="">Loading&hellip;</option></select>
                         </label>
                         <label class="etc-field">
-                            <span class="etc-field-label">Telescope &amp; Camera</span>
-                            <select id="select-rig"></select>
+                            <span class="etc-field-label">Telescope</span>
+                            <select id="select-telescope"></select>
+                        </label>
+                        <label class="etc-field">
+                            <span class="etc-field-label">Camera</span>
+                            <select id="select-camera"></select>
+                        </label>
+                        <label class="etc-field">
+                            <span class="etc-field-label">Filter</span>
+                            <select id="select-filter"></select>
                         </label>
                         <p class="etc-specs" id="specs-card"></p>
 
-                        <hr class="etc-divider">
-
-                        <!-- The detail fields stay expanded rather than collapsing behind a
-                             disclosure control: this is an exposure time calculator, and the
-                             inputs the number depends on are the reason to trust the number. -->
-                        <h3 class="etc-section-title">Telescope</h3>
+                        <!-- Collapsed by default: once a telescope has been chosen, its raw
+                             numbers are a thing to check on demand rather than to read past
+                             every time. They stay in the DOM and in the payload while closed
+                             — <details> hides, it doesn't disable. -->
+                        <details class="etc-details">
+                            <summary class="etc-details-summary">Detailed parameters</summary>
+                            <div class="etc-details-body">
+                                <h3 class="etc-section-title">Telescope</h3>
                         <label class="etc-field">
                             <span class="etc-field-label">Primary Mirror Diameter</span>
                             <span class="etc-input-wrap">
@@ -95,9 +106,9 @@
                             </span>
                         </label>
 
-                        <hr class="etc-divider">
+                                <hr class="etc-divider">
 
-                        <h3 class="etc-section-title">Camera / Detector</h3>
+                                <h3 class="etc-section-title">Camera / Detector</h3>
                         <label class="etc-field">
                             <span class="etc-field-label">Pixel Pitch</span>
                             <span class="etc-input-wrap">
@@ -134,16 +145,9 @@
                             </span>
                         </label>
 
-                        <hr class="etc-divider">
+                                <hr class="etc-divider">
 
-                        <!-- Filter stays its own selector: the band changes between
-                             exposures while the telescope and camera don't, so folding it
-                             into a rig would mean a rig per band. -->
-                        <h3 class="etc-section-title">Filter</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Filter Preset</span>
-                            <select id="select-filter"><option value="">Loading&hellip;</option></select>
-                        </label>
+                                <h3 class="etc-section-title">Filter</h3>
                         <label class="etc-field">
                             <span class="etc-field-label">Central Wavelength</span>
                             <span class="etc-input-wrap">
@@ -166,9 +170,9 @@
                             </span>
                         </label>
 
-                        <hr class="etc-divider">
+                                <hr class="etc-divider">
 
-                        <h3 class="etc-section-title">System</h3>
+                                <h3 class="etc-section-title">System</h3>
                         <label class="etc-field">
                             <span class="etc-field-label">Throughput Correction</span>
                             <span class="etc-input-wrap">
@@ -176,6 +180,8 @@
                                 <span class="etc-unit">%</span>
                             </span>
                         </label>
+                            </div>
+                        </details>
                     </div>
 
                     <!-- ══ Target ══ -->

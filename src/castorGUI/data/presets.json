@@ -1,12 +1,16 @@
 {
   "_comment": [
-    "Hardware and site presets, shared by both interfaces (castorGUI's Flet app and",
-    "frontend/). Kinder serves this file verbatim from its presets route, so its shape",
-    "is a contract, not an internal detail.",
+    "Hardware and site presets, shared by every host. Kinder serves this file verbatim",
+    "from its presets route, so its shape is a contract, not an internal detail.",
     "",
-    "Fragments are shaped like castor.schema itself (instrument.telescope, environment.",
+    "Fragments are shaped like castor.schema itself (telescope, camera, environment.",
     "location, ...) rather than dotted-path strings, so a preset is a literal subset of",
     "the request a user would save or send.",
+    "",
+    "Telescopes and cameras are listed per profile rather than as one global catalogue:",
+    "choosing a site is what narrows them, which is the reason the site selector sits",
+    "above the others. They stay separate lists rather than fixed pairings because",
+    "cameras do get moved between telescopes.",
     "",
     "A profile with an 'environment' block is a real observing site and applying it fills",
     "in the site's coordinates and sky. A profile without one is a hardware family only",
@@ -15,7 +19,10 @@
     "",
     "'median_seeing_fwhm' is a reference figure for display only and is never written into",
     "the form: seeing is a condition of the night being planned, not a property of the site,",
-    "and it is the field an observer is most likely to have set deliberately."
+    "and it is the field an observer is most likely to have set deliberately.",
+    "",
+    "Filters are global. Bands are a property of the observation rather than of the site,",
+    "and the standard sets are not tied to one telescope."
   ],
 
   "profiles": {
@@ -31,41 +38,45 @@
         "extinction_coeff": 0.17
       },
       "median_seeing_fwhm": 1.4,
-      "rigs": {
-        "lot_sophia": {
-          "name": "LOT 1.0 m + Sophia",
-          "instrument": {
-            "telescope": {
-              "primary_mirror_diameter": 1.0,
-              "secondary_mirror_diameter": 0.3,
-              "focal_length": 8.0,
-              "optical_throughput": 0.804
-            },
-            "camera": {
-              "pixel_pitch": 15.0,
-              "quantum_efficiency": 0.85,
-              "dark_current_rate": 0.01,
-              "readout_noise": 5.0,
-              "full_well_capacity": 100000
-            }
+      "telescopes": {
+        "LOT": {
+          "name": "LOT 1.0 m",
+          "telescope": {
+            "primary_mirror_diameter": 1.0,
+            "secondary_mirror_diameter": 0.3,
+            "focal_length": 8.0,
+            "optical_throughput": 0.804
           }
         },
-        "slt_default": {
-          "name": "SLT 0.4 m + default camera",
-          "instrument": {
-            "telescope": {
-              "primary_mirror_diameter": 0.4,
-              "secondary_mirror_diameter": 0.12,
-              "focal_length": 3.2,
-              "optical_throughput": 0.804
-            },
-            "camera": {
-              "pixel_pitch": 9.0,
-              "quantum_efficiency": 0.85,
-              "dark_current_rate": 0.01,
-              "readout_noise": 3.5,
-              "full_well_capacity": 50000
-            }
+        "SLT": {
+          "name": "SLT 0.4 m",
+          "telescope": {
+            "primary_mirror_diameter": 0.4,
+            "secondary_mirror_diameter": 0.12,
+            "focal_length": 3.2,
+            "optical_throughput": 0.804
+          }
+        }
+      },
+      "cameras": {
+        "Sophia": {
+          "name": "Sophia",
+          "camera": {
+            "pixel_pitch": 15.0,
+            "quantum_efficiency": 0.85,
+            "dark_current_rate": 0.01,
+            "readout_noise": 5.0,
+            "full_well_capacity": 100000
+          }
+        },
+        "SLT_default": {
+          "name": "SLT default camera",
+          "camera": {
+            "pixel_pitch": 9.0,
+            "quantum_efficiency": 0.85,
+            "dark_current_rate": 0.01,
+            "readout_noise": 3.5,
+            "full_well_capacity": 50000
           }
         }
       }
@@ -73,23 +84,26 @@
 
     "vlt": {
       "name": "VLT / FORS2 (hardware only)",
-      "rigs": {
-        "vlt_fors2": {
-          "name": "VLT 8.0 m + FORS2 MIT",
-          "instrument": {
-            "telescope": {
-              "primary_mirror_diameter": 8.0,
-              "secondary_mirror_diameter": 1.088,
-              "focal_length": 24.75,
-              "optical_throughput": 0.771
-            },
-            "camera": {
-              "pixel_pitch": 15.0,
-              "quantum_efficiency": 0.781,
-              "dark_current_rate": 0.000583,
-              "readout_noise": 3.15,
-              "full_well_capacity": 80400
-            }
+      "telescopes": {
+        "VLT": {
+          "name": "VLT 8.0 m",
+          "telescope": {
+            "primary_mirror_diameter": 8.0,
+            "secondary_mirror_diameter": 1.088,
+            "focal_length": 24.75,
+            "optical_throughput": 0.771
+          }
+        }
+      },
+      "cameras": {
+        "FORS2_MIT": {
+          "name": "FORS2 MIT",
+          "camera": {
+            "pixel_pitch": 15.0,
+            "quantum_efficiency": 0.781,
+            "dark_current_rate": 0.000583,
+            "readout_noise": 3.15,
+            "full_well_capacity": 80400
           }
         }
       }

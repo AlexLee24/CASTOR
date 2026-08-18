@@ -528,7 +528,12 @@
     var presets = {};
 
     function profiles() { return presets.profiles || {}; }
-    function rigsOf(profileId) { return (profiles()[profileId] || {}).rigs || {}; }
+
+    /* Telescope and camera lists are scoped to the selected site — that scoping is
+       why the site selector sits above them. */
+    function catalogue(kind) {
+        return (profiles()[el('select-profile').value] || {})[kind] || {};
+    }
 
     /* Presets are stored shaped like castor.schema itself, so applying one means
        walking the fragment down to its leaves and writing each into the matching
@@ -604,9 +609,12 @@
 
     function applyProfile(profileId) {
         var profile = profiles()[profileId];
-        var rigSelect = el('select-rig');
+        var telescopeSelect = el('select-telescope');
+        var cameraSelect = el('select-camera');
+
         if (!profile) {
-            fillSelect(rigSelect, [], 'Custom');
+            fillSelect(telescopeSelect, [], 'Custom');
+            fillSelect(cameraSelect, [], 'Custom');
             renderSpecs();
             return;
         }
@@ -614,19 +622,41 @@
         // family and must not invent a location. See data/presets.json.
         if (profile.environment) { applyFragment('environment', profile.environment); }
 
-        fillSelect(rigSelect, named(profile.rigs || {}), 'Custom');
-        var firstRig = Object.keys(profile.rigs || {})[0];
-        if (firstRig) {
-            rigSelect.value = firstRig;
-            applyFragment('instrument', profile.rigs[firstRig].instrument);
+        fillSelect(telescopeSelect, named(profile.telescopes || {}), 'Custom');
+        fillSelect(cameraSelect, named(profile.cameras || {}), 'Custom');
+
+        var firstTelescope = Object.keys(profile.telescopes || {})[0];
+        if (firstTelescope) {
+            telescopeSelect.value = firstTelescope;
+            applyFragment('instrument.telescope', profile.telescopes[firstTelescope].telescope);
+        }
+        var firstCamera = Object.keys(profile.cameras || {})[0];
+        if (firstCamera) {
+            cameraSelect.value = firstCamera;
+            applyFragment('instrument.camera', profile.cameras[firstCamera].camera);
         }
         renderSpecs();
     }
 
     function initPresets() {
         var profileSelect = el('select-profile');
-        var rigSelect = el('select-rig');
+        var telescopeSelect = el('select-telescope');
+        var cameraSelect = el('select-camera');
         var filterSelect = el('select-filter');
+
+        /* Each of the three hardware selectors writes only its own slice. Picking a
+           different camera at the same site is no reason to re-apply that site's sky
+           over an mu_dark the observer tuned, nor to reset the telescope. */
+        function bindSlice(select, kind, section, key) {
+            select.addEventListener('change', function () {
+                var preset = kind === 'filters'
+                    ? (presets.filters || {})[select.value]
+                    : catalogue(kind)[select.value];
+                if (preset) { applyFragment(section, preset[key]); }
+                renderSpecs();
+                recalculate();
+            });
+        }
 
         fetch(CONFIG.presetsUrl).then(function (response) {
             if (!response.ok) { throw new Error('HTTP ' + response.status); }
@@ -634,7 +664,8 @@
         }).then(function (data) {
             presets = data || {};
             fillSelect(profileSelect, named(profiles()), 'Custom');
-            fillSelect(rigSelect, [], 'Custom');
+            fillSelect(telescopeSelect, [], 'Custom');
+            fillSelect(cameraSelect, [], 'Custom');
             fillSelect(filterSelect, named(presets.filters || {}), 'Custom');
             renderSpecs();
 
@@ -642,25 +673,15 @@
                 applyProfile(profileSelect.value);
                 recalculate();
             });
-            rigSelect.addEventListener('change', function () {
-                // Instrument only: picking a different instrument at the same site is no
-                // reason to re-apply that site's sky over an mu_dark the observer tuned.
-                var rig = rigsOf(profileSelect.value)[rigSelect.value];
-                if (rig) { applyFragment('instrument', rig.instrument); }
-                renderSpecs();
-                recalculate();
-            });
-            filterSelect.addEventListener('change', function () {
-                var preset = (presets.filters || {})[filterSelect.value];
-                if (preset) { applyFragment('instrument.optic_filter', preset.optic_filter); }
-                recalculate();
-            });
+            bindSlice(telescopeSelect, 'telescopes', 'instrument.telescope', 'telescope');
+            bindSlice(cameraSelect, 'cameras', 'instrument.camera', 'camera');
+            bindSlice(filterSelect, 'filters', 'instrument.optic_filter', 'optic_filter');
         }).catch(function (err) {
             // Presets are a convenience, not a requirement — every field already
             // carries a usable default, so say so plainly and leave them editable
             // instead of stranding the dropdown on "Loading…".
             console.error('Preset load failed:', err);
-            [profileSelect, rigSelect, filterSelect].forEach(function (select) {
+            [profileSelect, telescopeSelect, cameraSelect, filterSelect].forEach(function (select) {
                 select.innerHTML = '<option>Presets unavailable — using defaults below</option>';
                 select.disabled = true;
                 select.classList.add('is-error');
@@ -750,9 +771,9 @@
         }
         // Same reasoning as AppState.load_from_dict: leaving the selectors on their
         // previous choice would claim a provenance these numbers no longer have.
-        el('select-profile').value = '';
-        el('select-rig').value = '';
-        el('select-filter').value = '';
+        ['select-profile', 'select-telescope', 'select-camera', 'select-filter'].forEach(
+            function (id) { el(id).value = ''; }
+        );
         renderSpecs();
         syncConditionalFields();
         recalculate();

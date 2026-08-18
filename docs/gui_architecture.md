@@ -63,7 +63,8 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 ##### A. Request Building
 
 * **Domain-Driven Form:** Four freely-switchable tabs — Instrument, Target, Environment, Options — mirroring the engine's four request pillars. Every `<input name="...">` is a dotted path matching `castor.schema`'s nested shape, so the request payload is built by walking the form rather than by naming each field twice.
-* **Observing Profiles:** A profile (site) cascading into a rig (telescope + camera), from [`data/presets.json`](../src/castorGUI/data/presets.json), plus an independent filter selector. Selecting a site also fills in its coordinates, `mu_dark` and extinction — the cross-tab fill-in is the reason for grouping them.
+* **Observing Setup:** Four selectors from [`data/presets.json`](../src/castorGUI/data/presets.json) — site, telescope, camera, filter. The site comes first because it is what narrows the telescope and camera lists, and selecting it also fills in that site's coordinates, `mu_dark` and extinction; the cross-tab fill-in is the reason those live together. The three hardware selectors stay independent of one another, because cameras get moved between telescopes and the band changes between exposures.
+* **Progressive disclosure:** Below the selectors, a summary line states what was applied (aperture, focal length, f/ratio, pixel pitch, QE, read noise) and the raw fields sit in a collapsed `<details>`. Once a telescope has been chosen its individual numbers are something to check on demand, not to read past every time. The fields stay in the DOM and in the payload while closed.
 * **Save / Load:** Serializing the form to/from JSON.
 
 ##### B. Live Calculation & Results Display
@@ -109,7 +110,7 @@ src/castorGUI/
 
 * **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server.
 
-* **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Kinder serves this file verbatim, which makes its shape a contract rather than an internal detail.
+* **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Telescopes and cameras are listed per site rather than as one global catalogue; filters are global, since bands belong to the observation rather than the site. Kinder serves this file verbatim, which makes its shape a contract rather than an internal detail.
 
 ## 3. Design Principles
 
@@ -127,7 +128,7 @@ The mounted and standalone deployments are the same files, differing only in wha
 
 ### 3.4 Presets Describe, They Don't Presume
 
-A preset fills in what it actually knows. A site profile sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Swapping rigs never rewrites the site's sky, and `median_seeing_fwhm` is displayed but never applied: seeing describes the night being planned, not the site, and it is the field an observer is most likely to have set deliberately.
+A preset fills in what it actually knows, and no more. A site sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Each hardware selector writes only its own slice, so changing camera neither resets the telescope nor rewrites an `mu_dark` the observer tuned for the night. And `median_seeing_fwhm` is displayed but never applied: seeing describes the night being planned, not the site, and it is the field an observer is most likely to have set deliberately.
 
 ## 4. Data Flow
 
