@@ -61,6 +61,17 @@ python src/castorGUI/server.py     # http://127.0.0.1:8600
 `server.py` substitutes `etc_body.html` into `index.html`'s `<!--CASTOR_ETC_BODY-->`
 marker at request time, so editing the partial only needs a browser refresh.
 
+## Desktop
+
+```bash
+python src/castorGUI/desktop.py
+```
+
+The same files again, in a native window: `desktop.py` starts `server.py` on a
+loopback port and points the platform's own webview at it. There is no separate
+desktop UI to keep in step, and no browser is bundled — see the packaging command
+in that file's docstring.
+
 ## Mounting inside Kinder
 
 Kinder already vendors this repository at `app/modules/CASTOR/` and already

@@ -28,8 +28,20 @@ from castor import schema  # noqa: E402
 from castor.calculator import run_calculation  # noqa: E402
 from castor.batch_calculator import run_batch_calculation  # noqa: E402
 
-FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
-PRESETS_PATH = Path(__file__).resolve().parent / "data" / "presets.json"
+def _asset_root() -> Path:
+    """Where frontend/ and data/ live at runtime.
+
+    Running from source that is simply this file's directory. Inside a PyInstaller
+    bundle the sources are unpacked to a temporary directory it advertises as
+    sys._MEIPASS, and __file__ points into the frozen archive instead — so the
+    desktop build would serve a 404 for every asset without this.
+    """
+    bundled = getattr(sys, "_MEIPASS", None)
+    return Path(bundled) if bundled else Path(__file__).resolve().parent
+
+
+FRONTEND_DIR = _asset_root() / "frontend"
+PRESETS_PATH = _asset_root() / "data" / "presets.json"
 BODY_MARKER = "<!--CASTOR_ETC_BODY-->"
 
 app = FastAPI(title="CASTOR ETC")
