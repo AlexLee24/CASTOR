@@ -4,122 +4,130 @@
 
 ### 1.1 Product Identity
 
-CASTOR GUI is the official reference interface for the [CASTOR](architecture.md) exposure time calculator engine. It is a Flet-based Python application that gives astronomers a full, form-driven UI for building an observation request (instrument, target, environment, calculation strategy), running the calculation live, and reading back the results — without writing any code or touching `castor.schema` directly.
+CASTOR GUI is the official reference interface for the [CASTOR](architecture.md) exposure time calculator engine. It gives astronomers a form-driven UI for building an observation request (instrument, target, environment, calculation strategy), running the calculation live, and reading back the results — without writing any code or touching `castor.schema` directly.
 
-It ships as a standalone desktop/web app first (what you get running `castorGUI` locally), and the same build is designed to be **mounted as a page inside [Kinder](https://kinder.astro.ncu.edu.tw)** — a larger, multi-tab astronomy portal — rather than distributed as its own separately-branded site. In other words: Kinder does not reimplement the calculator's UI; it mounts CASTOR GUI's page and everything astronomers see there is the same interface verified in this standalone app.
+It is plain HTML, CSS and JavaScript ([`src/castorGUI/frontend/`](../src/castorGUI/frontend/)), served either by its own small development host or by whatever site embeds it. That choice is the product decision, not an implementation detail: CASTOR GUI is meant to be **mounted inside [Kinder](https://kinder.astro.ncu.edu.tw)**, a Flask/Jinja astronomy portal with no frontend build step, and a plain HTML fragment is the only shape that a Jinja template can include natively. See [`frontend/README.md`](../src/castorGUI/frontend/README.md) for the host contract.
 
-Per an early mockup from the team (not yet a locked spec), the mounted page is reached from Kinder's own top-level `TOOLS` navigation menu and is branded **"CASTOR ETC — Optical Exposure Time Calculator Engine"** within the page itself, distinct from the Kinder site name shown in the nav bar above it.
-
-CASTOR GUI is a distinct product from the CASTOR core engine. It is a consumer of that engine, not part of it — see [`architecture.md` §1.3](architecture.md#13-system-context--boundary) for the engine-side boundary. This document describes CASTOR GUI on its own terms.
+CASTOR GUI is a distinct product from the CASTOR core engine. It is a consumer of that engine, not part of it — see [`architecture.md` §1.3](architecture.md#13-system-context--boundary) for the engine-side boundary.
 
 ### 1.2 Core Value
 
-Without CASTOR GUI, every consumer of the CASTOR engine (Kinder's backend, other scripts) has to build its own form, its own validation-error display, and its own results layout from scratch, against a Pydantic contract that changes as the engine evolves. CASTOR GUI centralizes that work once, correctly, and lets Kinder mount it instead of re-deriving it — while still doubling as the fastest way for the CASTOR team to manually exercise the engine during development.
+Without CASTOR GUI, every consumer of the CASTOR engine has to build its own form, its own validation-error display, and its own results layout from scratch, against a Pydantic contract that changes as the engine evolves. CASTOR GUI centralizes that work once and lets Kinder include it rather than re-derive it.
+
+That "rather than re-derive it" is the lesson the current structure exists to encode. An earlier version of this frontend was deleted when the GUI was rewritten in Flet; Kinder had already forked a copy of it, so the two immediately began to drift, with the same form maintained twice in two languages. The frontend was restored specifically so there is one copy again.
 
 ### 1.3 System Context & Boundary
 
-CASTOR GUI talks to the engine exactly like any other caller: it imports `castor.calculator`, `castor.batch_calculator`, and `castor.schema` as a plain Python library and calls them in-process (see [`state.py`](../src/castorGUI/state.py)). It holds no special access the engine doesn't also grant to Kinder or any other integrator.
+Kinder vendors this repository at `app/modules/CASTOR/` and calls the engine **in-process**, exactly like any other Python caller — `from castor.calculator import run_calculation`. What crosses a network boundary is only the browser talking to Kinder's own routes.
 
 ```mermaid
 flowchart TD
     User((User / Astronomer))
 
-    subgraph KinderSite["Kinder Website (multi-page portal)"]
+    subgraph KinderSite["Kinder (Flask portal)"]
         direction TB
-        KinderOther["Other Kinder Pages<br/>(unrelated features)"]
-        MountedGUI["CASTOR GUI<br/>(mounted as a page)"]
+        KinderNav["Site chrome<br/>(nav bar, routing, auth)"]
+        MountedGUI["CASTOR GUI<br/>(frontend/ included into a Jinja template)"]
+        KinderAPI["/api/exposure_time_calculator<br/>Flask routes"]
     end
 
-    StandaloneGUI["CASTOR GUI<br/>(standalone app — dev / local use)"]
+    subgraph Standalone["Standalone (development)"]
+        DevGUI["CASTOR GUI<br/>(same frontend/ files)"]
+        DevAPI["server.py<br/>FastAPI, identical routes"]
+    end
+
     CASTOR["CASTOR (Core Engine)<br/>castor.calculator / castor.batch_calculator"]
 
-    User -- "Browses to the ETC tab" --> KinderSite
-    User -- "Runs directly" --> StandaloneGUI
+    User -- "TOOLS menu" --> KinderSite
+    User -- "python server.py" --> Standalone
 
-    MountedGUI -. "same codebase & build" .-> StandaloneGUI
-    MountedGUI -- "Python import, in-process call" --> CASTOR
-    StandaloneGUI -- "Python import, in-process call" --> CASTOR
+    MountedGUI -- "HTTP" --> KinderAPI
+    DevGUI -- "HTTP" --> DevAPI
+    KinderAPI -- "in-process import" --> CASTOR
+    DevAPI -- "in-process import" --> CASTOR
+    MountedGUI -. "same files" .-> DevGUI
 
     style CASTOR fill:transparent,stroke:#a871ff,stroke-width:3px
     style MountedGUI fill:transparent,stroke:#ff8c2b,stroke-width:2px
-    style StandaloneGUI fill:transparent,stroke:#ff8c2b,stroke-width:2px
+    style DevGUI fill:transparent,stroke:#ff8c2b,stroke-width:2px
     style KinderSite fill:transparent,stroke:#2b8cff,stroke-width:2px
-    style KinderOther fill:transparent,stroke:#888888,stroke-width:2px,stroke-dasharray: 5 5
+    style Standalone fill:transparent,stroke:#888888,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
-Two deployment shapes, one codebase: locally the CASTOR team runs CASTOR GUI standalone to develop and verify against the engine; in production the same app is mounted as one page inside Kinder's larger site rather than being its own destination astronomers navigate to directly.
+**Chrome vs. content ownership.** Kinder owns the outer site chrome — nav bar, routing, page title, page background, and how much vertical room the calculator gets. CASTOR GUI owns the content area and nothing outside it: every CSS rule is scoped under `.castor-etc`.
 
-**Chrome vs. content ownership:** when mounted, Kinder owns only the outer site chrome — its top nav bar (`MARSHAL` / `TOOLS` / `PLANNERS` / `ABOUT US` / `LOGIN`) and whatever routing gets a user to the page. Everything inside the content area belongs to CASTOR GUI, *including its own visual identity* — the dark background and gold `#C5A059` accent defined in [`constant.py`](../src/castorGUI/constant.py)'s `Design` tokens travel with the product rather than being re-skinned to match Kinder. Kinder frames it; it doesn't restyle it.
+Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.css` defines `--kw-accent: #C5A059`, `--kw-border`, `--kw-space-*` and the rest; [`etc.css`](../src/castorGUI/frontend/css/etc.css) reads those variables with its own fallbacks, so mounted it inherits the site's theme and standalone it still renders correctly on its own.
 
 #### In Scope for CASTOR GUI
 
 ##### A. Request Building
 
-* **Domain-Driven Form:** Four tabs — Instrument, Target, Environment, Options — mirroring the engine's four request pillars, each editing a dotted-path slice of `AppState` (see [`state.py`](../src/castorGUI/state.py)).
-* **Hardware Presets:** Loading and applying named telescope/camera/filter presets from [`data/presets.json`](../src/castorGUI/data/presets.json) so common configurations don't need to be retyped.
-* **Save / Load:** Serializing the current form state to/from JSON, independent of the engine's own request/response schema.
+* **Domain-Driven Form:** Four freely-switchable tabs — Instrument, Target, Environment, Options — mirroring the engine's four request pillars. Every `<input name="...">` is a dotted path matching `castor.schema`'s nested shape, so the request payload is built by walking the form rather than by naming each field twice.
+* **Observing Profiles:** A profile (site) cascading into a rig (telescope + camera), from [`data/presets.json`](../src/castorGUI/data/presets.json), plus an independent filter selector. Selecting a site also fills in its coordinates, `mu_dark` and extinction — the cross-tab fill-in is the reason for grouping them.
+* **Save / Load:** Serializing the form to/from JSON.
 
 ##### B. Live Calculation & Results Display
 
-* **Single-Point Mode:** Recalculates via `castor.calculator.run_calculation()` on every field edit and renders SNR/exposure results, the signal & noise budget, physical diagnostics, and observation limits as metric cards ([`rightPanel.py`](../src/castorGUI/rightPanel.py)). The interaction model — freely-switchable tabs with instant recalculation on every edit, not a gated step-by-step wizard — is intentional and is what's meant to carry into the mounted Kinder page as-is; CASTOR GUI was built specifically to become that page, so its existing UX *is* the target UX, not a placeholder for one. (An early team mockup rendered the tabs as numbered, sequentially-gated steps — that reflects the mockup's own rough layout, not an intended interaction change.)
-* **Error & Warning Surfacing:** Translating Pydantic `ValidationError`s and engine-level `ValueError`s into readable messages instead of crashing the app; surfacing physical-boundary warnings (e.g. saturation, high airmass) inline.
-* **Batch / Time-Series Mode (planned):** Driving `castor.batch_calculator.run_batch_calculation()` and rendering its array output as a curve (e.g. SNR over a night, or over exposure time) rather than single-point metric cards — see §5 Future Extensibility.
+* **Recalculate on every edit:** No submit button, no gated wizard. Edits are debounced, and each request family cancels its own predecessor so a slow earlier response cannot land after a fast later one and overwrite it.
+* **Error & Warning Surfacing:** Pydantic `ValidationError`s and engine `ValueError`s become readable messages; physical-boundary warnings (saturation, high airmass) appear inline. On error the metric cards blank rather than leaving the last good run's numbers beside an error message.
+* **Observing Window:** When "Sweep time range" is on, `run_batch_calculation()` drives a three-panel Plotly chart (target/moon elevation, single-exposure SNR, saturation margin) sharing one time axis.
 
 ##### C. Visual Presentation
 
-* **Its own design system:** Colors, spacing, and typography ([`constant.py`](../src/castorGUI/constant.py)) — this is exactly the kind of UI ownership `src/castor/` explicitly stays out of.
+* **Design tokens** in `etc.css`, layered over Kinder's where present — the kind of UI ownership `src/castor/` explicitly stays out of.
 
 #### Out of Scope for CASTOR GUI
 
-##### A. Physics & Validation Logic
-
-* **No Independent Calculations:** CASTOR GUI never computes SNR, exposure time, or any physical quantity itself — every number displayed comes from a `castor` engine call. It contains no copies of formulas from `physics.py` or `moon.py`.
-* **No Relaxed Validation:** It does not work around or loosen the engine's Pydantic contract; invalid input is rejected by the same `StrictModel` rules the engine enforces on any other caller.
-
-##### B. Backend & Persistence Concerns
-
-* **No Auth, No Multi-User State:** Accounts, sessions, and permissions are Kinder's responsibility once CASTOR GUI is mounted inside it — this app has no login and no per-user data.
-* **No Canonical Preset Database:** [`data/presets.json`](../src/castorGUI/data/presets.json) is a local convenience file for standalone/dev use, not a production source of truth — when mounted inside Kinder, presets are expected to come from Kinder's own hardware database instead.
-* **No Networking of Its Own:** It does not expose an HTTP API; it is a client, and it reaches the engine only via direct, in-process Python calls.
+* **No Independent Calculations:** Every number displayed comes from an engine call. No formulas from `physics.py` or `moon.py` are duplicated here.
+* **No Relaxed Validation:** Invalid input is rejected by the same `StrictModel` rules the engine enforces on any other caller.
+* **No Auth, No Multi-User State:** Accounts and sessions are the host's responsibility.
+* **No Backend of Its Own:** [`server.py`](../src/castorGUI/server.py) exists so the frontend can be developed and verified against a real HTTP host. It is a reference implementation of the route contract, not a production server — in production those routes are Kinder's.
 
 ## 2. Component Architecture
 
 ```text
 src/castorGUI/
-├── app.py            # Entry point: wires AppState + LeftPanel + RightPanel into one page
-├── state.py           # AppState — form data store, presets, schema (de)serialization
-├── leftPanel.py         # Input forms: Instrument / Target / Environment / Options tabs
-├── rightPanel.py          # Results display: metric cards, error/warning boxes
-├── constant.py              # Design tokens — colors, spacing, typography
+├── frontend/
+│   ├── etc_body.html    # The UI. Plain HTML fragment — no wrapper, no template syntax
+│   ├── css/etc.css      # All styling, scoped under .castor-etc
+│   ├── js/etc.js        # Controller: payload building, live recalc, presets, chart
+│   ├── js/plotly.min.js # Vendored so the standalone build works offline
+│   ├── index.html       # Standalone page shell
+│   └── README.md        # The host contract — read this before embedding
+├── server.py            # Development host: the same three routes Kinder exposes
 └── data/
-    └── presets.json           # Local dev hardware presets (see §1.3.B out-of-scope note)
+    └── presets.json     # Observing profiles, rigs and filters
 ```
 
 ### Module Responsibilities
 
-* **`app.py`:** Boots the Flet page, constructs `AppState`, `LeftPanel`, and `RightPanel`, and wires the recalculate-on-change callback between them. Runs one calculation up front so the results panel isn't empty on first paint.
+* **`etc_body.html`:** Carries no `<head>`/`<body>` and no Jinja, so both hosts include the same file. Field names are the schema contract.
 
-* **`state.py`:** The single source of truth for form data. Exposes dotted-path `get`/`set` access matching the engine schema's nested shape, builds a validated `castor.schema.ObservationRequest` from that dict, and calls `run_calculation()`. Converts any `ValidationError`/`ValueError` into a display-ready string rather than letting it propagate. Also owns preset application and JSON save/load (deep-merge, so old save files missing newer fields don't blow away current defaults).
+* **`etc.js`:** Builds the request by walking the form (pruning branches the discriminators exclude, since the schema is strict), converts percent-displayed fields back to the 0–1 fractions the schema wants, calls the routes named in `window.CASTOR_ETC_CONFIG`, and renders results and the chart. Reads `window.Plotly`; providing it is the host's job.
 
-* **`leftPanel.py`:** Renders the four-tab input form and keeps every field bound back into `AppState`, triggering recalculation on change.
+* **`etc.css`:** Scoped tokens with `var(--kw-*, fallback)`.
 
-* **`rightPanel.py`:** A pure render target — no buttons, no state of its own. Takes whatever `AppState.recalculate()` returns and either draws metric cards or an error message.
+* **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server.
 
-* **`constant.py`:** Centralizes the `Design` token set (colors, spacing, radii, typography) so visual styling isn't scattered as magic values across the panel files.
+* **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Kinder serves this file verbatim, which makes its shape a contract rather than an internal detail.
 
 ## 3. Design Principles
 
 ### 3.1 Thin Client Over the Engine
 
-CASTOR GUI holds no physics and no independent validation rules — it is a rendering and input-collection layer over `castor`. Every calculation result traces back to a single `run_calculation()` / `run_batch_calculation()` call; this keeps the GUI and the engine from ever silently disagreeing about a number.
+No physics, no independent validation. Every result traces to a single `run_calculation()` / `run_batch_calculation()` call, so the GUI and the engine can never silently disagree about a number.
 
 ### 3.2 Same Contract as Any External Caller
 
-The GUI is deliberately not given a private/faster path into the engine. It builds the exact same `ObservationRequest` / `BatchObservationRequest` Pydantic objects any other integrator (like Kinder's backend) would build, so behavior verified in the GUI transfers directly to other callers.
+The GUI builds the exact `ObservationRequest` / `BatchObservationRequest` any other integrator would build, so behaviour verified here transfers directly.
 
-### 3.3 Standalone-First, Mount-Ready
+### 3.3 One Copy, Two Hosts
 
-The app is built and tested as a fully working standalone program, not as a fragment that only makes sense embedded in Kinder. Mounting inside Kinder is an additional deployment target for the same build, not a different codebase.
+The mounted and standalone deployments are the same files, differing only in what the host supplies: routes, Plotly, page chrome, and available height. Anything a host needs to vary is a declared seam — `window.CASTOR_ETC_CONFIG`, `--kw-*` theme variables, `--etc-shell-height` — never a second copy of the markup.
+
+### 3.4 Presets Describe, They Don't Presume
+
+A preset fills in what it actually knows. A site profile sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Swapping rigs never rewrites the site's sky, and `median_seeing_fwhm` is displayed but never applied: seeing describes the night being planned, not the site, and it is the field an observer is most likely to have set deliberately.
 
 ## 4. Data Flow
 
@@ -127,28 +135,35 @@ The app is built and tested as a fully working standalone program, not as a frag
 sequenceDiagram
     autonumber
     actor User
-    participant Left as leftPanel.py
-    participant State as state.py (AppState)
+    participant UI as etc.js (browser)
+    participant Host as Host route<br/>(Kinder blueprint / server.py)
     participant Engine as castor (calculator.py /<br/>batch_calculator.py)
-    participant Right as rightPanel.py
 
-    User->>Left: Edits a field (e.g. exposure time)
-    Left->>State: set(dotted_path, value)
-    Left->>State: recalculate()
-    State->>State: build_observation_request()
+    User->>UI: Edits a field
+    UI->>UI: Debounce; cancel the in-flight request
+    UI->>UI: Walk the form into a request payload
+    UI->>Host: POST /api/exposure_time_calculator
+    Host->>Host: ObservationRequest.model_validate()
     alt Validation fails
-        State-->>Left: (None, error message)
+        Host-->>UI: 400 {"error": "..."}
+        UI-->>User: Error box, metric cards blanked
     else Validation succeeds
-        State->>Engine: run_calculation(request)
-        Engine-->>State: ObservationResponse
-        State-->>Left: (response, None)
+        Host->>Engine: run_calculation(request)
+        Engine-->>Host: ObservationResponse
+        Host-->>UI: 200 JSON
+        UI-->>User: Hero value, metric cards, warnings
     end
-    Left->>Right: render(response, error)
-    Right-->>User: Metric cards or error box
+    opt Sweep time range is on
+        UI->>Host: POST .../batch (longer debounce)
+        Host->>Engine: run_batch_calculation(request)
+        Engine-->>Host: BatchObservationResponse
+        Host-->>UI: 200 JSON
+        UI-->>User: Observing Window chart
+    end
 ```
 
 ## 5. Future Extensibility
 
-* **Batch / Time-Series Visualization:** A results view backed by `castor.batch_calculator.run_batch_calculation()`, plotting its array output (e.g. SNR across a night, or across accumulated exposure time) instead of single-point metric cards. This is the natural home for the "SNR to Exposure Time"-style chart — it reuses the existing Instrument/Target/Options tabs and only needs the Environment tab to grow a time-series variant (start/end/step in place of a single `observing_time_utc`), plus a chart-rendering results view alongside the existing metric-card one.
-* **Kinder Mounting Mechanism:** Confirmed shape is a page under Kinder's `TOOLS` menu, branded "CASTOR ETC", with Kinder owning only the outer nav chrome and CASTOR GUI owning the full content area (see §1.3). The concrete technical integration (iframe, Flet web export served from a Kinder route, or another embedding approach) is not yet decided.
-* **Preset Source Swap:** Replacing the local `data/presets.json` with Kinder's hardware database once mounted, while keeping the JSON file as the standalone/dev fallback.
+* **Desktop build:** Wrapping the same frontend in a native window (`pywebview` is already declared for this) rather than maintaining a second, separately-written desktop UI.
+* **Completing the Kinder mount:** Kinder's `exposure_time_calculator.html` still carries its own forked copy of the form. Switching it to `{% include %}` this frontend is what ends the duplication; the routes and the vendored engine are already in place.
+* **Preset source swap:** Serving profiles from Kinder's hardware database while keeping `presets.json` as the standalone fallback. Note the current direction is the reverse — Kinder reads this file.

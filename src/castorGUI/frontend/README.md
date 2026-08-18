@@ -50,8 +50,7 @@ the calculator is likewise the host's to say: the panels' height comes from
 (`.castor-etc { --etc-shell-height: calc(100vh - 160px); }`) instead of
 patching the layout rule. Where the host defines Kinder's
 `--kw-*` theme variables the calculator picks them up automatically; where it
-doesn't, the fallbacks in `etc.css` (the same values as `constant.py`'s `Design`
-tokens) apply.
+doesn't, the fallbacks in `etc.css` apply.
 
 ## Standalone
 
