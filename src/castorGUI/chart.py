@@ -85,7 +85,15 @@ def render_batch_chart(response: schema.BatchObservationResponse, single_exp_tim
     fig.subplots_adjust(top=0.98, bottom=0.06, left=0.10, right=0.97)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", facecolor=fig.get_facecolor())
+    # transparent=True, not facecolor=SURFACE_1: RightPanel's card is a translucent,
+    # backdrop-blurred "glass" surface (Design.PANEL_BG + GLASS_CARD's blur) — its
+    # effective on-screen color is that translucency composited over whatever's behind
+    # the page, not a flat SURFACE_1. A solid-filled PNG can only ever approximate that
+    # with a flat color and would drift the moment PANEL_BG/BG_DARK changes; a
+    # transparent PNG instead shows the real glass surface through it, matching by
+    # construction. This overrides the fig/axes facecolor set above for any other export
+    # path (e.g. saving a PNG standalone) that doesn't pass transparent=True itself.
+    fig.savefig(buf, format="png", transparent=True)
     return buf.getvalue()
 
 

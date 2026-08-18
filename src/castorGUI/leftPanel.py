@@ -16,6 +16,12 @@ class LeftPanel(ft.Container):
 
         # dotted-path -> Control, used to sync displayed values when a preset is applied
         self.field_refs: dict[str, ft.TextField] = {}
+        # Paths built with _num_field(..., percent=True): stored/schema value is still the
+        # 0-1 fraction castor.schema expects (ge=0, le=1) — only the displayed text is
+        # *100, same convention rightPanel.py already uses for read-only outputs like
+        # System Throughput / Enclosed Flux. Tracked here so _make_preset_handler's
+        # display refresh (after LOAD or applying a preset) converts the same way.
+        self._percent_paths: set[str] = set()
 
         self.current_tab_index = 0
         self.tab_names = ["Instrument", "Target", "Environment", "Options"]
@@ -376,12 +382,27 @@ class LeftPanel(ft.Container):
         except Exception as ex:  # noqa: BLE001
             print(f"[LeftPanel] on_change callback failed: {ex}")
 
-    def _num_field(self, path: str, label: str, unit: str = "", integer: bool = False, width=None) -> ft.TextField:
+    @staticmethod
+    def _format_percent(value: float) -> str:
+        """value*100 on a float (e.g. 0.804*100) routinely lands on 80.39999999999999 —
+        round before display so the field doesn't show float noise the user never typed."""
+        rounded = round(value, 6)
+        return str(int(rounded)) if rounded == int(rounded) else str(rounded)
+
+    def _num_field(
+        self, path: str, label: str, unit: str = "", integer: bool = False, width=None, percent: bool = False
+    ) -> ft.TextField:
+        """percent=True is for the handful of castor.schema fields bounded to [0, 1]
+        (optical_throughput, quantum_efficiency, filter_transmission,
+        throughput_correction): the user types/sees a 0-100 percentage, but
+        state.py/schema.py never know the difference — the stored value is always the
+        0-1 fraction, converted only at this GUI boundary."""
         current = self.state.get(path)
+        display_value = self._format_percent(current * 100) if percent else str(current)
         tf = ft.TextField(
             label=label,
-            value=str(current),
-            suffix=unit or None,
+            value=display_value,
+            suffix=unit or ("%" if percent else None),
             keyboard_type=ft.KeyboardType.NUMBER,
             text_size=13,
             color=Design.TEXT_MAIN,
@@ -392,9 +413,11 @@ class LeftPanel(ft.Container):
             content_padding=ft.Padding(left=12, right=12, top=10, bottom=10),
             width=width,
             expand=(width is None),
-            on_change=self._make_num_handler(path, integer=integer),
+            on_change=self._make_num_handler(path, integer=integer, percent=percent),
         )
         self.field_refs[path] = tf
+        if percent:
+            self._percent_paths.add(path)
         return tf
 
     def _text_field(self, path: str, label: str, width=None) -> ft.TextField:
@@ -422,13 +445,15 @@ class LeftPanel(ft.Container):
             self._notify_change()
         return handler
 
-    def _make_num_handler(self, path: str, integer: bool = False):
+    def _make_num_handler(self, path: str, integer: bool = False, percent: bool = False):
         def handler(e):
             raw = e.control.value
             try:
                 value = int(raw) if integer else float(raw)
             except (TypeError, ValueError):
                 return  # User is still mid-typing (e.g. "1." or "-"), leave state untouched
+            if percent:
+                value = value / 100
             self.state.set(path, value)
             self._notify_change()
         return handler
@@ -456,63 +481,155 @@ class LeftPanel(ft.Container):
             self._notify_change()
         return handler
 
-    def _preset_dropdown(self, category: str, label: str) -> ft.Dropdown:
-        keys = list(self.state.presets.get(category, {}).keys())
+    def _preset_dropdown(self, label: str, options: list[tuple[str, str]], value, on_select) -> ft.Dropdown:
+        """Shared shape for the three preset selectors. hint_text shows when value is
+        None, which is the state's way of saying the current numbers came from the user
+        rather than from a preset."""
         return ft.Dropdown(
             label=label,
             label_style=ft.TextStyle(color=Design.TEXT_MUTED, size=12),
-            hint_text="Apply a preset…",
-            options=[ft.dropdown.Option(key=k, text=k.replace("_", " ")) for k in keys],
+            hint_text="Custom",
+            value=value,
+            options=[ft.dropdown.Option(key=k, text=text) for k, text in options],
             color=Design.TEXT_MAIN,
             border_color=Design.BORDER_COLOR,
             border_radius=Design.RADIUS_BASE,
             expand=True,
-            on_select=self._make_preset_handler(category),
+            on_select=on_select,
         )
 
-    def _make_preset_handler(self, category: str):
-        def handler(e):
-            key = e.control.value
-            changed_paths = self.state.apply_preset(category, key)
-            for path in changed_paths:
-                field = self.field_refs.get(path)
-                if field is None:
-                    continue
-                field.value = str(self.state.get(path))
-                if field.page:
-                    field.update()
-            self._notify_change()
-        return handler
+    def _sync_fields(self, paths: list[str]) -> None:
+        """Pushes freshly-applied state values back into their input fields. Paths can
+        land on any tab — applying a site profile writes the Environment tab's
+        coordinates while the user is looking at Instrument — so this deliberately
+        doesn't assume the field is currently on screen; .value is set either way and
+        .update() only runs for fields actually attached to the page."""
+        for path in paths:
+            field = self.field_refs.get(path)
+            if field is None:
+                continue
+            value = self.state.get(path)
+            field.value = self._format_percent(value * 100) if path in self._percent_paths else str(value)
+            # _safe_update, not `if field.page` — reading .page on an unmounted Control
+            # raises rather than returning None, and applying a site profile from the
+            # Instrument tab necessarily touches Environment fields that aren't mounted.
+            self._safe_update(field)
+
+    def _profile_options(self) -> list[tuple[str, str]]:
+        profiles = self.state.presets.get("profiles", {})
+        return [(key, profile.get("name", key)) for key, profile in profiles.items()]
+
+    def _rig_options(self, profile_id: str | None) -> list[tuple[str, str]]:
+        rigs = self.state.presets.get("profiles", {}).get(profile_id or "", {}).get("rigs", {})
+        return [(key, rig.get("name", key)) for key, rig in rigs.items()]
+
+    def _filter_options(self) -> list[tuple[str, str]]:
+        filters = self.state.presets.get("filters", {})
+        return [(key, preset.get("name", key)) for key, preset in filters.items()]
+
+    def _specs_summary(self) -> str:
+        """A read-only digest of the numbers the two selectors above just set, so the
+        common case doesn't require scrolling the detail fields to confirm what was
+        applied. Derived from live state rather than from the preset, so it keeps
+        telling the truth after a field is edited by hand."""
+        tel = self.state.instrument["telescope"]
+        cam = self.state.instrument["camera"]
+        aperture = tel["primary_mirror_diameter"]
+        focal_ratio = f"f/{tel['focal_length'] / aperture:.1f}" if aperture else "f/—"
+        lines = [
+            f"{aperture:g} m aperture · {tel['focal_length']:g} m focal length · {focal_ratio}",
+            f"{cam['pixel_pitch']:g} µm pixels · QE {cam['quantum_efficiency'] * 100:.0f}% · "
+            f"read noise {cam['readout_noise']:g} e-",
+        ]
+        seeing = self.state.median_seeing()
+        if seeing is not None:
+            # Shown, never applied — see AppState.apply_profile on why seeing is the
+            # observer's call rather than the site's.
+            lines.append(f"Site median seeing {seeing:g}\" — reference only, not applied")
+        return "\n".join(lines)
+
+    def _refresh_specs(self) -> None:
+        self.specs_text.value = self._specs_summary()
+        self._safe_update(self.specs_card)
+
+    def _on_profile_select(self, e):
+        changed = self.state.apply_profile(e.control.value)
+        self._sync_fields(changed)
+        self.rig_dropdown.options = [
+            ft.dropdown.Option(key=k, text=text) for k, text in self._rig_options(self.state.active_profile)
+        ]
+        self.rig_dropdown.value = self.state.active_rig
+        self._safe_update(self.rig_dropdown)
+        self._refresh_specs()
+        self._notify_change()
+
+    def _on_rig_select(self, e):
+        self._sync_fields(self.state.apply_rig(e.control.value))
+        self._refresh_specs()
+        self._notify_change()
+
+    def _on_filter_select(self, e):
+        self._sync_fields(self.state.apply_filter(e.control.value))
+        self._notify_change()
 
     # ==========================================
     # Tab 1: Instrument
     # ==========================================
     def build_instrument_tab(self) -> ft.Column:
+        # Two cascading selectors instead of three independent ones: nobody pairs an
+        # arbitrary telescope with an arbitrary camera, and picking a site can fill in
+        # its coordinates and sky at the same time (see AppState.apply_profile).
+        self.profile_dropdown = self._preset_dropdown(
+            "Observing Profile", self._profile_options(), self.state.active_profile, self._on_profile_select
+        )
+        self.rig_dropdown = self._preset_dropdown(
+            "Telescope & Camera", self._rig_options(self.state.active_profile),
+            self.state.active_rig, self._on_rig_select
+        )
+        self.specs_text = ft.Text(self._specs_summary(), size=11, color=Design.TEXT_MUTED)
+        self.specs_card = ft.Container(
+            content=self.specs_text,
+            bgcolor=Design.SURFACE_1,
+            border_radius=Design.RADIUS_BASE,
+            padding=Design.GAP_FIELD,
+        )
+
         return ft.Column(
             controls=[
+                self._section_title("Observing Profile"),
+                self.profile_dropdown,
+                self.rig_dropdown,
+                self.specs_card,
+                self._divider(),
+                # The detail fields stay expanded rather than collapsing behind a
+                # disclosure control: this is an exposure time calculator, and the
+                # inputs the number depends on are the reason to trust the number.
                 self._section_title("Telescope"),
-                self._preset_dropdown("telescopes", "Telescope Preset"),
                 self._num_field("instrument.telescope.primary_mirror_diameter", "Primary Mirror Diameter", "m"),
                 self._num_field("instrument.telescope.secondary_mirror_diameter", "Secondary Mirror Diameter", "m"),
                 self._num_field("instrument.telescope.focal_length", "Focal Length", "m"),
-                self._num_field("instrument.telescope.optical_throughput", "Optical Throughput", "0-1"),
+                self._num_field("instrument.telescope.optical_throughput", "Optical Throughput", percent=True),
                 self._divider(),
                 self._section_title("Camera / Detector"),
-                self._preset_dropdown("cameras", "Camera Preset"),
                 self._num_field("instrument.camera.pixel_pitch", "Pixel Pitch", "μm"),
-                self._num_field("instrument.camera.quantum_efficiency", "Quantum Efficiency", "0-1"),
+                self._num_field("instrument.camera.quantum_efficiency", "Quantum Efficiency", percent=True),
                 self._num_field("instrument.camera.dark_current_rate", "Dark Current Rate", "e-/s/pix"),
                 self._num_field("instrument.camera.readout_noise", "Readout Noise", "e-/pix"),
                 self._num_field("instrument.camera.full_well_capacity", "Full Well Capacity", "e-"),
                 self._divider(),
+                # Filter stays its own selector: the band changes between exposures
+                # while the telescope and camera don't, so folding it into a rig would
+                # mean a rig per band.
                 self._section_title("Filter"),
-                self._preset_dropdown("filters", "Filter Preset"),
+                self._preset_dropdown(
+                    "Filter Preset", self._filter_options(), self.state.active_filter, self._on_filter_select
+                ),
                 self._num_field("instrument.optic_filter.central_wavelength", "Central Wavelength", "nm"),
                 self._num_field("instrument.optic_filter.filter_bandwidth", "Filter Bandwidth", "nm"),
-                self._num_field("instrument.optic_filter.filter_transmission", "Filter Transmission", "0-1"),
+                self._num_field("instrument.optic_filter.filter_transmission", "Filter Transmission", percent=True),
                 self._divider(),
                 self._section_title("System"),
-                self._num_field("instrument.throughput_correction", "Throughput Correction", "0-1"),
+                self._num_field("instrument.throughput_correction", "Throughput Correction", percent=True),
             ],
             spacing=Design.GAP_FIELD,
             scroll=ft.ScrollMode.AUTO,

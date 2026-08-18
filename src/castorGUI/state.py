@@ -111,6 +111,14 @@ class AppState:
 
         self.presets = self._load_presets()
 
+        # Which preset the current values came from, or None for "Custom". None is the
+        # honest starting value: the defaults above are generic, not a copy of any one
+        # profile, so claiming a profile on first paint would misdescribe them. Set by
+        # apply_profile()/apply_filter(), cleared by load_from_dict().
+        self.active_profile: str | None = None
+        self.active_rig: str | None = None
+        self.active_filter: str | None = None
+
     # ==========================================
     # Dotted-path access
     # ==========================================
@@ -137,18 +145,92 @@ class AppState:
         with open(PRESETS_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def apply_preset(self, category: str, key: str) -> list[str]:
+    def apply_profile(self, profile_id: str) -> list[str]:
         """
-        Applies a preset (e.g. category="telescopes", key="LOT").
-        Returns the list of changed dotted paths, so the caller can sync the
-        corresponding input fields' displayed values.
+        Selects an observing profile (e.g. "lulin") and its first rig — one of the two
+        preset actions the UI offers, the other being apply_rig().
+
+        A profile carrying an "environment" block is a real site, so its coordinates,
+        mu_dark and extinction are filled in alongside the hardware; that cross-tab
+        fill-in is the whole point of grouping them. A profile without one only ever
+        touches "instrument": see the note in data/presets.json about why a telescope
+        model must not carry an invented location.
+
+        Note what is deliberately *not* applied: median_seeing_fwhm. Seeing describes
+        the night being planned rather than the site, and it is the field an observer
+        is most likely to have set on purpose, so it is surfaced as a reference figure
+        (see median_seeing()) instead of overwriting their input.
+
+        Returns the dotted paths it changed, so the caller can refresh exactly those
+        fields' displayed values.
         """
-        preset = self.presets.get(category, {}).get(key)
+        profile = self.presets.get("profiles", {}).get(profile_id)
+        if profile is None:
+            return []
+
+        self.active_profile = profile_id
+        changed: list[str] = []
+
+        site = profile.get("environment")
+        if site:
+            changed += self._apply_fragment("environment", site)
+
+        first_rig = next(iter(profile.get("rigs", {})), None)
+        if first_rig is not None:
+            changed += self.apply_rig(first_rig)
+        else:
+            self.active_rig = None
+        return changed
+
+    def apply_rig(self, rig_id: str) -> list[str]:
+        """
+        Swaps the telescope/camera within the active profile, and touches nothing else.
+
+        Kept separate from apply_profile() rather than folded in as an argument: picking
+        a different instrument at the same site is not a reason to re-apply that site's
+        sky, which would quietly discard an mu_dark or extinction the observer had
+        adjusted for the night they are actually planning.
+        """
+        rigs = self.presets.get("profiles", {}).get(self.active_profile or "", {}).get("rigs", {})
+        rig = rigs.get(rig_id)
+        if rig is None:
+            return []
+        self.active_rig = rig_id
+        return self._apply_fragment("instrument", rig.get("instrument", {}))
+
+    def apply_filter(self, key: str) -> list[str]:
+        """Filters stay their own choice rather than being folded into a rig: which
+        band you observe in changes between exposures, while the telescope and camera
+        don't."""
+        preset = self.presets.get("filters", {}).get(key)
         if not preset:
             return []
-        for dotted_path, value in preset.items():
-            self.set(dotted_path, value)
-        return list(preset.keys())
+        self.active_filter = key
+        return self._apply_fragment("instrument.optic_filter", preset.get("optic_filter", {}))
+
+    def median_seeing(self) -> float | None:
+        """The active site's typical seeing, for display next to the seeing field.
+        None for hardware-only profiles and for Custom."""
+        profile = self.presets.get("profiles", {}).get(self.active_profile or "", {})
+        return profile.get("median_seeing_fwhm")
+
+    def _apply_fragment(self, section: str, fragment: dict) -> list[str]:
+        """Writes a nested, schema-shaped preset fragment into the state and reports
+        the dotted paths it touched."""
+        changed = []
+        for path, value in self._flatten(section, fragment):
+            self.set(path, value)
+            changed.append(path)
+        return changed
+
+    @staticmethod
+    def _flatten(prefix: str, fragment: dict):
+        for key, value in fragment.items():
+            path = f"{prefix}.{key}"
+            if isinstance(value, dict):
+                yield from AppState._flatten(path, value)
+            else:
+                yield path, value
 
     # ==========================================
     # Calculation engine payload (flattened version for LOAD/SAVE JSON,
@@ -184,6 +266,13 @@ class AppState:
         batch_enabled = data.get("batch_enabled")
         if isinstance(batch_enabled, bool):
             self.batch_enabled = batch_enabled
+
+        # Loaded values are the user's own and needn't match any preset — leaving the
+        # selectors pointing at whatever was chosen before would claim a provenance the
+        # numbers on screen no longer have.
+        self.active_profile = None
+        self.active_rig = None
+        self.active_filter = None
 
     @staticmethod
     def _deep_update(base: dict, incoming: dict) -> None:

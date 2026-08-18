@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CASTOR ETC</title>
+
+    <!-- Providing Plotly is the host's job — etc.js only ever reads window.Plotly.
+         This standalone build serves a vendored copy so it works offline and on a
+         private observatory network; Kinder's template pins the same library from
+         its own CDN tag instead. Both deferred: a blocking 3.4MB <script> in the
+         head means the form doesn't render until the library has finished
+         downloading, which on a slow link is several seconds of blank page. -->
+    <script src="js/plotly.min.js" defer charset="utf-8"></script>
+    <script src="js/etc.js" defer></script>
+    <link rel="stylesheet" href="css/etc.css">
+
+    <script>
+        // The host decides where the engine lives; server.py serves these paths
+        // itself and Kinder points the same three keys at its own blueprint.
+        // Inline (not deferred) so it is in place before the deferred etc.js runs.
+        window.CASTOR_ETC_CONFIG = {
+            apiUrl: '/api/exposure_time_calculator',
+            batchUrl: '/api/exposure_time_calculator/batch',
+            presetsUrl: '/api/exposure_time_calculator/presets'
+        };
+    </script>
+
+    <!-- Page chrome for the standalone build only. Deliberately not in etc.css:
+         mounted inside Kinder the page background, font and outer padding belong
+         to the host, and the calculator must not reach outside .castor-etc. -->
+    <style>
+        html { -webkit-font-smoothing: antialiased; }
+        body {
+            margin: 0;
+            padding: 32px;
+            min-height: 100vh;
+            background: #0a0a12;
+            color: #e5e7eb;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+
+<!--CASTOR_ETC_BODY-->
+
+</body>
+</html>
