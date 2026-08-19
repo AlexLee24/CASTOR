@@ -650,14 +650,24 @@
         el('specs-card').textContent = lines.join('\n');
     }
 
+    /* The three catalogues a site owns, each with the select it fills, the part of the
+       request it writes, and the disclosure it reveals. */
+    var CATALOGUES = [
+        { kind: 'telescopes', select: 'select-telescope', section: 'instrument.telescope', key: 'telescope', panel: 'telescope' },
+        { kind: 'cameras', select: 'select-camera', section: 'instrument.camera', key: 'camera', panel: 'camera' },
+        { kind: 'filters', select: 'select-filter', section: 'instrument.optic_filter', key: 'optic_filter', panel: 'filter' }
+    ];
+
     function applyProfile(profileId) {
         var profile = profiles()[profileId];
-        var telescopeSelect = el('select-telescope');
-        var cameraSelect = el('select-camera');
 
         if (!profile) {
-            fillSelect(telescopeSelect, [], 'Custom');
-            fillSelect(cameraSelect, [], 'Custom');
+            // Nothing to choose from and nothing chosen: every catalogue empties to
+            // Custom, and each one's fields become the only way to describe it.
+            CATALOGUES.forEach(function (cat) {
+                fillSelect(el(cat.select), [], 'Custom');
+                revealDetails(cat.panel);
+            });
             renderSpecs();
             return;
         }
@@ -665,36 +675,31 @@
         // family and must not invent a location. See data/presets.json.
         if (profile.environment) { applyFragment('environment', profile.environment); }
 
-        fillSelect(telescopeSelect, named(profile.telescopes || {}), 'Custom');
-        fillSelect(cameraSelect, named(profile.cameras || {}), 'Custom');
+        CATALOGUES.forEach(function (cat) {
+            var entries = profile[cat.kind] || {};
+            var select = el(cat.select);
+            fillSelect(select, named(entries), 'Custom');
 
-        var firstTelescope = Object.keys(profile.telescopes || {})[0];
-        if (firstTelescope) {
-            telescopeSelect.value = firstTelescope;
-            applyFragment('instrument.telescope', profile.telescopes[firstTelescope].telescope);
-        }
-        var firstCamera = Object.keys(profile.cameras || {})[0];
-        if (firstCamera) {
-            cameraSelect.value = firstCamera;
-            applyFragment('instrument.camera', profile.cameras[firstCamera].camera);
-        }
+            // First listed is the default — see the note on ordering in presets.json.
+            var first = Object.keys(entries)[0];
+            if (first) {
+                select.value = first;
+                applyFragment(cat.section, entries[first][cat.key]);
+            }
+            collapseDetails(cat.panel);
+        });
         renderSpecs();
     }
 
     function initPresets() {
         var profileSelect = el('select-profile');
-        var telescopeSelect = el('select-telescope');
-        var cameraSelect = el('select-camera');
-        var filterSelect = el('select-filter');
 
         /* Each of the three hardware selectors writes only its own slice. Picking a
            different camera at the same site is no reason to re-apply that site's sky
            over an mu_dark the observer tuned, nor to reset the telescope. */
         function bindSlice(select, kind, section, key, panel) {
             select.addEventListener('change', function () {
-                var preset = kind === 'filters'
-                    ? (presets.filters || {})[select.value]
-                    : catalogue(kind)[select.value];
+                var preset = catalogue(kind)[select.value];
                 if (preset) {
                     applyFragment(section, preset[key]);
                     collapseDetails(panel);
@@ -724,30 +729,39 @@
         }).then(function (data) {
             presets = data || {};
             fillSelect(profileSelect, named(profiles()), 'Custom');
-            fillSelect(telescopeSelect, [], 'Custom');
-            fillSelect(cameraSelect, [], 'Custom');
-            fillSelect(filterSelect, named(presets.filters || {}), 'Custom');
-            renderSpecs();
+            CATALOGUES.forEach(function (cat) { fillSelect(el(cat.select), [], 'Custom'); });
 
             profileSelect.addEventListener('change', function () {
-                var profile = profiles()[profileSelect.value];
                 applyProfile(profileSelect.value);
-                // A site fills the hardware in for you; Custom leaves it to you.
-                ['telescope', 'camera'].forEach(profile ? collapseDetails : revealDetails);
                 recalculate();
             });
             profileSelect.addEventListener('click', function () {
-                if (!profileSelect.value) { ['telescope', 'camera'].forEach(revealDetails); }
+                if (!profileSelect.value) { CATALOGUES.forEach(function (c) { revealDetails(c.panel); }); }
             });
-            bindSlice(telescopeSelect, 'telescopes', 'instrument.telescope', 'telescope', 'telescope');
-            bindSlice(cameraSelect, 'cameras', 'instrument.camera', 'camera', 'camera');
-            bindSlice(filterSelect, 'filters', 'instrument.optic_filter', 'optic_filter', 'filter');
+            CATALOGUES.forEach(function (cat) {
+                bindSlice(el(cat.select), cat.kind, cat.section, cat.key, cat.panel);
+            });
+
+            /* Open on the first profile rather than on Custom. The HTML defaults are
+               real, usable numbers but they come from nowhere in particular, so booting
+               on Custom meant every selector claimed the values were hand-entered while
+               the panels holding those values stayed shut — the label and the behaviour
+               disagreed. Starting from a named configuration removes the contradiction
+               instead of special-casing first paint out of the reveal rule. */
+            var firstProfile = Object.keys(profiles())[0];
+            if (firstProfile) {
+                profileSelect.value = firstProfile;
+                applyProfile(firstProfile);
+                recalculate();
+            } else {
+                renderSpecs();
+            }
         }).catch(function (err) {
             // Presets are a convenience, not a requirement — every field already
             // carries a usable default, so say so plainly and leave them editable
             // instead of stranding the dropdown on "Loading…".
             console.error('Preset load failed:', err);
-            [profileSelect, telescopeSelect, cameraSelect, filterSelect].forEach(function (select) {
+            [profileSelect].concat(CATALOGUES.map(function (c) { return el(c.select); })).forEach(function (select) {
                 select.innerHTML = '<option>Presets unavailable — using defaults below</option>';
                 select.disabled = true;
                 select.classList.add('is-error');
@@ -840,7 +854,7 @@
         SELECTOR_IDS.forEach(function (id) { el(id).value = ''; });
         // Loaded numbers match no preset, and the reader has every reason to want to see
         // what they just opened.
-        ['telescope', 'camera', 'filter'].forEach(revealDetails);
+        CATALOGUES.forEach(function (cat) { revealDetails(cat.panel); });
         renderSpecs();
         syncConditionalFields();
         recalculate();

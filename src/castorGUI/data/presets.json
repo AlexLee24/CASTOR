@@ -3,28 +3,30 @@
     "Hardware and site presets, shared by every host. Kinder serves this file verbatim",
     "from its presets route, so its shape is a contract, not an internal detail.",
     "",
-    "Fragments are shaped like castor.schema itself (telescope, camera, environment.",
-    "location, ...) rather than dotted-path strings, so a preset is a literal subset of",
-    "the request a user would save or send.",
+    "Fragments are shaped like castor.schema itself (telescope, camera, optic_filter,",
+    "environment.location, ...) rather than dotted-path strings, so a preset is a literal",
+    "subset of the request a user would save or send.",
     "",
-    "Telescopes and cameras are listed per profile rather than as one global catalogue:",
-    "choosing a site is what narrows them, which is the reason the site selector sits",
-    "above the others. They stay separate lists rather than fixed pairings because",
-    "cameras do get moved between telescopes.",
+    "A profile owns three catalogues: telescopes, cameras and filters. All three are",
+    "properties of the observatory — it has the instruments it has, and the filter wheel",
+    "holds what it holds — which is why choosing a site is what narrows them, and why the",
+    "site selector sits above the other three. They stay separate lists rather than fixed",
+    "pairings because cameras do get moved between telescopes.",
+    "",
+    "ORDER IS SIGNIFICANT: the first entry in each catalogue is the default, applied on",
+    "load so the calculator opens on a real, named configuration instead of anonymous",
+    "numbers. Kinder's presets route serves raw bytes rather than jsonify for exactly this",
+    "reason - Flask would otherwise alphabetise the keys and scramble the intended order.",
     "",
     "A profile with an 'environment' block is a real observing site and applying it fills",
     "in the site's coordinates and sky. A profile without one is a hardware family only",
-    "and touches nothing outside 'instrument' — deliberately, because inventing a location",
+    "and touches nothing outside 'instrument' - deliberately, because inventing a location",
     "for a telescope model would silently produce wrong airmass and moon geometry.",
     "",
     "'median_seeing_fwhm' is a reference figure for display only and is never written into",
     "the form: seeing is a condition of the night being planned, not a property of the site,",
-    "and it is the field an observer is most likely to have set deliberately.",
-    "",
-    "Filters are global. Bands are a property of the observation rather than of the site,",
-    "and the standard sets are not tied to one telescope."
+    "and it is the field an observer is most likely to have set deliberately."
   ],
-
   "profiles": {
     "lulin": {
       "name": "Lulin Observatory",
@@ -79,9 +81,50 @@
             "full_well_capacity": 50000
           }
         }
+      },
+      "filters": {
+        "Sloan_r": {
+          "name": "Sloan r'",
+          "optic_filter": {
+            "central_wavelength": 623.0,
+            "filter_bandwidth": 137.0,
+            "filter_transmission": 0.9
+          }
+        },
+        "Sloan_u": {
+          "name": "Sloan u'",
+          "optic_filter": {
+            "central_wavelength": 354.0,
+            "filter_bandwidth": 56.0,
+            "filter_transmission": 0.9
+          }
+        },
+        "Sloan_g": {
+          "name": "Sloan g'",
+          "optic_filter": {
+            "central_wavelength": 477.0,
+            "filter_bandwidth": 137.0,
+            "filter_transmission": 0.9
+          }
+        },
+        "Sloan_i": {
+          "name": "Sloan i'",
+          "optic_filter": {
+            "central_wavelength": 763.0,
+            "filter_bandwidth": 153.0,
+            "filter_transmission": 0.9
+          }
+        },
+        "Sloan_z": {
+          "name": "Sloan z'",
+          "optic_filter": {
+            "central_wavelength": 913.0,
+            "filter_bandwidth": 137.0,
+            "filter_transmission": 0.9
+          }
+        }
       }
     },
-
     "vlt": {
       "name": "VLT / FORS2 (hardware only)",
       "telescopes": {
@@ -106,38 +149,25 @@
             "full_well_capacity": 80400
           }
         }
+      },
+      "filters": {
+        "FORS2_g_HIGH": {
+          "name": "FORS2 g_HIGH",
+          "optic_filter": {
+            "central_wavelength": 467.0,
+            "filter_bandwidth": 160.3,
+            "filter_transmission": 0.85
+          }
+        },
+        "V_HIGH+114": {
+          "name": "FORS2 V_HIGH + 114",
+          "optic_filter": {
+            "central_wavelength": 550.0,
+            "filter_bandwidth": 114.0,
+            "filter_transmission": 0.51
+          }
+        }
       }
-    }
-  },
-
-  "filters": {
-    "Sloan_u": {
-      "name": "Sloan u'",
-      "optic_filter": { "central_wavelength": 354.0, "filter_bandwidth": 56.0, "filter_transmission": 0.9 }
-    },
-    "Sloan_g": {
-      "name": "Sloan g'",
-      "optic_filter": { "central_wavelength": 477.0, "filter_bandwidth": 137.0, "filter_transmission": 0.9 }
-    },
-    "Sloan_r": {
-      "name": "Sloan r'",
-      "optic_filter": { "central_wavelength": 623.0, "filter_bandwidth": 137.0, "filter_transmission": 0.9 }
-    },
-    "Sloan_i": {
-      "name": "Sloan i'",
-      "optic_filter": { "central_wavelength": 763.0, "filter_bandwidth": 153.0, "filter_transmission": 0.9 }
-    },
-    "Sloan_z": {
-      "name": "Sloan z'",
-      "optic_filter": { "central_wavelength": 913.0, "filter_bandwidth": 137.0, "filter_transmission": 0.9 }
-    },
-    "FORS2_g_HIGH": {
-      "name": "FORS2 g_HIGH",
-      "optic_filter": { "central_wavelength": 467.0, "filter_bandwidth": 160.3, "filter_transmission": 0.85 }
-    },
-    "V_HIGH+114": {
-      "name": "FORS2 V_HIGH + 114",
-      "optic_filter": { "central_wavelength": 550.0, "filter_bandwidth": 114.0, "filter_transmission": 0.51 }
     }
   }
 }

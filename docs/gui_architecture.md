@@ -63,7 +63,7 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 ##### A. Request Building
 
 * **Domain-Driven Form:** Four freely-switchable tabs — Instrument, Target, Environment, Options — mirroring the engine's four request pillars. Every `<input name="...">` is a dotted path matching `castor.schema`'s nested shape, so the request payload is built by walking the form rather than by naming each field twice.
-* **Observing Setup:** Four selectors from [`data/presets.json`](../src/castorGUI/data/presets.json) — site, telescope, camera, filter. The site comes first because it is what narrows the telescope and camera lists, and selecting it also fills in that site's coordinates, `mu_dark` and extinction; the cross-tab fill-in is the reason those live together. The three hardware selectors stay independent of one another, because cameras get moved between telescopes and the band changes between exposures.
+* **Observing Setup:** Four selectors from [`data/presets.json`](../src/castorGUI/data/presets.json) — site, telescope, camera, filter. A site owns all three hardware catalogues, since an observatory has the instruments it has and its filter wheel holds what it holds; that is why the site selector comes first and what makes it narrow the other three. Selecting it also fills in the site's coordinates, `mu_dark` and extinction, which is the cross-tab fill-in those live together for. Within a site the three stay independent of one another, because cameras do get moved between telescopes. The calculator opens on the first entry in each catalogue rather than on Custom, so it starts from a real, named configuration instead of anonymous numbers.
 * **Progressive disclosure:** Each selector owns the collapsed `<details>` directly beneath it, holding exactly the fields that selector writes; a summary line below them states what was applied (aperture, focal length, f/ratio, pixel pitch, QE, read noise). Once a telescope has been chosen by name its individual numbers are something to check on demand, not to read past every time. Setting a selector to Custom opens its own panel and only its own, since those fields are then the only way to say anything. The fields stay in the DOM and in the payload while closed — `<details>` hides, it does not disable.
 * **Save / Load:** Serializing the form to/from JSON.
 
@@ -110,7 +110,7 @@ src/castorGUI/
 
 * **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server.
 
-* **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Telescopes and cameras are listed per site rather than as one global catalogue; filters are global, since bands belong to the observation rather than the site. Kinder serves this file verbatim, which makes its shape a contract rather than an internal detail.
+* **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Telescopes, cameras and filters are all listed per site. Key order is significant — the first entry in each catalogue is the default applied on load — which is why Kinder's presets route serves the file as raw bytes rather than through `jsonify`, whose key sorting would scramble it. Kinder serving it verbatim also makes its shape a contract rather than an internal detail.
 
 ## 3. Design Principles
 
