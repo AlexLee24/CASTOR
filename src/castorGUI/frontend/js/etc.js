@@ -570,11 +570,39 @@
        Custom before any choice has been made, and opening it there would just be the
        uncollapsed form again.
 
-       Opening only, never closing: a rule for closing it again would be second-guessing
-       a reader who deliberately opened it. Closing is theirs alone. */
+       Picking a preset again closes the panel back up, but only one this code opened:
+       autoOpened records that, so a panel the reader opened for themselves is never
+       shut on their behalf. (Each panel belongs to exactly one selector, which is what
+       makes closing well-defined — while a single shared panel served all four
+       selectors, no correct rule existed.) */
+    var autoOpened = Object.create(null);
+
+    function panelFor(name) {
+        return root.querySelector('.etc-details[data-details="' + name + '"]');
+    }
+
     function revealDetails(name) {
-        var details = root.querySelector('.etc-details[data-details="' + name + '"]');
-        if (details) { details.open = true; }
+        var details = panelFor(name);
+        if (!details || details.open) { return; }
+        details.open = true;
+        autoOpened[name] = true;
+    }
+
+    function collapseDetails(name) {
+        var details = panelFor(name);
+        if (!details || !autoOpened[name]) { return; }
+        details.open = false;
+        delete autoOpened[name];
+    }
+
+    function watchPanels() {
+        Array.prototype.forEach.call(root.querySelectorAll('.etc-details'), function (details) {
+            details.addEventListener('toggle', function () {
+                // Closing it by hand takes ownership back. Opening it by hand was never
+                // ours to close, so it never enters autoOpened in the first place.
+                if (!details.open) { delete autoOpened[details.dataset.details]; }
+            });
+        });
     }
 
     function fillSelect(select, entries, placeholder) {
@@ -669,11 +697,24 @@
                     : catalogue(kind)[select.value];
                 if (preset) {
                     applyFragment(section, preset[key]);
+                    collapseDetails(panel);
                 } else {
                     revealDetails(panel);
                 }
                 renderSpecs();
                 recalculate();
+            });
+            bindCustomReselect(select, panel);
+        }
+
+        /* Re-picking the value a select already holds fires no change event, and every
+           selector starts on Custom — so on a fresh page, opening the menu and choosing
+           Custom would do nothing at all, which reads as the reveal being broken rather
+           than as nothing having changed. Opening the menu while already on Custom is
+           reason enough to show the fields. */
+        function bindCustomReselect(select, panel) {
+            select.addEventListener('click', function () {
+                if (!select.value) { revealDetails(panel); }
             });
         }
 
@@ -689,11 +730,14 @@
             renderSpecs();
 
             profileSelect.addEventListener('change', function () {
+                var profile = profiles()[profileSelect.value];
                 applyProfile(profileSelect.value);
-                if (!profiles()[profileSelect.value]) {
-                    ['telescope', 'camera'].forEach(revealDetails);
-                }
+                // A site fills the hardware in for you; Custom leaves it to you.
+                ['telescope', 'camera'].forEach(profile ? collapseDetails : revealDetails);
                 recalculate();
+            });
+            profileSelect.addEventListener('click', function () {
+                if (!profileSelect.value) { ['telescope', 'camera'].forEach(revealDetails); }
             });
             bindSlice(telescopeSelect, 'telescopes', 'instrument.telescope', 'telescope', 'telescope');
             bindSlice(cameraSelect, 'cameras', 'instrument.camera', 'camera', 'camera');
@@ -815,6 +859,7 @@
     }
 
     initTabs();
+    watchPanels();
     initDefaultTimes();
     initPresets();
     initSaveLoad();
