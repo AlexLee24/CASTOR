@@ -561,4 +561,22 @@
         </section>
 
     </div>
+
+    <!-- SAVE/LOAD both go through the same box, showing the request as text. A file is
+         the secondary route rather than the only one: the JSON is small and worth
+         reading, pasting it into a script or a message is the common way to share a
+         setup, and a sandboxed iframe can block downloads and file pickers outright
+         while a textarea always works. Routing a chosen file through the same box also
+         means nothing is ever applied before it has been seen.
+
+         Native <dialog>: focus trapping, Escape and the top layer come with it. -->
+    <dialog class="etc-dialog" id="json-dialog" aria-labelledby="json-dialog-title">
+        <h3 class="etc-dialog-title" id="json-dialog-title"></h3>
+        <p class="etc-dialog-hint" id="json-dialog-hint"></p>
+        <textarea class="etc-dialog-text" id="json-dialog-text" spellcheck="false" wrap="off"></textarea>
+        <div class="etc-alert etc-alert-error" id="json-dialog-error" hidden>
+            <span class="etc-alert-text" id="json-dialog-error-text"></span>
+        </div>
+        <div class="etc-dialog-actions" id="json-dialog-actions"></div>
+    </dialog>
 </div>

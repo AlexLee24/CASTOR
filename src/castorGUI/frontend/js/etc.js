@@ -774,40 +774,146 @@
     // saved here opens in the Flet GUI and vice versa.
     // ========================================================================
 
+    var dialog = el('json-dialog');
+
+    function openJsonDialog(options) {
+        el('json-dialog-title').textContent = options.title;
+        el('json-dialog-hint').textContent = options.hint;
+        var text = el('json-dialog-text');
+        text.value = options.text || '';
+        text.readOnly = Boolean(options.readOnly);
+        setDialogError('');
+
+        var actions = el('json-dialog-actions');
+        actions.innerHTML = '';
+        options.actions.forEach(function (spec) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'etc-action' + (spec.variant ? ' etc-action-' + spec.variant : '');
+            button.textContent = spec.label;
+            button.addEventListener('click', spec.onClick);
+            actions.appendChild(button);
+        });
+
+        dialog.showModal();
+        text.focus();
+        if (options.readOnly) {
+            // Selecting scrolls to the end of the selection; the reader wants the start.
+            text.select();
+            text.scrollTop = 0;
+        }
+    }
+
+    function setDialogError(message) {
+        el('json-dialog-error-text').textContent = message;
+        el('json-dialog-error').hidden = !message;
+    }
+
+    /* The shape AppState.get_api_payload() produced: every branch's value kept, not just
+       the ones the current discriminators select. That makes it a superset of a valid
+       request — deliberately, so switching brightness type after a load doesn't find the
+       fields blank — which is why it is read back through applyLoaded rather than posted. */
+    function buildSaveObject() {
+        var all = PayloadBuilder.build(false);
+        var batch = all.batch || {};
+        delete all.batch;
+        all.batch_time = {
+            start_time_utc: batch.start_time_utc,
+            end_time_utc: batch.end_time_utc,
+            time_step_minutes: batch.time_step_minutes
+        };
+        all.batch_enabled = el('toggle-batch').checked;
+        return all;
+    }
+
+    function importFromDialog() {
+        var raw = el('json-dialog-text').value.trim();
+        if (!raw) {
+            setDialogError('Nothing to import — paste the JSON above first.');
+            return;
+        }
+        var data;
+        try {
+            data = JSON.parse(raw);
+        } catch (err) {
+            setDialogError('That is not valid JSON: ' + err.message);
+            return;
+        }
+        if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+            setDialogError('Expected a JSON object like the one SAVE produces.');
+            return;
+        }
+        applyLoaded(data);
+        dialog.close();
+    }
+
     function initSaveLoad() {
         el('btn-save').addEventListener('click', function () {
-            var all = PayloadBuilder.build(false);
-            var batch = all.batch || {};
-            delete all.batch;
-            all.batch_time = {
-                start_time_utc: batch.start_time_utc,
-                end_time_utc: batch.end_time_utc,
-                time_step_minutes: batch.time_step_minutes
-            };
-            all.batch_enabled = el('toggle-batch').checked;
-
-            var blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
-            var url = URL.createObjectURL(blob);
-            var link = document.createElement('a');
-            link.href = url;
-            link.download = 'castor_request.json';
-            link.click();
-            URL.revokeObjectURL(url);
+            openJsonDialog({
+                title: 'Save request',
+                hint: 'Copy this and keep it wherever you like — a file, a script, a message. LOAD takes it back.',
+                text: JSON.stringify(buildSaveObject(), null, 2),
+                readOnly: true,
+                actions: [
+                    { label: 'Copy', variant: 'primary', onClick: copyDialogText },
+                    { label: 'Download', onClick: downloadDialogText },
+                    { label: 'Close', variant: 'ghost', onClick: function () { dialog.close(); } }
+                ]
+            });
         });
 
-        el('btn-load').addEventListener('click', function () { el('load-file-input').click(); });
+        el('btn-load').addEventListener('click', function () {
+            openJsonDialog({
+                title: 'Load request',
+                hint: 'Paste a saved request below, or pick a file to read one in — either way you see it before it is applied.',
+                text: '',
+                actions: [
+                    { label: 'Import', variant: 'primary', onClick: importFromDialog },
+                    { label: 'Choose file…', onClick: function () { el('load-file-input').click(); } },
+                    { label: 'Cancel', variant: 'ghost', onClick: function () { dialog.close(); } }
+                ]
+            });
+        });
 
+        // Fills the box rather than applying straight away, so a file gets the same
+        // look-before-you-leap as a paste.
         el('load-file-input').addEventListener('change', function (event) {
             var file = event.target.files && event.target.files[0];
+            event.target.value = '';   // so re-picking the same file fires change again
             if (!file) { return; }
             file.text().then(function (text) {
-                applyLoaded(JSON.parse(text));
+                el('json-dialog-text').value = text;
+                setDialogError('');
             }).catch(function (err) {
-                el('error-text').textContent = 'Could not read that file: ' + err.message;
-                el('error-box').hidden = false;
+                setDialogError('Could not read that file: ' + err.message);
             });
-            event.target.value = '';   // so re-picking the same file fires change again
         });
+    }
+
+    function copyDialogText() {
+        var text = el('json-dialog-text');
+        text.select();
+        // The Clipboard API needs a secure context, which a plain-http deployment is not.
+        // Falling back to selecting the text means the worst case is still one Ctrl+C.
+        if (!navigator.clipboard) {
+            setDialogError('Clipboard unavailable here — the text is selected, copy it with Ctrl/Cmd+C.');
+            return;
+        }
+        navigator.clipboard.writeText(text.value).then(function () {
+            setDialogError('');
+        }).catch(function () {
+            setDialogError('Could not reach the clipboard — the text is selected, copy it with Ctrl/Cmd+C.');
+        });
+    }
+
+    function downloadDialogText() {
+        var blob = new Blob([el('json-dialog-text').value], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = 'castor_request.json';
+        link.click();
+        URL.revokeObjectURL(url);
     }
 
     function lookup(source, path) {

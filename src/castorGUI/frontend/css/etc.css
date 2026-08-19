@@ -21,6 +21,9 @@
     /* ── Surfaces ──────────────────────────────────────────────────────── */
     --etc-panel-bg:      var(--kw-glass-bg, rgba(20, 20, 30, 0.60));
     --etc-surface-1:     #14141E;
+    /* One step brighter than the cards: a dialog floating above them has to read as
+       nearer the viewer, and matching their surface makes it look flat instead. */
+    --etc-surface-2:     #1c1c28;
     --etc-border-color:  var(--kw-border, rgba(255, 255, 255, 0.10));
     --etc-border-width:  2px;
 
@@ -445,6 +448,71 @@
     text-align: center;
 }
 .castor-etc .etc-chart-status[hidden] { display: none; }
+
+/* ============================================================================
+   SAVE / LOAD dialog
+============================================================================ */
+.castor-etc .etc-dialog {
+    width: min(680px, calc(100vw - 64px));
+    max-height: calc(100vh - 96px);
+    margin: auto;
+    padding: var(--etc-pad-card);
+    border: var(--etc-border-width) solid var(--etc-border-color);
+    border-radius: var(--etc-radius-card);
+    background: var(--etc-surface-2);
+    color: var(--etc-text-main);
+    font-size: 13px;
+}
+.castor-etc .etc-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+
+.castor-etc .etc-dialog-title {
+    margin: 0 0 4px;
+    color: var(--etc-accent);
+    font-size: 14px;
+    font-weight: 700;
+}
+.castor-etc .etc-dialog-hint {
+    margin: 0 0 var(--etc-gap-field);
+    color: var(--etc-text-muted);
+    font-size: 12px;
+}
+
+.castor-etc .etc-dialog-text {
+    display: block;
+    width: 100%;
+    height: min(46vh, 380px);
+    resize: vertical;
+    padding: 10px;
+    border: var(--etc-border-width) solid var(--etc-border-color);
+    border-radius: var(--etc-radius-base);
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--etc-text-main);
+    /* Monospace on purpose: this is the request as it will be sent, and lining the
+       numbers up is what makes it readable rather than merely present. */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    tab-size: 2;
+    white-space: pre;
+    overflow: auto;
+}
+.castor-etc .etc-dialog-text:focus { outline: none; border-color: var(--etc-accent); }
+
+.castor-etc .etc-dialog .etc-alert { margin-top: var(--etc-gap-field); }
+
+.castor-etc .etc-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--etc-gap-field);
+    margin-top: var(--etc-gap-group);
+}
+.castor-etc .etc-dialog-actions .etc-action { height: 34px; font-size: 12px; }
+.castor-etc .etc-dialog-actions .etc-action-primary {
+    color: var(--etc-accent);
+    border-color: var(--etc-accent);
+}
+.castor-etc .etc-dialog-actions .etc-action-ghost { border-color: transparent; }
 
 /* ============================================================================
    Responsive — below the two-column threshold the panels stack and each grows

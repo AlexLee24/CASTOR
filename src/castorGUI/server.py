@@ -66,6 +66,23 @@ app.mount("/css", DevStaticFiles(directory=FRONTEND_DIR / "css"), name="css")
 app.mount("/js", DevStaticFiles(directory=FRONTEND_DIR / "js"), name="js")
 
 
+def _versioned(shell: str) -> str:
+    """Stamps each asset URL with its file's modification time.
+
+    Cache-Control alone only governs copies a browser fetches from now on; one it
+    already holds under heuristic freshness is not revisited, so an edit can stay
+    invisible until that expires no matter what the server now says. A URL that
+    changes with the file cannot go stale at all — the old URL simply stops being
+    asked for. This is also the only lever that reaches a browser already holding a
+    stale copy.
+    """
+    for relative in ("css/etc.css", "js/etc.js", "js/plotly.min.js"):
+        asset = FRONTEND_DIR / relative
+        if asset.is_file():
+            shell = shell.replace(relative, f"{relative}?v={int(asset.stat().st_mtime)}")
+    return shell
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     """Assembles index.html around the shared body partial.
@@ -78,7 +95,8 @@ def index() -> HTMLResponse:
     """
     shell = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
     body = (FRONTEND_DIR / "etc_body.html").read_text(encoding="utf-8")
-    return HTMLResponse(shell.replace(BODY_MARKER, body), headers={"Cache-Control": "no-cache"})
+    page = _versioned(shell).replace(BODY_MARKER, body)
+    return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/exposure_time_calculator/presets")
