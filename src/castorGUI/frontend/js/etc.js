@@ -562,6 +562,23 @@
         });
     }
 
+    var SELECTOR_IDS = ['select-profile', 'select-telescope', 'select-camera', 'select-filter'];
+
+    /* Choosing "Custom" means the numbers have no preset behind them, so the raw fields
+       stop being a detail to check on demand and become the only way to say anything —
+       reveal them. Only on an actual selection, not on first paint: everything starts on
+       Custom before any choice has been made, and opening it there would just be the
+       uncollapsed form again.
+
+       Opening only, never closing. One panel serves all four selectors, so any rule for
+       closing it again would have to reason about the other three — and a version that
+       did exactly that stayed open whenever the filter happened to be on Custom, which
+       is indistinguishable from a bug. Closing is the reader's, and only the reader's. */
+    function revealDetails() {
+        var details = root.querySelector('.etc-details');
+        if (details) { details.open = true; }
+    }
+
     function fillSelect(select, entries, placeholder) {
         select.innerHTML = '';
         var blank = document.createElement('option');
@@ -653,6 +670,7 @@
                     ? (presets.filters || {})[select.value]
                     : catalogue(kind)[select.value];
                 if (preset) { applyFragment(section, preset[key]); }
+                if (!preset) { revealDetails(); }
                 renderSpecs();
                 recalculate();
             });
@@ -671,6 +689,7 @@
 
             profileSelect.addEventListener('change', function () {
                 applyProfile(profileSelect.value);
+                if (!profiles()[profileSelect.value]) { revealDetails(); }
                 recalculate();
             });
             bindSlice(telescopeSelect, 'telescopes', 'instrument.telescope', 'telescope');
@@ -771,9 +790,10 @@
         }
         // Same reasoning as AppState.load_from_dict: leaving the selectors on their
         // previous choice would claim a provenance these numbers no longer have.
-        ['select-profile', 'select-telescope', 'select-camera', 'select-filter'].forEach(
-            function (id) { el(id).value = ''; }
-        );
+        SELECTOR_IDS.forEach(function (id) { el(id).value = ''; });
+        // Loaded numbers match no preset, and the reader has every reason to want to see
+        // what they just opened.
+        revealDetails();
         renderSpecs();
         syncConditionalFields();
         recalculate();
