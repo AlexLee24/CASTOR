@@ -196,20 +196,25 @@
                     <!-- ══ Target ══ -->
                     <div class="etc-tabpanel" data-panel="target" role="tabpanel" hidden>
                         <h3 class="etc-section-title">Coordinates (J2000, decimal degrees)</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Right Ascension</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="target.ra" value="180.0" step="any" min="0" max="359.9999" required>
-                                <span class="etc-unit">deg</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Declination</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="target.dec" value="45.0" step="any" min="-90" max="90" required>
-                                <span class="etc-unit">deg</span>
-                            </span>
-                        </label>
+                        <!-- One coordinate, not two settings: a pair that is always read
+                             and edited together sits on one row, like the FWHM pairs on the
+                             Environment tab. -->
+                        <div class="etc-field-row">
+                            <label class="etc-field">
+                                <span class="etc-field-label">Right Ascension</span>
+                                <span class="etc-input-wrap">
+                                    <input type="number" name="target.ra" value="180.0" step="any" min="0" max="359.9999" required>
+                                    <span class="etc-unit">deg</span>
+                                </span>
+                            </label>
+                            <label class="etc-field">
+                                <span class="etc-field-label">Declination</span>
+                                <span class="etc-input-wrap">
+                                    <input type="number" name="target.dec" value="45.0" step="any" min="-90" max="90" required>
+                                    <span class="etc-unit">deg</span>
+                                </span>
+                            </label>
+                        </div>
 
                         <hr class="etc-divider">
 
