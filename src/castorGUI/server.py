@@ -44,9 +44,26 @@ FRONTEND_DIR = _asset_root() / "frontend"
 PRESETS_PATH = _asset_root() / "data" / "presets.json"
 BODY_MARKER = "<!--CASTOR_ETC_BODY-->"
 
+class DevStaticFiles(StaticFiles):
+    """Static assets that always revalidate.
+
+    Starlette sends ETag and Last-Modified but no Cache-Control, and a response with
+    no explicit freshness is one the browser may cache heuristically — commonly for
+    10% of the time since it was last modified — without asking the server again.
+    For a host whose whole job is to show you the file you just edited, that means a
+    refresh can silently keep running the previous version of etc.js. "no-cache" does
+    not mean "don't store": the ETag still answers most requests with a 304.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 app = FastAPI(title="CASTOR ETC")
-app.mount("/css", StaticFiles(directory=FRONTEND_DIR / "css"), name="css")
-app.mount("/js", StaticFiles(directory=FRONTEND_DIR / "js"), name="js")
+app.mount("/css", DevStaticFiles(directory=FRONTEND_DIR / "css"), name="css")
+app.mount("/js", DevStaticFiles(directory=FRONTEND_DIR / "js"), name="js")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -61,7 +78,7 @@ def index() -> HTMLResponse:
     """
     shell = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
     body = (FRONTEND_DIR / "etc_body.html").read_text(encoding="utf-8")
-    return HTMLResponse(shell.replace(BODY_MARKER, body))
+    return HTMLResponse(shell.replace(BODY_MARKER, body), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/exposure_time_calculator/presets")
