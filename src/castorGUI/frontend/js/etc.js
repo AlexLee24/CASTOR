@@ -570,12 +570,10 @@
        Custom before any choice has been made, and opening it there would just be the
        uncollapsed form again.
 
-       Opening only, never closing. One panel serves all four selectors, so any rule for
-       closing it again would have to reason about the other three — and a version that
-       did exactly that stayed open whenever the filter happened to be on Custom, which
-       is indistinguishable from a bug. Closing is the reader's, and only the reader's. */
-    function revealDetails() {
-        var details = root.querySelector('.etc-details');
+       Opening only, never closing: a rule for closing it again would be second-guessing
+       a reader who deliberately opened it. Closing is theirs alone. */
+    function revealDetails(name) {
+        var details = root.querySelector('.etc-details[data-details="' + name + '"]');
         if (details) { details.open = true; }
     }
 
@@ -664,13 +662,16 @@
         /* Each of the three hardware selectors writes only its own slice. Picking a
            different camera at the same site is no reason to re-apply that site's sky
            over an mu_dark the observer tuned, nor to reset the telescope. */
-        function bindSlice(select, kind, section, key) {
+        function bindSlice(select, kind, section, key, panel) {
             select.addEventListener('change', function () {
                 var preset = kind === 'filters'
                     ? (presets.filters || {})[select.value]
                     : catalogue(kind)[select.value];
-                if (preset) { applyFragment(section, preset[key]); }
-                if (!preset) { revealDetails(); }
+                if (preset) {
+                    applyFragment(section, preset[key]);
+                } else {
+                    revealDetails(panel);
+                }
                 renderSpecs();
                 recalculate();
             });
@@ -689,12 +690,14 @@
 
             profileSelect.addEventListener('change', function () {
                 applyProfile(profileSelect.value);
-                if (!profiles()[profileSelect.value]) { revealDetails(); }
+                if (!profiles()[profileSelect.value]) {
+                    ['telescope', 'camera'].forEach(revealDetails);
+                }
                 recalculate();
             });
-            bindSlice(telescopeSelect, 'telescopes', 'instrument.telescope', 'telescope');
-            bindSlice(cameraSelect, 'cameras', 'instrument.camera', 'camera');
-            bindSlice(filterSelect, 'filters', 'instrument.optic_filter', 'optic_filter');
+            bindSlice(telescopeSelect, 'telescopes', 'instrument.telescope', 'telescope', 'telescope');
+            bindSlice(cameraSelect, 'cameras', 'instrument.camera', 'camera', 'camera');
+            bindSlice(filterSelect, 'filters', 'instrument.optic_filter', 'optic_filter', 'filter');
         }).catch(function (err) {
             // Presets are a convenience, not a requirement — every field already
             // carries a usable default, so say so plainly and leave them editable
@@ -793,7 +796,7 @@
         SELECTOR_IDS.forEach(function (id) { el(id).value = ''; });
         // Loaded numbers match no preset, and the reader has every reason to want to see
         // what they just opened.
-        revealDetails();
+        ['telescope', 'camera', 'filter'].forEach(revealDetails);
         renderSpecs();
         syncConditionalFields();
         recalculate();

@@ -49,137 +49,146 @@
                              same time. Telescope, camera and filter stay independent because
                              cameras get moved between telescopes and the band changes
                              between exposures. None of these carry a name attribute, so none
-                             of them reach the request payload. -->
+                             of them reach the request payload.
+
+                             Each selector owns the disclosure directly beneath it, holding
+                             exactly the fields that selector writes. One shared panel at the
+                             bottom meant setting the telescope to Custom revealed the camera
+                             and filter numbers too, and put the fields being asked for a
+                             screen away from the control that asked for them. -->
                         <h3 class="etc-section-title">Observing Setup</h3>
+
                         <label class="etc-field">
                             <span class="etc-field-label">Site</span>
                             <select id="select-profile"><option value="">Loading&hellip;</option></select>
                         </label>
+
                         <label class="etc-field">
                             <span class="etc-field-label">Telescope</span>
                             <select id="select-telescope"></select>
                         </label>
+                        <details class="etc-details" data-details="telescope">
+                            <summary class="etc-details-summary">Telescope parameters</summary>
+                            <div class="etc-details-body">
+                                <label class="etc-field">
+                                <span class="etc-field-label">Primary Mirror Diameter</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.telescope.primary_mirror_diameter" value="1.0" step="any" min="0.001" required>
+                                <span class="etc-unit">m</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Secondary Mirror Diameter</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.telescope.secondary_mirror_diameter" value="0.3" step="any" min="0" required>
+                                <span class="etc-unit">m</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Focal Length</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.telescope.focal_length" value="8.0" step="any" min="0.001" required>
+                                <span class="etc-unit">m</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Optical Throughput</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.telescope.optical_throughput" value="85" step="any" min="0" max="100" data-percent required>
+                                <span class="etc-unit">%</span>
+                                </span>
+                                </label>
+                            </div>
+                        </details>
+
                         <label class="etc-field">
                             <span class="etc-field-label">Camera</span>
                             <select id="select-camera"></select>
                         </label>
+                        <details class="etc-details" data-details="camera">
+                            <summary class="etc-details-summary">Camera parameters</summary>
+                            <div class="etc-details-body">
+                                <label class="etc-field">
+                                <span class="etc-field-label">Pixel Pitch</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.camera.pixel_pitch" value="15.0" step="any" min="0.001" required>
+                                <span class="etc-unit">&micro;m</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Quantum Efficiency</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.camera.quantum_efficiency" value="85" step="any" min="0" max="100" data-percent required>
+                                <span class="etc-unit">%</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Dark Current Rate</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.camera.dark_current_rate" value="0.01" step="any" min="0" required>
+                                <span class="etc-unit">e-/s/pix</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Readout Noise</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.camera.readout_noise" value="5.0" step="any" min="0" required>
+                                <span class="etc-unit">e-/pix</span>
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Full Well Capacity</span>
+                                <span class="etc-input-wrap">
+                                <input type="number" name="instrument.camera.full_well_capacity" value="100000" step="any" min="0.001" required>
+                                <span class="etc-unit">e-</span>
+                                </span>
+                                </label>
+                            </div>
+                        </details>
+
                         <label class="etc-field">
                             <span class="etc-field-label">Filter</span>
                             <select id="select-filter"></select>
                         </label>
-                        <p class="etc-specs" id="specs-card"></p>
-
-                        <!-- Collapsed by default: once a telescope has been chosen, its raw
-                             numbers are a thing to check on demand rather than to read past
-                             every time. They stay in the DOM and in the payload while closed
-                             — <details> hides, it doesn't disable. -->
-                        <details class="etc-details">
-                            <summary class="etc-details-summary">Detailed parameters</summary>
+                        <details class="etc-details" data-details="filter">
+                            <summary class="etc-details-summary">Filter parameters</summary>
                             <div class="etc-details-body">
-                                <h3 class="etc-section-title">Telescope</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Primary Mirror Diameter</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.telescope.primary_mirror_diameter" value="1.0" step="any" min="0.001" required>
-                                <span class="etc-unit">m</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Secondary Mirror Diameter</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.telescope.secondary_mirror_diameter" value="0.3" step="any" min="0" required>
-                                <span class="etc-unit">m</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Focal Length</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.telescope.focal_length" value="8.0" step="any" min="0.001" required>
-                                <span class="etc-unit">m</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Optical Throughput</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.telescope.optical_throughput" value="85" step="any" min="0" max="100" data-percent required>
-                                <span class="etc-unit">%</span>
-                            </span>
-                        </label>
-
-                                <hr class="etc-divider">
-
-                                <h3 class="etc-section-title">Camera / Detector</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Pixel Pitch</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.camera.pixel_pitch" value="15.0" step="any" min="0.001" required>
-                                <span class="etc-unit">&micro;m</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Quantum Efficiency</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.camera.quantum_efficiency" value="85" step="any" min="0" max="100" data-percent required>
-                                <span class="etc-unit">%</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Dark Current Rate</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.camera.dark_current_rate" value="0.01" step="any" min="0" required>
-                                <span class="etc-unit">e-/s/pix</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Readout Noise</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.camera.readout_noise" value="5.0" step="any" min="0" required>
-                                <span class="etc-unit">e-/pix</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Full Well Capacity</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="instrument.camera.full_well_capacity" value="100000" step="any" min="0.001" required>
-                                <span class="etc-unit">e-</span>
-                            </span>
-                        </label>
-
-                                <hr class="etc-divider">
-
-                                <h3 class="etc-section-title">Filter</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Central Wavelength</span>
-                            <span class="etc-input-wrap">
+                                <label class="etc-field">
+                                <span class="etc-field-label">Central Wavelength</span>
+                                <span class="etc-input-wrap">
                                 <input type="number" name="instrument.optic_filter.central_wavelength" value="550.0" step="any" min="0.001" required>
                                 <span class="etc-unit">nm</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Filter Bandwidth</span>
-                            <span class="etc-input-wrap">
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Filter Bandwidth</span>
+                                <span class="etc-input-wrap">
                                 <input type="number" name="instrument.optic_filter.filter_bandwidth" value="89.0" step="any" min="0.001" required>
                                 <span class="etc-unit">nm</span>
-                            </span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Filter Transmission</span>
-                            <span class="etc-input-wrap">
+                                </span>
+                                </label>
+                                <label class="etc-field">
+                                <span class="etc-field-label">Filter Transmission</span>
+                                <span class="etc-input-wrap">
                                 <input type="number" name="instrument.optic_filter.filter_transmission" value="90" step="any" min="0" max="100" data-percent required>
                                 <span class="etc-unit">%</span>
-                            </span>
-                        </label>
+                                </span>
+                                </label>
+                            </div>
+                        </details>
 
-                                <hr class="etc-divider">
+                        <p class="etc-specs" id="specs-card"></p>
 
-                                <h3 class="etc-section-title">System</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Throughput Correction</span>
-                            <span class="etc-input-wrap">
+                        <details class="etc-details" data-details="system">
+                            <summary class="etc-details-summary">System</summary>
+                            <div class="etc-details-body">
+                                <label class="etc-field">
+                                <span class="etc-field-label">Throughput Correction</span>
+                                <span class="etc-input-wrap">
                                 <input type="number" name="instrument.throughput_correction" value="100" step="any" min="0" max="100" data-percent required>
                                 <span class="etc-unit">%</span>
-                            </span>
-                        </label>
+                                </span>
+                                </label>
                             </div>
                         </details>
                     </div>
