@@ -25,3 +25,7 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+# validation/ compares CASTOR against outside references and is run on purpose,
+# not on every commit — see validation/README.md.
+testpaths = ["tests"]
+markers = ["validation: compares CASTOR against an external reference"]

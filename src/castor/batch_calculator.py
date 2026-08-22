@@ -106,7 +106,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     # Broadcasting magic happens here: scalars and arrays interleave to produce the
     # count-rate curve for the whole night
     sky_rate_arr = physics.calculate_sky_background_rate(
-        f_lambda_sky_arr, env.extinction_coeff, airmass_arr, 
+        f_lambda_sky_arr,
         inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, pixel_scale
     )
 

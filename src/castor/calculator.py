@@ -125,9 +125,10 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     # Sky flux conversion (mu_sky is assumed to be in the AB magnitude system)
     f_lambda_sky = float(physics.convert_ab_to_wavelength_flux(mu_sky, inst.optic_filter.central_wavelength))
 
-    # Compute the sky background count rate
+    # Compute the sky background count rate. No extinction term: mu_sky was
+    # measured from the ground, so the atmosphere is already in it (ATBD 4.2.2 C).
     sky_rate = float(physics.calculate_sky_background_rate(
-        f_lambda_sky, env.extinction_coeff, airmass, 
+        f_lambda_sky,
         inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, pixel_scale
     ))
 

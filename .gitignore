@@ -215,3 +215,5 @@ __marimo__/
 project_context.md
 
 de421.bsp
+# Raw reference exports: regenerate rather than carry (see validation/README.md)
+validation/data/raw/
