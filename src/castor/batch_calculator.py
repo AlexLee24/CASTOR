@@ -110,21 +110,25 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, pixel_scale
     )
 
+    # Each branch also states its brightest pixel; see calculator.py for why that
+    # cannot be derived from source_rate once an aperture has been applied to it.
     match tgt.morphology:
         case schema.PointMorphology():
             source_rate_arr = physics.calculate_point_source_rate(
                 f_lambda_target, env.extinction_coeff, airmass_arr,
                 inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, f_enc
             )
+            peak_rate_arr = physics.calculate_peak_pixel_rate(
+                source_rate_arr / f_enc, total_fwhm, pixel_scale
+            )
         case schema.ExtendedMorphology():
             source_rate_arr = physics.calculate_extended_source_rate(
                 f_lambda_target, env.extinction_coeff, airmass_arr,
                 inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, n_pix, pixel_scale
             )
+            peak_rate_arr = source_rate_arr / n_pix
         case _:
             raise ValueError("Unknown target morphology")
-
-    peak_rate_arr = physics.calculate_peak_pixel_rate(source_rate_arr, total_fwhm, pixel_scale)
 
     # ---------------------------------------------------------
     # Phase 3: vectorized strategy solving

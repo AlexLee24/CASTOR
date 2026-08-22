@@ -92,7 +92,7 @@ def test_every_supplied_value_is_reported(run, lulin):
     """The whole point of the tool: what it chose is on screen, not buried in the request."""
     result = run(*lulin)
 
-    assert "options.aperture_factor = 1.5" in result.stderr
+    assert "options.aperture_factor = 0.85" in result.stderr
     assert "instrument.throughput_correction = 1.0" in result.stderr
 
 def test_assumptions_stay_off_stdout(run, lulin):

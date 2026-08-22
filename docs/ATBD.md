@@ -55,7 +55,7 @@ flowchart LR
     FWC([full_well_capacity])
     
     %% Observation Settings
-    kap([APERTURE_FACTOR = 1.5])
+    kap([APERTURE_FACTOR = 0.85])
     t_tot([total_exp_time])
     t_single_in([single_exp_time])
     N_exp_in([num_exposures])
@@ -210,7 +210,7 @@ This profile holds user-configurable settings that dictate the desired constrain
 
 | Python Field | Math Symbol | Unit | Description |
 | --- | --- | --- | --- |
-| `aperture_factor` | $k_{\text{ap}}$ | dimensionless | Multiplier defining the photometric aperture radius (default: 1.5). |
+| `aperture_factor` | $k_{\text{ap}}$ | dimensionless | Multiplier defining the photometric aperture radius, in units of $FWHM_{\text{tot}}$. No schema default; callers supply it, and both shipped clients send 0.85 (§5.2). |
 | `total_exp_time` | $t_{\text{total}}$ | s | Cumulative integration time across all frames. |
 | `single_exp_time` | $t_{\text{single}}$ | s | Integration time for an individual sub-exposure frame. |
 | `num_exposures` | $N_{\text{exp}}$ | count | Total number of exposure frames. |
@@ -362,7 +362,7 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 
 * **Gaussian Point Spread Function (PSF):** The derivation of the enclosed flux fraction ($f_{\text{enc}}$) and peak pixel count rates ($Rate_{\text{peak}}$) assumes an idealized, symmetric Gaussian PSF for point sources. Real-world optical aberrations, tracking errors, or structural diffraction spikes may introduce asymmetry that deviates from this model.
 
-* **Aperture Photometry Constraints:** Signal extraction relies on a fixed aperture multiplier ($k_{\text{ap}} = 1.5$), which assumes optimal circular aperture photometry. Complex crowded fields or extended morphology may require adaptive aperture sizing not covered by this baseline.
+* **Aperture Photometry Constraints:** Signal extraction uses a single circular aperture of radius $k_{\text{ap}} \cdot FWHM_{\text{tot}}$, with no adaptive sizing, deblending or PSF fitting; crowded fields and extended morphology may need more. The shipped clients default $k_{\text{ap}}$ to 0.85. There is no one correct value: for a Gaussian PSF the SNR-optimal radius is $0.673 \cdot FWHM$ when the sky dominates and rises towards $1.0 \cdot FWHM$ when the source does, so 0.85 is the choice that stays within 5% of the best achievable SNR across both regimes. The previous default of 1.5 enclosed 99.8% of the source but admitted three times the sky area, giving up 36% of the SNR on a background-limited target. Quantified in `validation/test_eso.py`.
 
 ### 5.3 Detector and Noise Limitations
 

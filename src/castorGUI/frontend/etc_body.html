@@ -429,7 +429,15 @@
                         <label class="etc-field">
                             <span class="etc-field-label">Aperture Factor (k_ap)</span>
                             <span class="etc-input-wrap">
-                                <input type="number" name="options.aperture_factor" value="1.5" step="any" min="0.001" required>
+                                <!-- Photometric aperture radius, in units of the total FWHM. 0.85 is
+                                     near the worst-case-optimal choice across brightness regimes: a
+                                     Gaussian on background peaks at 0.67 when the sky dominates and
+                                     around 1.0 when the star does, and 0.85 stays within 5% of both.
+                                     The old 1.5 enclosed 99.8% of the star but three times the sky
+                                     with it, costing 36% of the SNR on a faint target — which is the
+                                     case anyone runs a calculator for. See validation/test_eso.py. -->
+                                <input type="number" name="options.aperture_factor" value="0.85" step="any" min="0.001" required
+                                       title="Photometric aperture radius as a multiple of the total FWHM. 0.85 keeps within 5% of the best achievable SNR whether the target or the sky dominates; 1.5 collects nearly all the star but pays three times the sky for it.">
                             </span>
                         </label>
                         <label class="etc-field">

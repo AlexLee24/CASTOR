@@ -180,3 +180,44 @@ def test_auto_calc_background_selects_moon_model(monkeypatch, base_request):
     base_request.environment.auto_calc_background = True
     run_calculation(base_request)
     assert len(sky_brightness_calls) == 1, "The moon model should be queried once when enabled"
+
+# ==========================================
+# Saturation is a property of the target, not of the aperture
+# ==========================================
+
+@pytest.mark.parametrize("aperture_factor", [0.5, 0.85, 1.0, 1.5, 2.5])
+def test_saturation_does_not_move_with_the_photometric_aperture(base_request, aperture_factor):
+    """The brightest pixel belongs to the star and the seeing, and to nothing else.
+
+    Drawing a wider or narrower circle for photometry cannot change how fast the
+    central pixel fills up. This was worth pinning because for a long time it did:
+    the peak rate was derived from the aperture-enclosed rate, so shrinking the
+    aperture quietly reported saturation as arriving later than it does. At the
+    old default of 1.5 the enclosed fraction is 0.998 and the error was invisible;
+    at 0.85 it would have been 13%, in the direction that tells you a frame is safe
+    when it is not.
+    """
+    reference = base_request.model_copy(deep=True)
+    reference.options.aperture_factor = 1.5
+    expected = run_calculation(reference).core.saturation_time_limit
+
+    request = base_request.model_copy(deep=True)
+    request.options.aperture_factor = aperture_factor
+    assert run_calculation(request).core.saturation_time_limit == pytest.approx(expected, rel=1e-9)
+
+
+@pytest.mark.parametrize("aperture_factor", [0.85, 1.5, 2.5])
+def test_extended_sources_have_no_psf_peak(base_request, aperture_factor):
+    """Uniform surface brightness means every pixel in the aperture is the peak.
+
+    The old code ran the Gaussian peak-fraction over an extended source too, which
+    made its saturation time depend on the aperture squared — a galaxy that
+    saturated in one aperture was safe in another.
+    """
+    request = base_request.model_copy(deep=True)
+    request.target.morphology = schema.ExtendedMorphology()
+    request.options.aperture_factor = aperture_factor
+    response = run_calculation(request)
+
+    per_pixel = response.budget.source_count_rate / response.diagnostics.num_pixels_aperture
+    assert response.budget.peak_pixel_rate == pytest.approx(per_pixel, rel=1e-9)
