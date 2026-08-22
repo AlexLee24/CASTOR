@@ -15,11 +15,19 @@ def run():
     runner = CliRunner()
     return lambda *args, **kwargs: runner.invoke(cli, list(args), **kwargs)
 
+#: An instant at which the fixture target stands 8.5 degrees from Lulin's zenith.
+#: Every calculation below pins it. Without one the CLI defaults to now, and the
+#: answers swing with the sidereal clock: the same saturation case that fires at
+#: this hour is six thousand times fainter twelve hours later, so the suite passed
+#: or failed depending on what time of day it was run.
+WELL_PLACED = "2026-01-15T16:00:00Z"
+
+
 @pytest.fixture
 def lulin():
     """The shortest complete calculation: a site, a target, and one question."""
     return ["calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-            "--mag", "18", "--exp", "300", "-n", "10"]
+            "--mag", "18", "--exp", "300", "-n", "10", "--time", WELL_PLACED]
 
 @pytest.fixture
 def saved_form(tmp_path):
@@ -74,7 +82,7 @@ def test_a_site_and_a_target_are_enough(run, lulin):
 
 def test_solving_for_time_reports_the_frames_needed(run):
     result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-                 "--mag", "21", "--exp", "300", "--snr", "50")
+                 "--mag", "21", "--exp", "300", "--snr", "50", "--time", WELL_PLACED)
 
     assert result.exit_code == 0
     assert "Exposures needed" in result.stdout
@@ -210,7 +218,7 @@ def test_flags_layer_over_a_saved_form(run, saved_form):
 def test_saturation_leaves_by_a_different_exit_code(run):
     """A caller that only checks the exit code still finds out."""
     result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-                 "--mag", "8", "--exp", "300", "-n", "1")
+                 "--mag", "8", "--exp", "300", "-n", "1", "--time", WELL_PLACED)
 
     assert result.exit_code == 1
     assert "SATURATED" in result.stderr
