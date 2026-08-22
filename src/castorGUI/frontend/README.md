@@ -101,16 +101,16 @@ def castor_static(filename):
 
 Kinder keeps its existing CDN `<script>` for Plotly; no vendored copy is served.
 
-## Relation to the Flet GUI
+## Conventions
 
-`castorGUI/`'s Flet app and this frontend are two interfaces over the same
-engine, kept deliberately in step: the same four tabs in the same order, the same
-field labels and units, the same percent-vs-fraction convention (fields show
-0–100, `castor.schema` always receives the 0–1 fraction), and the same
-`Design`-token palette. SAVE files are interchangeable in both directions —
-`etc.js` writes the JSON shape `AppState.get_api_payload()` produces and reads
-what `AppState.load_from_dict()` accepts.
+Two of these are easy to trip over when editing the form:
 
-The Flet app calls the engine in-process, which makes it the faster way to catch
-a schema break during development; this frontend goes over HTTP, which is what
-production actually does. Changing a field in one means changing it in the other.
+- **Percent vs fraction.** Efficiency fields show 0–100 to the reader, while
+  `castor.schema` always receives the 0–1 fraction. The `data-percent` attribute
+  on an input is what marks the difference, and `etc.js` converts in both
+  directions around it.
+- **SAVE files are requests.** What SAVE writes is `castor.schema`'s own shape,
+  not a private format, so a saved file is readable by any other caller of the
+  engine. It is deliberately a superset of a valid request — every branch of
+  every discriminated union keeps its value — which is why it is read back
+  through the form rather than posted straight to the API.

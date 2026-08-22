@@ -101,7 +101,11 @@ def index() -> HTMLResponse:
 
 @app.get("/api/exposure_time_calculator/presets")
 def presets() -> JSONResponse:
-    """Thin passthrough of the hardware preset file the Flet GUI also reads."""
+    """Thin passthrough of the hardware preset file.
+
+    Handed on as parsed and never re-shaped: key order is part of the contract,
+    since the first entry in each catalogue is the one that gets applied by default.
+    """
     if not PRESETS_PATH.is_file():
         return JSONResponse({"error": "Presets file not found"}, status_code=404)
     return JSONResponse(json.loads(PRESETS_PATH.read_text(encoding="utf-8")))
