@@ -33,6 +33,11 @@
         html { -webkit-font-smoothing: antialiased; }
         body {
             margin: 0;
+            /* border-box or the 32px of padding lands outside the 100vh and the page
+               scrolls by exactly 64px on every screen, with nothing below the fold to
+               scroll to. The shell already sizes itself to 100vh - 96px and each panel
+               scrolls internally, so the outer page is not meant to scroll at all. */
+            box-sizing: border-box;
             padding: 32px;
             min-height: 100vh;
             background: #0a0a12;
