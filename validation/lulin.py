@@ -64,6 +64,20 @@ MEASURED_BANDPASS = {
     "Sloan_z": dict(centroid=962.1, fwhm=278.0, peak=0.998, integral=274.6),
 }
 
+#: Measured from a photon transfer curve: 89 adjacent same-night pairs, sky
+#: levels 401-7002 e-, fitting var(A-B)/2 = sky + RON^2 over the difference
+#: images so stars and flat structure drop out. The slope comes out 0.982,
+#: which says the header's GAIN 0.92 is right and BUNIT = electron is honest.
+#: The intercept puts read noise at 7.9 e-, squarely the datasheet's 1 MHz port
+#: (7 e-) rather than 100 kHz (3.5 e-), and consistent with the RMSNOISE 7.27
+#: the headers carry. So the preset's 7.0 is measured, not assumed.
+MEASURED_READ_NOISE = 7.9
+MEASURED_GAIN_SLOPE = 0.982
+
+#: Lulin's SLT page names the camera in full: Andor iKon-M DU934P-BEX2-DD
+#: CCD-26868. The BEX2-DD variant is what fixes the well depth at 130 ke-.
+SLT_CAMERA = "Andor iKon-M DU934P-BEX2-DD CCD-26868"
+
 #: What MaxIm wrote into every frame, against what the preset assumes.
 #: APTAREA implies a 130 mm central obstruction on a 1 m primary, which is small
 #: for an f/8 Ritchey-Chretien; the preset says 300 mm, which is typical. Lulin

@@ -136,10 +136,8 @@ Things the measurements raised that need someone who knows the instrument.
 6. **SOPHIA dark current and QE.** The datasheet quotes dark only at -90 C
    (0.0001 e-/p/s) and the camera runs at -80 C. The preset says 0.01, roughly
    100x the -90 C figure. QE is published as a figure, not a table.
-7. **SLT's camera.** The corrections applied — 13 um pixels, 130 ke- well,
-   2.9 e- read noise — assume the Andor iKon-M DU934P-BEX2-DD that Lulin's SLT
-   page links. Confirm the model, and which sensor variant, since dark current
-   differs by 50x between BEX2-DD and BV.
-8. **SOPHIA's readout speed.** Read noise is now 7.0 e-, the datasheet's 1 MHz
-   port, which matches the `RMSNOISE` 7.27 in the headers. Confirm the frames
-   were taken at 1 MHz and not 100 kHz (3.5 e-).
+*(Two more were closed by looking harder rather than by asking: Lulin's SLT page
+names the camera in full as Andor iKon-M DU934P-BEX2-DD CCD-26868, which fixes
+the sensor variant and so the 130 ke- well; and a photon transfer curve over the
+frames puts read noise at 7.9 e-, the datasheet's 1 MHz port, while confirming
+the header gain to 2%.)*

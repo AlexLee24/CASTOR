@@ -197,3 +197,17 @@ def test_the_frames_and_catalogue_are_where_the_module_says():
         pytest.skip("science frames not checked out; see data/lulin/README.md")
     assert len(list(lulin.FRAMES.glob("*.fits"))) > 50
     assert len(list(lulin.CATALOGUE.glob("*.csv"))) >= 1
+
+
+def test_read_noise_is_the_one_the_frames_show(lot):
+    """A photon transfer curve over the frames settles which readout port was used.
+
+    var(A-B)/2 against sky level across 89 adjacent pairs: the slope confirms the
+    gain and the intercept is the read noise. It lands at 7.9 e-, which is the
+    datasheet's 1 MHz port and not its 100 kHz one, so the preset's 7.0 is a
+    measurement rather than a guess. The measured value runs a little high
+    because any residual pattern noise lands in the intercept too.
+    """
+    assert lulin.MEASURED_GAIN_SLOPE == pytest.approx(1.0, abs=0.05)
+    assert lot["camera"].readout_noise == pytest.approx(7.0, abs=0.1)
+    assert abs(lulin.MEASURED_READ_NOISE - lot["camera"].readout_noise) < 1.5
