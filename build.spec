@@ -41,6 +41,7 @@ exe = EXE(
     a.datas,
     [],
     name='CASTOR-ETC', # 輸出的執行檔名稱
+    icon='assets/desktop/castor.ico', # Windows 執行檔圖示
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -58,6 +59,6 @@ exe = EXE(
 app = BUNDLE(
     exe,
     name='CASTOR-ETC.app',
-    icon=None,
+    icon='assets/desktop/castor.icns',
     bundle_identifier=None,
 )

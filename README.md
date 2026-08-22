@@ -1,5 +1,12 @@
 # CASTOR
 
+<picture>
+  <source media="(prefers-color-scheme: dark)"
+          srcset="src/castorGUI/frontend/img/castor-logo-white.png">
+  <img align="right" width="120" alt=""
+       src="src/castorGUI/frontend/img/castor-logo-black.png">
+</picture>
+
 CASTOR(Calculator for Astronomical Strategy and Time On Rigs) is a Python module for calculating the exposure time of telescopes and astronomical observations.
 
 By inputting the settings of the instrument, target, and environment, along with either the number of exposures or the target SNR, you can calculate the resulting SNR or the suggested number of exposures.
