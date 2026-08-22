@@ -25,7 +25,18 @@
     "",
     "'median_seeing_fwhm' is a reference figure for display only and is never written into",
     "the form: seeing is a condition of the night being planned, not a property of the site,",
-    "and it is the field an observer is most likely to have set deliberately."
+    "and it is the field an observer is most likely to have set deliberately.",
+    "",
+    "A filter entry may also carry 'environment' and 'telescope' fragments. They are",
+    "applied only when that filter is the one selected, and they override the site and",
+    "the rig. Both sky brightness and optical efficiency depend on the band, and the",
+    "request has exactly one number for each - so this is the only place a measurement",
+    "that varies with wavelength can be recorded without overwriting filter_transmission,",
+    "which holds the manufacturer's published curve and can be checked against it.",
+    "",
+    "Only a profile that is a real site may have its sky overridden this way; giving an",
+    "'environment' to a filter in a hardware-family profile is refused when the file is",
+    "read, rather than being quietly ignored."
   ],
   "profiles": {
     "lulin": {
@@ -89,6 +100,12 @@
             "central_wavelength": 627.8,
             "filter_bandwidth": 131.0,
             "filter_transmission": 0.995
+          },
+          "environment": {
+            "mu_dark": 20.92
+          },
+          "telescope": {
+            "optical_throughput": 0.568
           }
         },
         "Sloan_u": {
@@ -105,6 +122,12 @@
             "central_wavelength": 475.9,
             "filter_bandwidth": 147.0,
             "filter_transmission": 0.996
+          },
+          "environment": {
+            "mu_dark": 21.44
+          },
+          "telescope": {
+            "optical_throughput": 0.313
           }
         },
         "Sloan_i": {
@@ -113,6 +136,12 @@
             "central_wavelength": 767.6,
             "filter_bandwidth": 145.0,
             "filter_transmission": 1.0
+          },
+          "environment": {
+            "mu_dark": 20.04
+          },
+          "telescope": {
+            "optical_throughput": 0.312
           }
         },
         "Sloan_z": {

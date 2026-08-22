@@ -96,14 +96,15 @@ Each of these is asserted by a test, so it either stays true or announces itself
   publishes, g' was out by 16%, r' and i' by 5%, and z' by 55% — a 278 nm filter
   described as a 137 nm one. Now corrected from the measured curves. LOT u' has
   no published curve and keeps its placeholder.
-- **LOT's throughput was 2.6x too high.** Pan-STARRS photometry over 14
-  photometric nights puts T_sys at 0.265 (g'), 0.480 (r'), 0.265 (i'), where the
-  preset asserted 0.68 in all three. `optical_throughput` is now set so the
-  geometric mean is right, which leaves +22/-33/+22% — because the real
-  throughput is band-dependent and the schema has nowhere to say so.
-- **Lulin's sky is not one number.** Moonless, it measures 21.44 (g'), 20.92
-  (r'), 20.04 (i') AB mag/arcsec2. `mu_dark` is a single value on the profile's
-  environment and ships as 21.5, which suits g' and is 1.46 mag out in i'.
+- **LOT's throughput was 2.6x too high, and band-dependent.** Pan-STARRS
+  photometry over 14 photometric nights puts T_sys at 0.265 (g'), 0.480 (r'),
+  0.265 (i'), where the preset asserted 0.68 in all three. Both this and the sky
+  below now live on the filter entry, which is the only place in the file that
+  varies with band — see the note on band fragments in presets.json.
+- **Lulin's sky is not one number either.** Moonless, it measures 21.44 (g'),
+  20.92 (r'), 20.04 (i') AB mag/arcsec2, against a single site-wide 21.5 that
+  suited g' and was 1.46 mag out in i'. Bands with no measurement, u' among
+  them, still inherit the site value.
 - **The frame headers' own zero point cannot be used.** PinPoint's `ZMAG` is
   tied to USNO-B1.0 and sits 0.73 mag out in g', 0.21 in r' and 0.05 in i'.
 - **The moon model has no colour.** Krisciunas & Schaefer is Johnson V, and the
@@ -113,35 +114,11 @@ Each of these is asserted by a test, so it either stays true or announces itself
 
 ## Open questions
 
-Things the measurements raised that need someone who knows the instrument.
+Five for the observatory and two for us, written up so they can be asked without
+reading this directory: **[QUESTIONS.md](QUESTIONS.md)**.
 
-1. **LOT's secondary.** Every frame header carries `APTAREA` 772125 mm2, a
-   130 mm obstruction on the 1 m primary. The preset says 300 mm, typical for an
-   f/8 Ritchey-Chretien. 8% in collecting area, and Lulin publishes neither.
-2. **Where band-dependent throughput should live.** Measured T_sys spans
-   0.265-0.480 across g'r'i'. `optical_throughput` belongs to the telescope and
-   `quantum_efficiency` to the camera; both are single numbers, and
-   `filter_transmission` is now spoken for by the measured curves. A per-filter
-   throughput field, or a QE curve on the camera, would both work — but it is a
-   schema change and a contract other hosts read.
-3. **Same question for `mu_dark`**, which is one number per site but measures
-   1.4 mag apart across three bands.
-4. **Why r' is 1.8x more efficient than g' and i'.** Not the detector: the
-   datasheet QE curve reads 90/96/87% at the three band centres, flat to within
-   10%, where the measurement needs a factor of 1.8. Nor the filters, whose
-   integrals are known. That leaves the optics, something band-dependent in the
-   reduction, or LOT genuinely performing at 40-70% of a plausible system —
-   which a 2002 telescope with original coatings might well be. Someone who has
-   seen the mirrors should say which.
-5. **Extinction per band.** The fit gives r' 0.189 +/- 0.027, but g' 0.123 +/-
-   0.105 and i' 0.108 +/- 0.049 are too loose to adopt, and the ordering comes
-   out backwards. Frames spanning airmass on one photometric night would settle
-   it; these span nights instead.
-6. **SOPHIA dark current and QE.** The datasheet quotes dark only at -90 C
-   (0.0001 e-/p/s) and the camera runs at -80 C. The preset says 0.01, roughly
-   100x the -90 C figure. QE is published as a figure, not a table.
-*(Two more were closed by looking harder rather than by asking: Lulin's SLT page
-names the camera in full as Andor iKon-M DU934P-BEX2-DD CCD-26868, which fixes
-the sensor variant and so the 130 ke- well; and a photon transfer curve over the
-frames puts read noise at 7.9 e-, the datasheet's 1 MHz port, while confirming
-the header gain to 2%.)*
+Two that were on that list are now closed, by looking harder rather than by
+asking. Lulin's SLT page names the camera in full — Andor iKon-M DU934P-BEX2-DD
+CCD-26868 — which fixes the sensor variant and with it the 130 ke- well depth.
+And a photon transfer curve over the frames puts read noise at 7.9 e-, the
+datasheet's 1 MHz port, while confirming the header gain to 2%.

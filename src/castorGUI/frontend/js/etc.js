@@ -965,6 +965,35 @@
         { kind: 'filters', select: 'select-filter', section: 'instrument.optic_filter', key: 'optic_filter', panel: 'filter' }
     ];
 
+    /* A filter may also speak for the sky it looks through and for the efficiency of
+       everything in front of it, because both depend on the band while the request has
+       one number for each. Mirrors _overlay in castorCLI/presets.py.
+
+       The base is re-applied first, which the Python side gets for free by building a
+       fresh fragment every time and this side does not: without it, moving from a band
+       that carries a correction to one that does not would leave the previous band's
+       numbers sitting in the form, looking like the new filter's. Bands with no
+       measurement must fall back to the site and the rig, not to whatever was chosen
+       before them.
+
+       A catalogue sitting on Custom is left alone in both steps. Those numbers are the
+       reader's own, and a filter has no business overwriting them. */
+    function applyBand(entry) {
+        var profile = profiles()[el('select-profile').value];
+        if (!profile) { return; }
+
+        if (profile.environment) {
+            applyFragment('environment', profile.environment);
+            if (entry && entry.environment) { applyFragment('environment', entry.environment); }
+        }
+
+        var rig = (profile.telescopes || {})[el('select-telescope').value];
+        if (rig) {
+            applyFragment('instrument.telescope', rig.telescope);
+            if (entry && entry.telescope) { applyFragment('instrument.telescope', entry.telescope); }
+        }
+    }
+
     function applyProfile(profileId) {
         var profile = profiles()[profileId];
 
@@ -992,6 +1021,7 @@
             if (first) {
                 select.value = first;
                 applyFragment(cat.section, entries[first][cat.key]);
+                if (cat.kind === 'filters') { applyBand(entries[first]); }
             }
             collapseDetails(cat.panel);
         });
@@ -1009,6 +1039,7 @@
                 var preset = catalogue(kind)[select.value];
                 if (preset) {
                     applyFragment(section, preset[key]);
+                    if (kind === 'filters') { applyBand(preset); }
                     collapseDetails(panel);
                 } else {
                     revealDetails(panel);

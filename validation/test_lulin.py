@@ -34,11 +34,20 @@ def lot():
     )
 
 
+def _resolved(band):
+    """The configuration a caller actually gets when they name this filter.
+
+    Not the raw catalogue entry: the band's own sky and throughput are applied
+    during resolution, which is the whole point of them living on the filter.
+    """
+    return presets.load().resolve(PROFILE, optic_filter=lulin.FILTER_OF[band])
+
+
 def _throughput(lot, band):
-    optic = lot["filters"][lulin.FILTER_OF[band]]
-    return (lot["telescope"].optical_throughput
-            * lot["camera"].quantum_efficiency
-            * optic.filter_transmission)
+    instrument = _resolved(band)["instrument"]
+    return (instrument["telescope"]["optical_throughput"]
+            * instrument["camera"]["quantum_efficiency"]
+            * instrument["optic_filter"]["filter_transmission"])
 
 
 def _rate_per_unit_throughput(lot, band, ab_mag):
@@ -122,20 +131,16 @@ def test_measured_zero_points_are_self_consistent(band):
     assert m["nights"] >= 7
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Pan-STARRS photometry puts LOT+SOPHIA at T_sys 0.265 (g'), 0.480 "
-           "(r'), 0.265 (i'). The preset's optical_throughput 0.804 x QE 0.85 "
-           "x the measured filter transmissions gives 0.68 in every band: too "
-           "high by 2.6x, 1.4x, 2.6x. Worse, the real throughput is strongly "
-           "band-dependent and the schema has nowhere band-dependent to put it "
-           "except filter_transmission, which is already spoken for by the "
-           "measured curves. See the questions in validation/README.md.",
-)
 @pytest.mark.parametrize("band", ["g", "r", "i"])
 def test_preset_throughput_matches_the_photometry(lot, band):
+    """Each band now carries the throughput its own photometry measured.
+
+    It reached 2.6x wrong in g' and i' while looking merely optimistic, because a
+    single number was being asked to cover a quantity that runs 0.27 to 0.48
+    across three filters. It lives on the filter now.
+    """
     assert _throughput(lot, band) == pytest.approx(
-        lulin.MEASURED[band]["throughput"], rel=0.15)
+        lulin.MEASURED[band]["throughput"], rel=0.01)
 
 
 @pytest.mark.parametrize("band", ["g", "r", "i"])
@@ -152,19 +157,15 @@ def test_the_measured_throughput_reproduces_the_measured_sky(lot, band):
     assert rate == pytest.approx(m["sky_rate"], rel=0.02)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Sky brightness is strongly band-dependent — measured 21.44 (g'), "
-           "20.92 (r'), 20.04 (i') — but mu_dark is one number on the profile's "
-           "environment, shared by every filter. The shipped 21.5 happens to "
-           "suit g' and is 1.46 mag out in i', a factor of 3.8 in background "
-           "flux. Not parametrised: one value cannot be right for all three, "
-           "which is the point.",
-)
-def test_preset_mu_dark_matches_the_sky_that_was_measured(lot):
-    for band in ("g", "r", "i"):
-        assert lot["environment"].mu_dark == pytest.approx(
-            lulin.MEASURED[band]["mu_dark"], abs=0.15)
+@pytest.mark.parametrize("band", ["g", "r", "i"])
+def test_preset_mu_dark_matches_the_sky_that_was_measured(band):
+    """And each band carries the sky that was measured through it.
+
+    The site's single 21.5 suited g' and was 1.46 mag out in i', a factor of 3.8
+    in background flux. It survives as the fallback for bands nobody has measured.
+    """
+    assert _resolved(band)["environment"]["mu_dark"] == pytest.approx(
+        lulin.MEASURED[band]["mu_dark"], abs=0.01)
 
 
 def test_the_sky_is_bluer_than_one_number_can_describe():

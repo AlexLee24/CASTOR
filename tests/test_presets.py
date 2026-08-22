@@ -128,11 +128,18 @@ def test_named_entries_override_the_defaults(shipped):
     assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 354.0
 
 def test_a_site_fills_in_its_sky_and_location(shipped):
+    """The location is the site's alone; the sky is the site's until a band knows better.
+
+    Resolving with no filter named lands on the first listed, which for Lulin is
+    Sloan r' and carries its own measured mu_dark. The site's 21.5 is what any band
+    without a measurement still inherits — see the u' test below.
+    """
     environment = shipped.resolve("lulin")["environment"]
 
     assert environment["location"]["elevation_m"] == 2862.0
-    assert environment["mu_dark"] == 21.5
     assert environment["extinction_coeff"] == 0.17
+    assert shipped.profile("lulin").environment.mu_dark == 21.5
+    assert environment["mu_dark"] == 20.92                      # r' measured
 
 def test_a_hardware_family_invents_no_location(shipped):
     """VLT is listed as hardware only. Resolving it must leave the observer where they
@@ -194,3 +201,88 @@ def test_resolved_preset_runs_through_the_engine(shipped, remainder):
     )
 
     assert response.core.total_snr > 0
+
+
+# ==========================================
+# Band-dependent values a filter carries
+# ==========================================
+
+def test_choosing_a_filter_changes_the_sky_it_looks_through(shipped):
+    """Sky brightness is a property of the site and the band, not the site alone.
+
+    Measured at Lulin the three Sloan bands sit 1.4 magnitudes apart, so whichever
+    single figure the site carried was wrong for the other two by up to a factor
+    of 3.8 in background flux.
+    """
+    skies = {band: shipped.resolve("lulin", optic_filter=band)["environment"]["mu_dark"]
+             for band in ("Sloan_g", "Sloan_r", "Sloan_i")}
+
+    assert len(set(skies.values())) == 3
+    assert skies["Sloan_g"] > skies["Sloan_r"] > skies["Sloan_i"]
+
+
+def test_choosing_a_filter_changes_the_throughput_in_front_of_it(shipped):
+    """The same for optical efficiency, which the photometry puts at 0.27-0.48."""
+    def throughput(band):
+        fragment = shipped.resolve("lulin", optic_filter=band)
+        return fragment["instrument"]["telescope"]["optical_throughput"]
+
+    assert throughput("Sloan_r") > throughput("Sloan_g")
+    assert throughput("Sloan_r") > throughput("Sloan_i")
+
+
+def test_a_filter_without_a_measurement_leaves_the_site_values_alone(shipped):
+    """Lulin u' has no published curve and no photometry, so it inherits.
+
+    The point of overriding per field rather than per section: a band can correct
+    its sky without also having to claim an extinction coefficient nobody measured.
+    """
+    site = shipped.profile("lulin").environment
+
+    fragment = shipped.resolve("lulin", optic_filter="Sloan_u")
+    assert fragment["environment"]["mu_dark"] == site.mu_dark
+    assert fragment["instrument"]["telescope"]["optical_throughput"] == (
+        shipped.profile("lulin").telescopes["LOT"].telescope.optical_throughput)
+
+
+def test_every_band_keeps_the_site_extinction(shipped):
+    """Extinction is band-dependent too, but Lulin's is not yet measured well enough.
+
+    The field exists on BandSky and is deliberately unset, so the site value stands
+    until frames spanning airmass on one photometric night can pin it down.
+    """
+    site = shipped.profile("lulin").environment
+    for band in shipped.profile("lulin").filters:
+        fragment = shipped.resolve("lulin", optic_filter=band)
+        assert fragment["environment"]["extinction_coeff"] == site.extinction_coeff
+
+
+def test_a_hardware_family_cannot_be_given_a_sky(tmp_path):
+    """Refused at load, not ignored at resolve — an unapplied number in a data file
+    is indistinguishable from a wrong one until somebody measures the difference."""
+    path = tmp_path / "presets.json"
+    path.write_text(json.dumps({"profiles": {"rig": {
+        "name": "Hardware only",
+        "filters": {"F": {
+            "optic_filter": {"central_wavelength": 500.0, "filter_bandwidth": 100.0,
+                             "filter_transmission": 0.9},
+            "environment": {"mu_dark": 21.0}}}}}}), encoding="utf-8")
+
+    with pytest.raises(presets.PresetError, match="hardware family"):
+        presets.load(path)
+
+
+def test_a_misspelled_band_override_is_an_error(tmp_path):
+    """The override models forbid extras for the same reason the leaves do."""
+    path = tmp_path / "presets.json"
+    path.write_text(json.dumps({"profiles": {"site": {
+        "environment": {"location": {"latitude_deg": 0.0, "longitude_deg": 0.0,
+                                     "elevation_m": 0.0},
+                        "mu_dark": 21.5, "extinction_coeff": 0.17},
+        "filters": {"F": {
+            "optic_filter": {"central_wavelength": 500.0, "filter_bandwidth": 100.0,
+                             "filter_transmission": 0.9},
+            "environment": {"mu_drak": 21.0}}}}}}), encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        presets.load(path)
