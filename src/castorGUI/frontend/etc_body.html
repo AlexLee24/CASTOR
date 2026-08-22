@@ -309,9 +309,22 @@
                             <span class="etc-field-label">SED Model</span>
                             <select name="target.sed.type" id="select-sed-type">
                                 <option value="flat">Flat Spectrum</option>
-                                <option value="Temp">Blackbody (Temperature)</option>
                             </select>
                         </label>
+                        <!-- Blackbody is hidden rather than offered, because choosing it could
+                             only ever fail. schema.TempSED declares nothing but its own tag, so
+                             the temperature field below was rejected as an extra input and the
+                             whole request 400'd the moment the group unhid itself.
+
+                             The engine does not read target.sed at all yet — calculator's
+                             _unify_flux branches on target.brightness and never looks at the
+                             SED — so flat is not one model among two, it is the only behaviour
+                             there is, and the selector above says so honestly.
+
+                             Restoring this means three things, not one: give TempSED a
+                             temperature_k field, make the engine actually integrate a blackbody
+                             across the band, and only then put the option and this group back.
+                        <option value="Temp">Blackbody (Temperature)</option>
                         <div class="dynamic-group" data-sed="Temp" hidden>
                             <label class="etc-field">
                                 <span class="etc-field-label">Blackbody Temperature</span>
@@ -321,6 +334,7 @@
                                 </span>
                             </label>
                         </div>
+                        -->
                     </div>
 
                     <!-- ══ Environment ══ -->
