@@ -211,3 +211,16 @@ def test_read_noise_is_the_one_the_frames_show(lot):
     assert lulin.MEASURED_GAIN_SLOPE == pytest.approx(1.0, abs=0.05)
     assert lot["camera"].readout_noise == pytest.approx(7.0, abs=0.1)
     assert abs(lulin.MEASURED_READ_NOISE - lot["camera"].readout_noise) < 1.5
+
+
+def test_the_detector_does_not_explain_the_band_shape():
+    """Measured throughput has r' at 1.8x g' and i'. QE is flat to within 10%.
+
+    Reading the datasheet curve was worth doing because it removes the obvious
+    suspect. Whatever makes r' stand out is in the optics, the atmosphere, or
+    the reduction — not the sensor.
+    """
+    qe = lulin.DATASHEET_QE
+    assert max(qe[f"Sloan_{b}"] for b in "gri") / min(qe[f"Sloan_{b}"] for b in "gri") < 1.15
+    t = {b: lulin.MEASURED[b]["throughput"] for b in "gri"}
+    assert max(t.values()) / min(t.values()) > 1.7

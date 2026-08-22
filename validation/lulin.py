@@ -74,6 +74,14 @@ MEASURED_BANDPASS = {
 MEASURED_READ_NOISE = 7.9
 MEASURED_GAIN_SLOPE = 0.982
 
+#: Read off the QE curves on page 8 of the SOPHIA datasheet, the 2048B-152
+#: which is the 15 um CCD230-42 this camera has. Two coatings are plotted;
+#: these are the midband one, at our four band centres. Nearly flat across
+#: g'r'i', which matters because it rules the detector out as the reason the
+#: measured throughput in r' is 1.8x its neighbours' — whatever causes that,
+#: it is not the CCD.
+DATASHEET_QE = {"Sloan_g": 0.90, "Sloan_r": 0.96, "Sloan_i": 0.87, "Sloan_z": 0.28}
+
 #: Lulin's SLT page names the camera in full: Andor iKon-M DU934P-BEX2-DD
 #: CCD-26868. The BEX2-DD variant is what fixes the well depth at 130 ke-.
 SLT_CAMERA = "Andor iKon-M DU934P-BEX2-DD CCD-26868"

@@ -126,9 +126,13 @@ Things the measurements raised that need someone who knows the instrument.
    schema change and a contract other hosts read.
 3. **Same question for `mu_dark`**, which is one number per site but measures
    1.4 mag apart across three bands.
-4. **Why r' is 1.8x more efficient than g' and i'.** That shape is odd for a
-   back-illuminated deep-depletion CCD, which should peak broadly in the red.
-   Real, or an artefact of the reduction?
+4. **Why r' is 1.8x more efficient than g' and i'.** Not the detector: the
+   datasheet QE curve reads 90/96/87% at the three band centres, flat to within
+   10%, where the measurement needs a factor of 1.8. Nor the filters, whose
+   integrals are known. That leaves the optics, something band-dependent in the
+   reduction, or LOT genuinely performing at 40-70% of a plausible system —
+   which a 2002 telescope with original coatings might well be. Someone who has
+   seen the mirrors should say which.
 5. **Extinction per band.** The fit gives r' 0.189 +/- 0.027, but g' 0.123 +/-
    0.105 and i' 0.108 +/- 0.049 are too loose to adopt, and the ordering comes
    out backwards. Frames spanning airmass on one photometric night would settle
