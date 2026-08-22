@@ -117,14 +117,14 @@ def test_naming_only_the_site_resolves_a_real_configuration(shipped):
     fragment = shipped.resolve("lulin")
 
     assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 1.0  # LOT
-    assert fragment["instrument"]["camera"]["readout_noise"] == 5.0               # Sophia
-    assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 623.0  # Sloan r'
+    assert fragment["instrument"]["camera"]["readout_noise"] == 7.0               # Sophia
+    assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8  # Sloan r'
 
 def test_named_entries_override_the_defaults(shipped):
     fragment = shipped.resolve("lulin", telescope="SLT", camera="SLT_default", optic_filter="Sloan_u")
 
-    assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 0.4
-    assert fragment["instrument"]["camera"]["pixel_pitch"] == 9.0
+    assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 0.406
+    assert fragment["instrument"]["camera"]["pixel_pitch"] == 13.0
     assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 354.0
 
 def test_a_site_fills_in_its_sky_and_location(shipped):

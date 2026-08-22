@@ -46,16 +46,16 @@
           "telescope": {
             "primary_mirror_diameter": 1.0,
             "secondary_mirror_diameter": 0.3,
-            "focal_length": 8.0,
-            "optical_throughput": 0.804
+            "focal_length": 8.054,
+            "optical_throughput": 0.381
           }
         },
         "SLT": {
           "name": "SLT 0.4 m",
           "telescope": {
-            "primary_mirror_diameter": 0.4,
+            "primary_mirror_diameter": 0.406,
             "secondary_mirror_diameter": 0.12,
-            "focal_length": 3.2,
+            "focal_length": 3.414,
             "optical_throughput": 0.804
           }
         }
@@ -67,18 +67,18 @@
             "pixel_pitch": 15.0,
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.01,
-            "readout_noise": 5.0,
+            "readout_noise": 7.0,
             "full_well_capacity": 100000
           }
         },
         "SLT_default": {
           "name": "SLT default camera",
           "camera": {
-            "pixel_pitch": 9.0,
+            "pixel_pitch": 13.0,
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.01,
-            "readout_noise": 3.5,
-            "full_well_capacity": 50000
+            "readout_noise": 2.9,
+            "full_well_capacity": 130000
           }
         }
       },
@@ -86,9 +86,9 @@
         "Sloan_r": {
           "name": "Sloan r'",
           "optic_filter": {
-            "central_wavelength": 623.0,
-            "filter_bandwidth": 137.0,
-            "filter_transmission": 0.9
+            "central_wavelength": 627.8,
+            "filter_bandwidth": 131.0,
+            "filter_transmission": 0.995
           }
         },
         "Sloan_u": {
@@ -102,25 +102,25 @@
         "Sloan_g": {
           "name": "Sloan g'",
           "optic_filter": {
-            "central_wavelength": 477.0,
-            "filter_bandwidth": 137.0,
-            "filter_transmission": 0.9
+            "central_wavelength": 475.9,
+            "filter_bandwidth": 147.0,
+            "filter_transmission": 0.996
           }
         },
         "Sloan_i": {
           "name": "Sloan i'",
           "optic_filter": {
-            "central_wavelength": 763.0,
-            "filter_bandwidth": 153.0,
-            "filter_transmission": 0.9
+            "central_wavelength": 767.6,
+            "filter_bandwidth": 145.0,
+            "filter_transmission": 1.0
           }
         },
         "Sloan_z": {
           "name": "Sloan z'",
           "optic_filter": {
-            "central_wavelength": 913.0,
-            "filter_bandwidth": 137.0,
-            "filter_transmission": 0.9
+            "central_wavelength": 962.1,
+            "filter_bandwidth": 278.0,
+            "filter_transmission": 0.998
           }
         }
       }

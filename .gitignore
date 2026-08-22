@@ -217,3 +217,8 @@ project_context.md
 de421.bsp
 # Raw reference exports: regenerate rather than carry (see validation/README.md)
 validation/data/raw/
+
+# Real observations stay out of a public repository. The intake checklist is
+# tracked; nothing that lands beside it is.
+validation/data/lulin/*
+!validation/data/lulin/README.md
