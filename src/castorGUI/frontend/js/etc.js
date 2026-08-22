@@ -6,11 +6,10 @@
    Kinder points it at its own Flask blueprint; the standalone server.py points
    it at the identical paths it serves itself.
 
-   Interaction model matches the Flet GUI it was ported from: four freely
-   switchable tabs, no submit button, every edit recalculates. The one thing
-   that has no Flet counterpart is the network — recalculating in-process is
-   free, but over HTTP a slow earlier response can land after a fast later one
-   and overwrite it, so each request family keeps a single AbortController and
+   Interaction model: four freely switchable tabs, no submit button, every edit
+   recalculates. Recalculating over the network is what makes that last part
+   delicate — a slow earlier response can land after a fast later one and
+   overwrite it, so each request family keeps a single AbortController and
    cancels its own predecessor.
 ============================================================================ */
 (function () {
@@ -71,8 +70,8 @@
         /* prune=true drops inputs inside a hidden .dynamic-group, because
            castor.schema is strict: sending zero_point_flux while the brightness
            discriminator says ab_mag is a validation error, not a harmless extra.
-           prune=false is for SAVE, which keeps every branch's value the way
-           AppState.get_api_payload() does. */
+           prune=false is for SAVE, which keeps every branch's value — see
+           buildSaveObject for why. */
         build: function (prune) {
             var payload = {};
             var elements = form.elements;
@@ -124,7 +123,7 @@
     /* TimeSeriesEnvironment shares location / mu_dark / extinction / FWHM with the
        single-point environment and swaps the instant for a start/end/step range.
        It has no auto_calc_background: the batch path always layers the dynamic
-       moon contribution. Mirrors AppState.build_batch_observation_request. */
+       moon contribution. */
     function buildBatchRequest() {
         var base = PayloadBuilder.build(true);
         var env = base.environment || {};
@@ -829,8 +828,8 @@
 
     // ========================================================================
     // Presets — an observing profile (site + its rigs) cascading into a rig, plus
-    // an independent filter. Mirrors AppState.apply_profile/apply_rig/apply_filter;
-    // the two implementations read the same data/presets.json.
+    // an independent filter. The same rules are implemented for Python callers in
+    // castorCLI/presets.py; both read the same data/presets.json.
     // ========================================================================
 
     var presets = {};
@@ -1078,8 +1077,8 @@
     }
 
     // ========================================================================
-    // SAVE / LOAD — same JSON shape as AppState.get_api_payload(), so a file
-    // saved here opens in the Flet GUI and vice versa.
+    // SAVE / LOAD — a saved file is castor.schema's own request shape, so it stays
+    // readable by anything else that speaks the contract rather than only by this form.
     // ========================================================================
 
     var dialog = el('json-dialog');
@@ -1117,10 +1116,10 @@
         el('json-dialog-error').hidden = !message;
     }
 
-    /* The shape AppState.get_api_payload() produced: every branch's value kept, not just
-       the ones the current discriminators select. That makes it a superset of a valid
-       request — deliberately, so switching brightness type after a load doesn't find the
-       fields blank — which is why it is read back through applyLoaded rather than posted. */
+    /* Every branch's value is kept, not just the ones the current discriminators
+       select. That makes it a superset of a valid request — deliberately, so switching
+       brightness type after a load doesn't find the fields blank — which is why it is
+       read back through applyLoaded rather than posted. */
     function buildSaveObject() {
         var all = PayloadBuilder.build(false);
         var batch = all.batch || {};
@@ -1236,8 +1235,7 @@
 
     function applyLoaded(data) {
         // Field-by-field rather than wholesale: a save file predating a newer field
-        // leaves that field at its current value instead of blanking it. Same
-        // deep-merge intent as AppState.load_from_dict.
+        // leaves that field at its current value instead of blanking it.
         var elements = form.elements;
         for (var i = 0; i < elements.length; i++) {
             var input = elements[i];
@@ -1269,8 +1267,8 @@
         if (loadedBrightness === 'jansky_flux' || loadedBrightness === 'wavelength_flux') {
             fluxValueUnit = loadedBrightness;
         }
-        // Same reasoning as AppState.load_from_dict: leaving the selectors on their
-        // previous choice would claim a provenance these numbers no longer have.
+        // Leaving the selectors on their previous choice would claim a provenance
+        // these numbers no longer have.
         SELECTOR_IDS.forEach(function (id) { el(id).value = ''; });
         // Loaded numbers match no preset, and the reader has every reason to want to see
         // what they just opened.

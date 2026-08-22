@@ -68,8 +68,8 @@
 .castor-etc *::after { box-sizing: inherit; }
 
 /* ============================================================================
-   Shell — two glass cards side by side. The 10/12 split matches the Flet
-   layout's expand=10 (LeftPanel) / expand=12 (RightPanel).
+   Shell — two glass cards side by side, the results given slightly more width
+   than the form that feeds them.
 ============================================================================ */
 .castor-etc .etc-shell {
     display: grid;
