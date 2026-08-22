@@ -2,356 +2,53 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CASTOR ETC</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- 引入 Plotly 用於渲染陣列模式圖表 -->
-    <script src="js/plotly.js"></script>
-    <script src="js/script.js" defer></script>
+
+    <!-- Providing Plotly is the host's job — etc.js only ever reads window.Plotly.
+         This standalone build serves a vendored copy so it works offline and on a
+         private observatory network; Kinder's template pins the same library from
+         its own CDN tag instead. Both deferred: a blocking 3.4MB <script> in the
+         head means the form doesn't render until the library has finished
+         downloading, which on a slow link is several seconds of blank page. -->
+    <script src="js/plotly.min.js" defer charset="utf-8"></script>
+    <script src="js/etc.js" defer></script>
+    <link rel="stylesheet" href="css/etc.css">
+
+    <script>
+        // The host decides where the engine lives; server.py serves these paths
+        // itself and Kinder points the same three keys at its own blueprint.
+        // Inline (not deferred) so it is in place before the deferred etc.js runs.
+        window.CASTOR_ETC_CONFIG = {
+            apiUrl: '/api/exposure_time_calculator',
+            batchUrl: '/api/exposure_time_calculator/batch',
+            presetsUrl: '/api/exposure_time_calculator/presets'
+        };
+    </script>
+
+    <!-- Page chrome for the standalone build only. Deliberately not in etc.css:
+         mounted inside Kinder the page background, font and outer padding belong
+         to the host, and the calculator must not reach outside .castor-etc. -->
+    <style>
+        html { -webkit-font-smoothing: antialiased; }
+        body {
+            margin: 0;
+            /* border-box or the 32px of padding lands outside the 100vh and the page
+               scrolls by exactly 64px on every screen, with nothing below the fold to
+               scroll to. The shell already sizes itself to 100vh - 96px and each panel
+               scrolls internally, so the outer page is not meant to scroll at all. */
+            box-sizing: border-box;
+            padding: 32px;
+            min-height: 100vh;
+            background: #0a0a12;
+            color: #e5e7eb;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+        }
+    </style>
 </head>
 <body>
 
-    <header>
-        <h1>CASTOR ETC (Exposure Time Calculator)</h1>
-        <p>Optical Exposure Time Calculator Engine - Lulin Observatory</p>
-    </header>
-
-    <main>
-        <form id="castor-form">
-
-            <!-- [新增] 步驟化進度指示條 -->
-            <div class="stepper-indicator">
-                <div class="step active" data-step="1">1. Instrument</div>
-                <div class="step" data-step="2">2. Target</div>
-                <div class="step" data-step="3">3. Environment</div>
-                <div class="step" data-step="4">4. Calculation</div>
-            </div>
-
-            <!-- ==========================================
-                 Step 1: Instrument Profile
-            ========================================== -->
-            <section id="section-instrument" class="step-content active">
-                <h2>1. Instrument Profile</h2>
-                
-                <div class="instrument-group">
-                    <p>
-                        <label for="telescope-template">Telescope Preset:</label>
-                        <select id="telescope-template" name="preset_telescope">
-                            <option value="">Loading...</option>
-                        </select>
-                    </p>
-                    <div class="custom-details">
-                        <h4>[Telescope Optics & Specs]</h4>
-                        <ul>
-                            <li><label>Primary Mirror Diameter (m):</label> <input type="number" name="instrument.telescope.primary_mirror_diameter" value="1.0" step="any" required></li>
-                            <li><label>Secondary Mirror Diameter (m):</label> <input type="number" name="instrument.telescope.secondary_mirror_diameter" value="0.3" step="any" required></li>
-                            <li><label>Focal Length (m):</label> <input type="number" name="instrument.telescope.focal_length" value="8.0" step="any" required></li>
-                            <li><label>Optical Throughput (0.0 - 1.0):</label> <input type="number" name="instrument.telescope.optical_throughput" value="0.85" step="any" max="1" min="0" required></li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="instrument-group">
-                    <p>
-                        <label for="camera-template">Camera / Detector Preset:</label>
-                        <select id="camera-template" name="preset_camera">
-                            <option value="">Loading...</option>
-                        </select>
-                    </p>
-                    <div class="custom-details">
-                        <h4>[Camera Detector & Noise]</h4>
-                        <ul>
-                            <li><label>Pixel Pitch (μm):</label> <input type="number" name="instrument.camera.pixel_pitch" value="15.0" step="any" required></li>
-                            <li><label>Quantum Efficiency (0.0 - 1.0):</label> <input type="number" name="instrument.camera.quantum_efficiency" value="0.85" step="any" max="1" min="0" required></li>
-                            <li><label>Dark Current (e-/s/pix):</label> <input type="number" name="instrument.camera.dark_current_rate" value="0.01" step="any" required></li>
-                            <li><label>Readout Noise (e-/pix):</label> <input type="number" name="instrument.camera.readout_noise" value="5.0" step="any" required></li>
-                            <li><label>Full Well Capacity (e-):</label> <input type="number" name="instrument.camera.full_well_capacity" value="100000" step="any" required></li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="instrument-group">
-                    <p>
-                        <label for="filter-template">Filter Band Preset:</label>
-                        <select id="filter-template" name="preset_filter">
-                            <option value="">Loading...</option>
-                        </select>
-                    </p>
-                    <div class="custom-details">
-                        <h4>[Filter Characteristics]</h4>
-                        <ul>
-                            <li><label>Central Wavelength (nm):</label> <input type="number" name="instrument.optic_filter.central_wavelength" value="550.0" step="any" required></li>
-                            <li><label>Filter Bandwidth (nm):</label> <input type="number" name="instrument.optic_filter.filter_bandwidth" value="89.0" step="any" required></li>
-                            <li><label>Filter Transmission (0.0 - 1.0):</label> <input type="number" name="instrument.optic_filter.filter_transmission" value="0.9" step="any" max="1" min="0" required></li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ==========================================
-                 Step 2: Target Profile
-            ========================================== -->
-            <section id="section-target" class="step-content" hidden>
-                <h2>2. Target Profile</h2>
-                
-                <p>
-                    <label for="target-morphology">Target Morphology:</label>
-                    <select id="target-morphology" name="target.morphology.type">
-                        <option value="point">Point Source (e.g., Star)</option>
-                        <option value="extended">Extended Source (e.g., Galaxy)</option>
-                    </select>
-                </p>
-
-                <p>
-                    <label for="target-brightness-type">Brightness System:</label>
-                    <select id="target-brightness-type" name="target.brightness.type">
-                        <option value="vega_mag">Vega Magnitude</option>
-                        <option value="ab_mag">AB Magnitude</option>
-                        <option value="jansky_flux">Jansky Flux (Jy)</option>
-                        <option value="wavelength_flux">Wavelength Flux (erg/s/cm²/Å)</option>
-                    </select>
-                </p>
-
-                <div id="group-target-mag" class="dynamic-group">
-                    <p>
-                        <label>Apparent Magnitude (mag):</label>
-                        <input type="number" name="target.brightness.target_mag" value="15.0" step="any">
-                    </p>
-                </div>
-                <div id="group-zero-point-flux" class="dynamic-group">
-                    <p>
-                        <label>Zero Point Flux (erg/s/cm²/Å):</label>
-                        <input type="number" name="target.brightness.zero_point_flux" value="3.63e-9" step="any">
-                    </p>
-                </div>
-                <div id="group-flux-value" class="dynamic-group" hidden>
-                    <p>
-                        <label>Flux Value:</label>
-                        <input type="number" name="target.brightness.flux_value" step="any">
-                    </p>
-                </div>
-
-                <!-- 攤平的 SED 與座標 -->
-                <h4>Spectral Energy Distribution (SED)</h4>
-                <ul>
-                    <li>
-                        <label for="sed-type">SED Model:</label>
-                        <select id="sed-type" name="target.sed.type">
-                            <option value="flat">Flat Spectrum</option>
-                            <option value="Temp">Blackbody (Temp)</option>
-                        </select>
-                    </li>
-                    <li id="group-temperature" class="dynamic-group" hidden>
-                        <label>Blackbody Temperature (K):</label>
-                        <input type="number" name="target.sed.temperature_k" value="5800" step="any" min="0">
-                    </li>
-                </ul>
-
-                <h4>Astrometry Coordinates</h4>
-                <p style="font-size: 0.8rem; color: var(--text-muted);">* Must be in Decimal Degrees (J2000).</p>
-                <ul>
-                    <li>
-                        <label>Right Ascension (RA, 0-360 deg):</label>
-                        <input type="number" name="target.ra" value="180.0" step="any" min="0" max="360" required>
-                    </li>
-                    <li>
-                        <label>Declination (Dec, ±90 deg):</label>
-                        <input type="number" name="target.dec" value="45.0" step="any" min="-90" max="90" required>
-                    </li>
-                </ul>
-            </section>
-
-            <!-- ==========================================
-                 Step 3: Environment Conditions
-            ========================================== -->
-            <section id="section-environment" class="step-content" hidden>
-                <h2>3. Environment Conditions</h2>
-                
-                <h4>Spatial Spreading Errors (arcsec)</h4>
-                <div class="inline-group" style="margin-bottom: 15px;">
-                    <label>Seeing:</label> <input type="number" name="environment.seeing_fwhm" value="1.5" step="any" required>
-                    <label>Diffraction:</label> <input type="number" name="environment.diffraction_fwhm" value="0.2" step="any" required>
-                </div>
-                <div class="inline-group" style="margin-bottom: 15px;">
-                    <label>Optical:</label> <input type="number" name="environment.optical_fwhm" value="0.1" step="any" required>
-                    <label>Tracking:</label> <input type="number" name="environment.tracking_fwhm" value="0.1" step="any" required>
-                </div>
-
-                <h4>Atmosphere & Background</h4>
-                <ul>
-                    <li>
-                        <label>Dark Sky Background (mu_dark, mag/arcsec²):</label>
-                        <input type="number" name="environment.mu_dark" value="21.0" step="any" required>
-                    </li>
-                    <li>
-                        <label>Extinction Coefficient (mag/airmass):</label>
-                        <input type="number" name="environment.extinction_coeff" value="0.15" step="any" required>
-                    </li>
-                </ul>
-
-                <!-- 攤平的時空背景設定，並更改提示為 Local Time -->
-                <h4>Spatiotemporal Context (For Airmass & Moon)</h4>
-                <ul>
-                    <li>
-                        <label>Observation Time (Local Time):</label>
-                        <input type="datetime-local" name="environment.observing_time_utc" required>
-                    </li>
-                    <li>
-                        <label>Observatory Coordinates (Lat / Lon / Elev m):</label>
-                        <div class="inline-group">
-                            <input type="number" name="environment.location.latitude_deg" value="23.47" step="any" required>
-                            <input type="number" name="environment.location.longitude_deg" value="120.87" step="any" required>
-                            <input type="number" name="environment.location.elevation_m" value="2862" step="any" required>
-                        </div>
-                    </li>
-                </ul>
-            </section>
-
-            <!-- ==========================================
-                 Step 4: Calculation Options
-            ========================================== -->
-            <section id="section-options" class="step-content" hidden>
-                <h2>4. Calculation Options</h2>
-                
-                <h4>Base Configuration</h4>
-                <ul>
-                    <li>
-                        <label>Aperture Factor (k_ap):</label>
-                        <input type="number" name="options.aperture_factor" value="1.5" step="any" required>
-                    </li>
-                    <li>
-                        <label>Single Exposure Time (sec):</label>
-                        <input type="number" name="options.single_exp_time" value="300" min="0.1" step="any" required>
-                    </li>
-                </ul>
-
-                <h4>Observation Strategy</h4>
-                <p>
-                    <label for="calc-mode-type">Calculation Goal:</label>
-                    <select id="calc-mode-type" name="options.type">
-                        <option value="solve_snr">Solve for SNR (Given Exposures)</option>
-                        <option value="solve_time">Solve for Required Exposures (Given SNR)</option>
-                    </select>
-                </p>
-
-                <div id="group-solve-snr" class="dynamic-group">
-                    <p>
-                        <label>Number of Exposures (Count):</label>
-                        <input type="number" name="options.num_exposures" value="1" min="1" step="1">
-                    </p>
-                </div>
-                <div id="group-solve-time" class="dynamic-group" hidden>
-                    <p>
-                        <label>Target SNR:</label>
-                        <input type="number" name="options.target_snr" value="10.0" step="any">
-                    </p>
-                </div>
-                
-                <hr style="border: 1px dashed rgba(255,255,255,0.2); margin: 20px 0;">
-
-                <div>
-                    <p>
-                        <label>
-                            <input type="checkbox" id="toggle-array-mode"> 
-                            Enable Batch Array Mode (Time-Series Simulation)
-                        </label>
-                    </p>
-                </div>
-            </section>
-
-            <!-- [新增] 步驟導航按鈕 -->
-            <div class="stepper-actions">
-                <button type="button" id="btn-prev" class="btn-secondary" hidden>← Back</button>
-                <button type="button" id="btn-next" class="btn-primary">Next Step →</button>
-                <button type="submit" id="btn-submit" class="btn-submit" hidden>Run Simulation</button>
-            </div>
-
-        </form>
-    </main>
-
-    <!-- 結果區塊保持不變 -->
-    <section id="section-results">
-        <h2>5. Results Dashboard</h2>
-
-        <div id="results-placeholder" class="placeholder-box">
-            <span class="icon">🔭</span>
-            <p>Awaiting strict schema calculation...</p>
-        </div>
-
-        <div id="results-container" hidden>
-            <div id="alert-container" class="alert-box" hidden>
-                <strong>⚠️ Observation Warnings</strong>
-                <ul id="warning-list"></ul>
-            </div>
-
-            <!-- Core Metrics -->
-            <div class="result-hero-card">
-                <h3 id="primary-result-label">Primary Result</h3>
-                <div id="primary-result-value" class="hero-value">--</div>
-                <div id="primary-result-desc" class="hero-desc">--</div>
-            </div>
-
-            <!-- Signal & Noise Budget -->
-            <h4 style="margin-top: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; color: var(--primary);">[Signal & Noise Budget]</h4>
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Source Rate</div>
-                    <div class="metric-value"><span id="res-source-rate">--</span> <span class="unit">e-/s</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Sky Background</div>
-                    <div class="metric-value"><span id="res-sky-rate">--</span> <span class="unit">e-/s/pix</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Peak Pixel Rate</div>
-                    <div class="metric-value"><span id="res-peak-rate">--</span> <span class="unit">e-/s/pix</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Single Exp. SNR</div>
-                    <div class="metric-value"><span id="res-single-snr">--</span></div>
-                </div>
-            </div>
-
-            <!-- Physical Diagnostics -->
-            <h4 style="margin-top: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; color: var(--primary);">[Physical Diagnostics]</h4>
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Total FWHM</div>
-                    <div class="metric-value"><span id="res-total-fwhm">--</span> <span class="unit">arcsec</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Pixel Scale</div>
-                    <div class="metric-value"><span id="res-pixel-scale">--</span> <span class="unit">"/pix</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Effective Area</div>
-                    <div class="metric-value"><span id="res-eff-area">--</span> <span class="unit">m²</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">System Throughput</div>
-                    <div class="metric-value"><span id="res-throughput">--</span> <span class="unit">%</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Enclosed Flux</div>
-                    <div class="metric-value"><span id="res-enclosed-flux">--</span> <span class="unit">%</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Aperture Pixels</div>
-                    <div class="metric-value"><span id="res-num-pixels">--</span> <span class="unit">px</span></div>
-                </div>
-            </div>
-
-            <!-- Limits & Constraints -->
-            <h4 style="margin-top: 25px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; color: var(--primary);">[Observation Limits]</h4>
-            <div class="metrics-grid" style="grid-template-columns: 1fr;">
-                <div class="metric-card" style="border-color: rgba(239, 68, 68, 0.3);">
-                    <div class="metric-label">Saturation Time Limit (Full Well)</div>
-                    <div class="metric-value"><span id="res-sat-time">--</span> <span class="unit">sec</span></div>
-                </div>
-            </div>
-
-            <div id="plot-area" class="plot-container" hidden></div>
-        </div>
-    </section>
+<!--CASTOR_ETC_BODY-->
 
 </body>
 </html>

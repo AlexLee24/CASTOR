@@ -6,6 +6,8 @@
 
 CASTOR is a lightweight, stateless exposure time calculator (ETC) core engine designed specifically for optical astronomical observations. The project completely excludes graphical user interfaces (GUI) and data persistence layers, focusing entirely on implementing underlying physical algorithms—such as optical geometry, atmospheric physics, energy conversion, and signal-to-noise ratio (SNR) calculations—in pure Python. It is engineered to provide precise, high-concurrency computational support for upper-level astronomical web applications.
 
+> This document covers the core engine (`src/castor/`) only. **CASTOR GUI** (`src/castorGUI/`) is a separate product built on top of this engine — see [CASTOR GUI Architecture](gui_architecture.md).
+
 ### 1.2 Core Value
 
 Traditional astronomical exposure time calculators are often tightly coupled with the hardware equipment of specific observatories or exist as monolithic scripts that are difficult to maintain and integrate with modern web services. CASTOR achieves exceptional universality by completely decoupling physical formulas from hardware parameters. Any combination of optical telescopes and sensors can seamlessly invoke this engine for dynamic batch calculations, provided they adhere to the standard data contract.
@@ -16,36 +18,36 @@ To maintain the purity and high performance of the core engine, a strict divisio
 
 ```mermaid
 flowchart TD
-    %% 定義終端使用者
+    %% Define the end user
     User((User / Astronomer))
 
-    %% 定義 Client Layer 節點
+    %% Define Client Layer nodes
     KinderClient["<b>Kinder Frontend</b><br>• Renders UI/UX<br>• Collects user inputs for target & environment"]
     OtherClient["<b>Other Web Apps / Scripts</b><br>• Custom data collection"]
 
-    %% 定義 API Layer 節點
+    %% Define API Layer nodes
     KinderAPI["<b>Kinder Backend API</b><br>• Routing, Auth & Rate Limiting<br>• Queries database for Hardware Presets<br>• Constructs final payload"]
     OtherAPI["<b>Custom / 3rd Party APIs</b><br>• Alternative backend logic<br>• Constructs final payload"]
 
-    %% 定義 Core Engine 節點
+    %% Define Core Engine node
     CASTOR["<b>CASTOR (Core Engine)</b><br>• Strict Type & Mutex Validation<br>• Pre-computation & Batch Orchestration<br>• Pure Physics Equation Solver"]
 
-    %% 資料流向：使用者到前端
+    %% Data flow: user to frontend
     User -- "UI Input / Web Forms" --> KinderClient
     User -- "Custom Inputs" --> OtherClient
 
-    %% 資料流向：前端到 API
+    %% Data flow: frontend to API
     KinderClient -- "HTTP Request: JSON Payload" --> KinderAPI
     OtherClient -- "HTTP Request: JSON Payload" --> OtherAPI
     
-    %% (選用) 外部 Client 也可以直接打 Kinder 的 API
+    %% (Optional) External clients can also hit Kinder's API directly
     OtherClient -. "HTTP Request (Optional)" .-> KinderAPI
 
-    %% 資料流向：API 到 CASTOR 核心
+    %% Data flow: API to CASTOR core
     KinderAPI -- "Python Function Call:<br>Pydantic Object" --> CASTOR
     OtherAPI -- "Python Function Call:<br>Pydantic Object" --> CASTOR
 
-    %% 設定視覺樣式
+    %% Set visual styles
     style CASTOR fill:transparent,stroke:#a871ff,stroke-width:3px
     style KinderClient fill:transparent,stroke:#2b8cff,stroke-width:2px
     style KinderAPI fill:transparent,stroke:#2b8cff,stroke-width:2px
@@ -96,6 +98,8 @@ To maintain its identity as a lightweight, high-performance computational kernel
 * **No Frontend Components:** It does not generate HTML, CSS, JavaScript, or interactive web forms.
 * **No Graphical Plotting:** It outputs pure mathematical arrays and scalar metrics; it does not render visibility curves or data plots (e.g., Matplotlib/Plotly figures).
 
+> **Note on `src/castorGUI/`:** This boundary describes `src/castor/` only. The repository also ships **CASTOR GUI**, a separate, independently-scoped product that owns exactly the UI/visualization responsibilities this engine deliberately excludes. It is not a special caller — it imports `castor.calculator` / `castor.batch_calculator` / `castor.schema` as a plain Python library and calls them in-process, the same contract any external caller like Kinder would use. See [CASTOR GUI Architecture](gui_architecture.md) for its product identity, scope, and component design.
+
 ##### D. High-Level Scheduling & Operations
 
 * **No Queue Optimization:** While optimized to *support* schedulers, CASTOR itself does not decide the optimal observation order for targets or generate automated telescope operation queues.
@@ -103,35 +107,31 @@ To maintain its identity as a lightweight, high-performance computational kernel
 
 ## 2. Component Architecture
 
-> **[TBD / Draft Phase]**
-> *The internal module division is currently in the draft phase and may evolve after further team discussion.*
-
 The CASTOR package is divided into the following core modules:
 
 ```text
 src/castor/
-├── __init__.py        # Package Entry Point
-├── calculator.py      # Main Orchestrator & Batch Processing
-├── schema.py          # Data Contracts & Mutex Validation
-├── ephemeris.py       # Astrometry, Time & Environment Modeling
-├── optics.py          # Hardware & Optical Train Modeling
-├── physics.py         # Pure Mathematical & Physics Engine
-└── exceptions.py      # Custom Domain Exceptions
+├── __init__.py           # Package Entry Point
+├── calculator.py         # Single-Request Orchestrator
+├── batch_calculator.py   # Time-Series Batch Orchestrator
+├── schema.py              # Data Contracts & Mutex Validation
+├── moon.py                 # Astropy-Based Ephemeris & Lunar Sky Brightness
+└── physics.py               # Pure Mathematical & Optical Physics Engine
 ```
 
 ### Module Responsibilities
 
-* **`calculator.py`:** The system's traffic controller. It receives validated requests, gathers missing parameters from domain modules (`ephemeris`, `optics`), feeds the aggregated NumPy arrays into `physics.py`, and packages the final response.
+* **`calculator.py`:** The system's traffic controller for single-request calculations. It receives a validated `ObservationRequest`, calls `moon.py` for airmass/lunar geometry and `physics.py` for the optical and count-rate formulas, and packages the final `ObservationResponse`.
+
+* **`batch_calculator.py`:** Expands a `TimeSeriesEnvironment` (start/end/step) into discrete timestamps and vectorizes the same physics pipeline across the resulting NumPy arrays, returning a `BatchObservationResponse`.
 
 * **`schema.py`:** Defines Pydantic models to block invalid data at the door. It enforces physical boundaries (e.g., transmission rates strictly between $0.0$ and $1.0$) and logical mutual exclusivity (e.g., requiring either exposure time or target SNR, but not both).
 
-* **`ephemeris.py`:** Handles dynamic variables related to time and space using pure local mathematics (no external API calls). It calculates instantaneous Airmass, Moon phase, and sky background based on observation timestamps and coordinates.
+* **`moon.py`:** Handles dynamic variables related to time and space using Astropy (target/moon ephemeris, airmass, and the Krisciunas & Schaefer 1991 lunar sky-brightness model). Unlike the rest of the engine, this module depends on an external astronomy library rather than pure local math.
 
-* **`optics.py`:** Converts hardware specifications into physical parameters. It calculates the effective light-gathering area (accounting for obstruction), total optical throughput, and dynamically adjusts pixel scale and read noise based on sensor binning modes.
+* **`physics.py`:** The computational core. Combines the optical/hardware conversions (effective area, total throughput, pixel scale, aperture geometry) with the count-rate and SNR formulas. It contains no web schemas or API logic — only pure numerical functions operating on scalars or NumPy arrays.
 
-* **`physics.py`:** The lowest-level computational core. It contains no web schemas or API logic. It accepts only pure numerical matrices or scalars to execute deterministic algorithms—such as analytical quadratic solvers—in strict $O(1)$ complexity.
-
-* **`exceptions.py`:** Centralizes CASTOR-specific error classes (e.g., `TargetNotFoundError`, `PhysicsBoundaryError`) to provide clear, actionable error traces for the parent system.
+Error handling currently relies on Pydantic's `ValidationError` at the schema boundary and plain `ValueError` for physics-domain violations raised inside `calculator.py` / `physics.py` (e.g. an unrecognized morphology or calculation-option type). There is no dedicated exception hierarchy yet — see §6.
 
 ## 3. Design Principles
 
@@ -163,10 +163,10 @@ CASTOR processes each calculation request through a straightforward, step-by-ste
 sequenceDiagram
     autonumber
     
-    %% 將過長的名字加上 <br/> 來節省橫向空間
+    %% Add <br/> to overly long names to save horizontal space
     actor Client as External Caller<br/>(API/Web)
     
-    %% 使用 rgba 產生淡淡的紫色光暈，對齊 Flowchart 的 CASTOR 外框
+    %% Use rgba for a faint purple glow, matching the CASTOR outline in the flowchart
     box rgba(168, 113, 255, 0.05) CASTOR Core Engine
         participant Calc as calculator.py
         participant Schema as schema.py
@@ -182,17 +182,17 @@ sequenceDiagram
     Schema-->>Calc: Validated Pydantic Object
     deactivate Schema
 
-    %% Phase 2: Context Enrichment (Kinder 藍色背景)
+    %% Phase 2: Context Enrichment (Kinder blue background)
     rect rgba(43, 140, 255, 0.1)
         Note over Calc, Domain: Phase 2: Context Enrichment<br/>(Resolving missing physical & environmental data)
         
-        %% 將過長的動作標籤折行
+        %% Wrap overly long action labels
         Calc->>Domain: Compute Environment -> Airmass, Moon Phase
         Calc->>Domain: Compute Hardware -> Effective Area, Read Noise
         Domain-->>Calc: Aggregated Parameters
     end
 
-    %% Phase 3: Core Computation (CASTOR 紫色背景)
+    %% Phase 3: Core Computation (CASTOR purple background)
     rect rgba(168, 113, 255, 0.1)
         Note over Calc, Physics: Phase 3: Core Computation
         
@@ -302,3 +302,5 @@ Vectorized Batch Optimization
 TargetProfile to ESO ETC's Form
 
 API Docs
+
+Dedicated exception hierarchy (e.g. `PhysicsBoundaryError`) in place of plain `ValueError`

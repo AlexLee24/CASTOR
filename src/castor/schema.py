@@ -71,6 +71,13 @@ class InstrumentProfile(StrictModel):
     camera: CameraSchema
     optic_filter: FilterSchema
 
+    throughput_correction: float = Field(
+        ..., 
+        ge=0, 
+        le=1, 
+        description="Additional system-level throughput correction factor, as a dimensionless ratio from 0.0 to 1.0."
+    )
+
 class PointMorphology(StrictModel):
     type: Literal["point"] = "point"
 
@@ -160,10 +167,21 @@ class EnvironmentCondition(StrictModel):
         ..., 
         description="Observation timestamp in ISO 8601 UTC format."
     )
-    
+    auto_calc_background: bool = Field(
+        ...,
+        description=(
+            "Boolean toggle for whether to layer the real-time lunar/geometric sky-brightness "
+            "contribution (derived from observing_time_utc, location, and the target's position) "
+            "on top of the user-supplied `mu_dark` baseline. When False, `mu_dark` is used directly "
+            "as the total sky surface brightness. `mu_dark` is required either way — this flag never "
+            "derives mu_dark itself, since moonless-sky brightness (light pollution, airglow, etc.) "
+            "cannot be inferred from time and location alone."
+        )
+    )
+
     mu_dark: float = Field(
-        ..., 
-        description="Intrinsic surface brightness of the moonless night sky in mag/arcsec². (ATBD: mu_dark)"
+        ...,
+        description="Moonless-night baseline surface brightness of the sky in mag/arcsec², used as-is or as the base for auto_calc_background. (ATBD: mu_dark)"
     )
     extinction_coeff: float = Field(
         ..., 
@@ -189,7 +207,7 @@ class EnvironmentCondition(StrictModel):
 
 class BaseOptions(StrictModel):
     aperture_factor: PositiveFloat = Field(
-        ..., # 堅持零預設值，前端必須明確給定 (通常為 1.5)
+        ..., # Deliberately no default value; the frontend must always supply it explicitly (typically 1.5)
         description="Multiplier defining the photometric aperture radius. (ATBD: k_ap)"
     )
     single_exp_time: PositiveFloat = Field(
@@ -253,6 +271,13 @@ class CoreResult(StrictModel):
     saturation_time_limit: float = Field(
         ..., 
         description="Time limit before a single pixel reaches its Full Well Capacity. (ATBD: t_sat) [s]"
+    )
+    optimal_exposure_time: float = Field(
+        ...,
+        description=(
+            "Background-limited single exposure time in seconds — the point at which sky + dark "
+            "current shot noise overtakes readout noise. (ATBD: t_opt) [s]"
+        )
     )
 
 class SignalNoiseBudget(StrictModel):
@@ -394,8 +419,39 @@ class BatchCoreResult(StrictModel):
     timestamps_iso: list[str] = Field(..., description="Expanded discrete UTC timestamps.")
     total_snr: list[float] = Field(..., description="Total SNR array across the time series.")
     single_snr: list[float] = Field(..., description="Single exposure SNR array.")
+    required_exposures: list[float] | None = Field(
+        None,
+        description=(
+            "Exposures needed to reach the target SNR at each timestamp. Available only in "
+            "'solve_time' mode, and the only result array that responds to the calculation "
+            "goal — single_snr and saturation_time_limit describe the sky and the detector "
+            "and are the same whichever goal is set."
+        )
+    )
     saturation_time_limit: list[float] = Field(..., description="Saturation time limit array [s].")
+
+class BatchEphemeris(StrictModel):
+    target_elevation_deg: list[float] = Field(
+        ...,
+        description=(
+            "Target's altitude above the horizon at each timestamp, in degrees. Can go negative "
+            "when the target is below the horizon (unlike the airmass calculation internally used "
+            "for the SNR pipeline, this is not clamped to a minimum elevation)."
+        )
+    )
+    moon_elevation_deg: list[float] = Field(
+        ..., description="Moon's altitude above the horizon at each timestamp, in degrees."
+    )
+    sun_elevation_deg: list[float] = Field(
+        ...,
+        description=(
+            "Sun's altitude above the horizon at each timestamp, in degrees. Purely for the "
+            "visibility plot — nothing in the SNR pipeline reads it. Above 0 is daylight; "
+            "0 to -18 is twilight; below -18 is astronomical night."
+        )
+    )
 
 class BatchObservationResponse(StrictModel):
     core: BatchCoreResult = Field(..., description="Vectorized calculation results over time.")
+    ephemeris: BatchEphemeris = Field(..., description="Target/moon geometry over the time series, for visibility plots.")
     flags: SystemFlags = Field(..., description="System safety flags and boundary warnings.")

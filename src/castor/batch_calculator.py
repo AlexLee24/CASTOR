@@ -1,11 +1,11 @@
 import math
 import numpy as np
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from castor import schema
 from castor import physics
 from castor import moon
-# 為了不重複造輪子，我們直接借用 calculator 的輔助函數
+# Reusing calculator's helper function instead of duplicating it
 from castor.calculator import _unify_flux
 
 __all__ = ["run_batch_calculation"]
@@ -15,17 +15,22 @@ __all__ = ["run_batch_calculation"]
 # ==========================================
 
 def _expand_time_series(start: schema.AwareDatetime, end: schema.AwareDatetime, step_minutes: float) -> list[str]:
-    """將使用者的開始與結束時間，依據 step_minutes 展開成離散的 ISO 8601 字串陣列"""
+    """Expands the user's start and end time into a discrete array of ISO 8601 strings, stepped by step_minutes.
+
+    Normalizes each point to UTC and formats it without a UTC offset suffix (e.g. "2026-01-01T18:00:00",
+    not "...+00:00"): moon.py hands this straight to astropy's Time(..., format="isot"), and isot's strict
+    parser rejects an offset suffix outright, so datetime.isoformat()'s default output can't be used as-is.
+    """
     times = []
     current = start
     delta = timedelta(minutes=step_minutes)
-    
-    max_points = 1000 
-    
+
+    max_points = 1000
+
     while current <= end and len(times) < max_points:
-        times.append(current.isoformat())
+        times.append(current.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"))
         current += delta
-        
+
     return times
 
 # ==========================================
@@ -34,8 +39,9 @@ def _expand_time_series(start: schema.AwareDatetime, end: schema.AwareDatetime, 
 
 def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.BatchObservationResponse:
     """
-    CASTOR 批次計算管線。
-    接收時間序列合約，展開陣列並利用 NumPy Broadcasting 一次性完成整晚的物理計算。
+    CASTOR batch calculation pipeline.
+    Takes a time-series contract, expands it into arrays, and uses NumPy broadcasting to
+    compute the physics for the whole night in one pass.
     """
     inst = request.instrument
     tgt = request.target
@@ -43,16 +49,16 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     opt = request.options
 
     # ---------------------------------------------------------
-    # Phase 0: 展開時間序列矩陣
+    # Phase 0: expand the time-series matrix
     # ---------------------------------------------------------
     time_series_iso = _expand_time_series(env.start_time_utc, env.end_time_utc, env.time_step_minutes)
     if not time_series_iso:
         raise ValueError("Time series expansion resulted in an empty array. Check start and end times.")
 
     # ---------------------------------------------------------
-    # Phase 1: 動態幾何與陣列物理量
+    # Phase 1: dynamic geometry and array-valued physical quantities
     # ---------------------------------------------------------
-    # Astropy 與 moon.py 會直接吐出與 time_series_iso 等長的 NumPy 陣列
+    # Astropy and moon.py return NumPy arrays the same length as time_series_iso
     alpha_arr, rho_arr, z_moon_arr, z_target_arr = moon.get_moon_and_target_geometry(
         target_ra=tgt.ra, target_dec=tgt.dec,
         obs_time_utc=time_series_iso,
@@ -60,18 +66,27 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         elevation=env.location.elevation_m
     )
     
-    # 批次安全處理天頂角 (np.clip 取代 min)
+    # Daylight is a plotting concern only, so it is fetched separately rather than
+    # threaded through the photometry path — see moon.get_sun_elevation.
+    sun_elev_arr = moon.get_sun_elevation(
+        obs_time_utc=time_series_iso,
+        lon=env.location.longitude_deg, lat=env.location.latitude_deg,
+        elevation=env.location.elevation_m
+    )
+
+    # Batch-safe zenith angle clamping (np.clip in place of min)
     z_target_safe = np.clip(z_target_arr, 0.0, 89.0)
     airmass_arr = physics.calculate_airmass(z_target_safe)
     
     mu_sky_arr = moon.calculate_sky_brightness(
         target_ra=tgt.ra, target_dec=tgt.dec,
         obs_time_utc=time_series_iso, mu_dark=env.mu_dark,
+        extinction_coeff=env.extinction_coeff,
         lon=env.location.longitude_deg, lat=env.location.latitude_deg,
         elevation=env.location.elevation_m
     )
 
-    # 固定硬體參數前置計算 (純量 Scalars)
+    # Precompute fixed hardware parameters (scalars)
     eff_area = float(physics.calculate_effective_area(inst.telescope.primary_mirror_diameter, inst.telescope.secondary_mirror_diameter))
     photon_energy = float(physics.calculate_photon_energy(inst.optic_filter.central_wavelength))
     total_throughput = float(physics.calculate_total_throughput(inst.telescope.optical_throughput, inst.optic_filter.filter_transmission, inst.camera.quantum_efficiency))
@@ -81,14 +96,15 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     n_pix, f_enc = float(n_pix), float(f_enc)
 
     # ---------------------------------------------------------
-    # Phase 2: NumPy Broadcasting 計算光電子計數
+    # Phase 2: compute photoelectron counts via NumPy broadcasting
     # ---------------------------------------------------------
     f_lambda_target = _unify_flux(tgt.brightness, inst.optic_filter.central_wavelength)
     
-    # 注意：f_lambda_sky_arr 現在是一個陣列，因為 mu_sky_arr 是隨時間變動的
+    # Note: f_lambda_sky_arr is now an array, since mu_sky_arr varies over time
     f_lambda_sky_arr = physics.convert_ab_to_wavelength_flux(mu_sky_arr, inst.optic_filter.central_wavelength)
 
-    # 這裡發生廣播魔法：純量與陣列交織，吐出整晚的計數率變化曲線
+    # Broadcasting magic happens here: scalars and arrays interleave to produce the
+    # count-rate curve for the whole night
     sky_rate_arr = physics.calculate_sky_background_rate(
         f_lambda_sky_arr, env.extinction_coeff, airmass_arr, 
         inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, pixel_scale
@@ -111,12 +127,16 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     peak_rate_arr = physics.calculate_peak_pixel_rate(source_rate_arr, total_fwhm, pixel_scale)
 
     # ---------------------------------------------------------
-    # Phase 3: 向量化策略解算
+    # Phase 3: vectorized strategy solving
     # ---------------------------------------------------------
     single_snr_arr = physics.calculate_single_snr(
         source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
         n_pix, opt.single_exp_time
     )
+
+    # Stays None for solve_snr, where "how many exposures" is an input rather than
+    # an answer and there is nothing per-timestamp to report.
+    req_exp_int_arr = None
 
     match opt:
         case schema.BatchSolveForSNR(num_exposures=n_exp):
@@ -127,10 +147,10 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             )
 
         case schema.BatchSolveForTime(target_snr=t_snr):
-            # 批次反推曝光：每一個時間點所需的曝光次數都不同！
+            # Batch-solving exposures: each time point needs a different number of exposures!
             req_exp_float_arr = physics.solve_required_exposures(t_snr, single_snr_arr)
             
-            # 使用 numpy 向量化的 ceil
+            # Use numpy's vectorized ceil
             req_exp_int_arr = np.ceil(req_exp_float_arr)
             total_exp_time_arr = opt.single_exp_time * req_exp_int_arr
             
@@ -147,14 +167,15 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     )
     
     warnings = []
-    # 如果時間序列中有「任何一個點」的 Airmass 超過 2.0，就亮起警告
+    # Raise a warning if the airmass exceeds 2.0 at any point in the time series
     if np.any(airmass_arr > 2.0):
         warnings.append("Airmass > 2.0 detected in time series: Extinction model accuracy may degrade.")
 
     # ---------------------------------------------------------
-    # Phase 4: NumPy Array 轉回 Python List 以滿足 Pydantic 合約
+    # Phase 4: convert NumPy arrays back to Python lists to satisfy the Pydantic contract
     # ---------------------------------------------------------
-    # np.atleast_1d 確保即使只展開了一個時間點，它也能順利變成 list，而不會當機
+    # np.atleast_1d ensures that even a single expanded time point becomes a list cleanly,
+    # without crashing
     def to_list(arr) -> list[float]:
         return np.atleast_1d(arr).tolist()
 
@@ -163,10 +184,19 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             timestamps_iso=time_series_iso,
             total_snr=to_list(total_snr_arr),
             single_snr=to_list(single_snr_arr),
+            required_exposures=None if req_exp_int_arr is None else to_list(req_exp_int_arr),
             saturation_time_limit=to_list(t_sat_arr)
         ),
+        # z_target_arr / z_moon_arr were already computed in Phase 1 for the airmass/sky-brightness
+        # pipeline; elevation is just their complement. Note this uses the raw (unclamped) z_target_arr,
+        # not the z_target_safe used for airmass, so elevation can legitimately read negative.
+        ephemeris=schema.BatchEphemeris(
+            target_elevation_deg=to_list(90.0 - z_target_arr),
+            moon_elevation_deg=to_list(90.0 - z_moon_arr),
+            sun_elevation_deg=to_list(sun_elev_arr)
+        ),
         flags=schema.SystemFlags(
-            # 只要整晚有任何一個時刻會造成飽和，is_saturated 就是 True
+            # is_saturated is True if saturation occurs at any point during the night
             is_saturated=bool(np.any(opt.single_exp_time > t_sat_arr)),
             warnings=warnings
         )

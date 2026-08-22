@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import numpy.testing as npt
 
-# 假設你的模組路徑是 castor.physics
+# Assumes your module path is castor.physics
 from castor.physics import (
     calculate_airmass,
     calculate_effective_area,
@@ -12,15 +12,16 @@ from castor.physics import (
     calculate_sky_background_rate,
     calculate_single_snr,
     calculate_total_snr,
-    solve_required_exposures
+    solve_required_exposures,
+    calculate_optimal_exposure_time
 )
 
 # ==========================================
-# Global Core Properties (向量化與極限測試)
+# Global Core Properties (vectorization and boundary tests)
 # ==========================================
 
 def test_vectorization_support():
-    """確保核心函式能完美支援 NumPy 陣列，不拋出 TypeError。"""
+    """Ensures the core function fully supports NumPy arrays without raising TypeError."""
     zenith_angles = np.array([0.0, 60.0])
     expected_airmass = np.array([1.0, 2.0])
     
@@ -34,30 +35,30 @@ def test_vectorization_support():
 # ==========================================
 
 def test_calculate_airmass():
-    """基準與極限測試：0 度為 1.0，60 度為 2.0"""
+    """Baseline and boundary test: 0° is 1.0, 60° is 2.0"""
     assert calculate_airmass(0.0) == pytest.approx(1.0)
     assert calculate_airmass(60.0) == pytest.approx(2.0, rel=1e-5)
 
 def test_calculate_effective_area():
-    """測試有/無副鏡遮蔽時的面積計算"""
-    # 只有主鏡 (2m)，沒有副鏡遮蔽
+    """Tests the area calculation with/without secondary mirror obstruction"""
+    # Primary mirror only (2m), no secondary mirror obstruction
     area_no_obs = calculate_effective_area(2.0, 0.0)
     expected_no_obs = np.pi * (1.0 ** 2)  # pi * r^2, r=1
     assert area_no_obs == pytest.approx(expected_no_obs)
     
-    # 加上 1m 的副鏡遮蔽
+    # With a 1m secondary mirror obstruction
     area_obs = calculate_effective_area(2.0, 1.0)
     expected_obs = (np.pi / 4.0) * (2.0**2 - 1.0**2)
     assert area_obs == pytest.approx(expected_obs)
 
 def test_convert_ab_to_wavelength_flux():
-    """測試 AB 星等為 0 時的通量轉換是否符合 3631 Jy 的基準"""
+    """Tests whether the flux conversion at AB magnitude 0 matches the 3631 Jy baseline"""
     mag_ab = 0.0
     wavelength_nm = 500.0  # 500 nm = 5000 Å
     
     result_f_lambda = convert_ab_to_wavelength_flux(mag_ab, wavelength_nm)
     
-    # 理論手算值：
+    # Theoretical hand-calculated value:
     # F_nu = 3631 Jy = 3631 * 1e-23 erg/s/cm²/Hz = 3.631e-20
     # lambda = 5000 Å
     # c = 2.99792458e18 Å/s
@@ -72,7 +73,7 @@ def test_convert_ab_to_wavelength_flux():
 
 @pytest.fixture
 def dummy_stage3_params():
-    """提供一組標準的 Stage 3 假參數供測試使用"""
+    """Provides a standard set of fake Stage 3 parameters for testing"""
     return {
         "f_lambda": 1e-15,
         "extinction_coeff": 0.2,
@@ -84,47 +85,48 @@ def dummy_stage3_params():
     }
 
 def test_extinction_null_effect(dummy_stage3_params):
-    """大氣消光防呆：消光係數為 0 時，抵達通量不衰減"""
+    """Atmospheric extinction guard: when the extinction coefficient is 0, the arriving flux is not attenuated"""
     params = dummy_stage3_params.copy()
 
     base_flux = params.pop("f_lambda")
     
-    # 有大氣消光
+    # With atmospheric extinction
     rate_with_ext = calculate_point_source_rate(
         **params, f_lambda_total=base_flux, enclosed_flux_fraction=0.8
     )
     
-    # 無大氣消光 (k_ext = 0)
+    # No atmospheric extinction (k_ext = 0)
     params["extinction_coeff"] = 0.0
     rate_no_ext = calculate_point_source_rate(
         **params, f_lambda_total=base_flux, enclosed_flux_fraction=0.8
     )
     
-    # 沒有消光時算出的計數率必須嚴格大於有消光時
+    # The count rate computed without extinction must be strictly greater than with extinction
     assert rate_no_ext > rate_with_ext
 
 def test_geometric_divergence(dummy_stage3_params):
-    """幾何分流驗證：確保不同來源僅因為幾何常數（面積、比例）而有倍數差異"""
+    """Geometric branching verification: ensures different sources differ only by a
+    geometric-constant multiple (area, ratio)"""
     params = dummy_stage3_params.copy()
     
-    # 把通用的 f_lambda 拿出來，避免 kwargs 報錯
+    # Pull out the shared f_lambda to avoid a kwargs error
     base_flux = params.pop("f_lambda") 
     
-    # 1. 點源 (f_enc = 0.5)
+    # 1. Point source (f_enc = 0.5)
     rate_point = calculate_point_source_rate(
         **params, 
         f_lambda_total=base_flux, 
         enclosed_flux_fraction=0.5
     )
     
-    # 2. 天光背景 (單一像素，S_pixel = 2.0，面積為 4)
+    # 2. Sky background (single pixel, S_pixel = 2.0, area = 4)
     rate_sky = calculate_sky_background_rate(
         **params, 
         f_lambda_sky=base_flux, 
         pixel_scale=2.0
     )
     
-    # 3. 延伸源 (N_pix = 10, S_pixel = 2.0，總面積為 40)
+    # 3. Extended source (N_pix = 10, S_pixel = 2.0, total area = 40)
     rate_ext = calculate_extended_source_rate(
         **params, 
         f_lambda_surface=base_flux, 
@@ -132,7 +134,7 @@ def test_geometric_divergence(dummy_stage3_params):
         pixel_scale=2.0
     )
     
-    # 斷言它們之間的純幾何倍率關係
+    # Assert the purely geometric ratio between them
     assert rate_sky == pytest.approx(rate_point * 8.0)
     assert rate_ext == pytest.approx(rate_sky * 10.0)
 
@@ -142,7 +144,7 @@ def test_geometric_divergence(dummy_stage3_params):
 
 @pytest.fixture
 def dummy_stage4_params():
-    """提供一組標準的 Stage 4 假參數供測試使用"""
+    """Provides a standard set of fake Stage 4 parameters for testing"""
     return {
         "source_count_rate": 100.0,
         "sky_count_rate": 10.0,
@@ -152,20 +154,21 @@ def dummy_stage4_params():
     }
 
 def test_zero_exposure(dummy_stage4_params):
-    """曝光時間歸零：沒有曝光時間就沒有 SNR"""
+    """Zeroed exposure time: no exposure time means no SNR"""
     snr = calculate_single_snr(**dummy_stage4_params, single_exp_time=0.0)
     assert snr == 0.0
 
 def test_readout_noise_scaling(dummy_stage4_params):
-    """多重曝光噪聲累積：總時間相同，分多次拍的 SNR 必須較低（因為讀取雜訊累積）"""
+    """Multi-exposure noise accumulation: for the same total time, splitting into multiple
+    exposures must yield a lower SNR (because readout noise accumulates)"""
     params = dummy_stage4_params.copy()
     
-    # 情況 A：單次曝光 100 秒 (1 張)
+    # Case A: a single 100-second exposure (1 frame)
     snr_single_shot = calculate_total_snr(
         **params, single_exp_time=100.0, total_exp_time=100.0, num_exposures=1
     )
     
-    # 情況 B：單次曝光 10 秒，拍 10 張 (總時間一樣是 100 秒)
+    # Case B: 10-second exposures, 10 frames (same total time of 100 seconds)
     snr_multi_shot = calculate_total_snr(
         **params, single_exp_time=10.0, total_exp_time=100.0, num_exposures=10
     )
@@ -173,11 +176,32 @@ def test_readout_noise_scaling(dummy_stage4_params):
     assert snr_single_shot > snr_multi_shot
 
 def test_snr_reversibility():
-    """完美可逆性：反推所需的曝光張數必須精準"""
+    """Perfect reversibility: the backward-solved number of exposures must be exact"""
     target_snr = 20.0
     single_snr = 10.0
-    
+
     required_exposures = solve_required_exposures(target_snr, single_snr)
-    
+
     # (20 / 10)^2 = 4.0
     assert required_exposures == pytest.approx(4.0)
+
+def test_optimal_exposure_time_crossover_point():
+    """Crossover point definition: when background_dominance_factor=1.0, plugging the
+    computed t_opt into the background shot-noise formula sqrt(background_rate * t_opt)
+    must equal RON exactly."""
+    sky_rate, dark_rate, readout_noise = 2.0, 0.5, 5.0
+
+    t_opt = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise)
+
+    background_shot_noise = np.sqrt((sky_rate + dark_rate) * t_opt)
+    assert background_shot_noise == pytest.approx(readout_noise)
+
+def test_optimal_exposure_time_scales_with_dominance_factor_squared():
+    """k is defined as a ratio of standard deviations, so converted to time (variance) it
+    must scale quadratically: doubling k should quadruple t_opt."""
+    sky_rate, dark_rate, readout_noise = 2.0, 0.5, 5.0
+
+    t_k1 = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise, background_dominance_factor=1.0)
+    t_k2 = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise, background_dominance_factor=2.0)
+
+    assert t_k2 == pytest.approx(t_k1 * 4.0)
