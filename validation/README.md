@@ -21,6 +21,7 @@ pytest validation   # this suite, on purpose
 | `lco_etc.py` | Las Cumbres Observatory's published calculator, transcribed |
 | `eso_etc.py` | ESO's FORS2 ETC — captured reference results, plus a live client |
 | `lulin.py` | LOT/SOPHIA measured against real frames and Lulin's own documents |
+| `provenance.py` | Where every number in presets.json came from, or that it came from nowhere |
 | `skycalc.py` | Loading and rebinning ESO SkyCalc radiance exports |
 | `test_lco.py` | Count-rate chain and extinction conventions against LCO |
 | `test_eso.py` | The top-hat bandpass against a full spectral integration |
@@ -111,6 +112,14 @@ Each of these is asserted by a test, so it either stays true or announces itself
   only band-dependence CASTOR gives it is the extinction coefficient. Moonlight
   comes out far too blue and nearly vanishes in the near-infrared, where a full
   moon is under-counted by about a factor of ten.
+
+- **presets.json was invented, and now says which parts still are.** Nothing in
+  it had a source when it was written, and every value a check reached turned
+  out wrong — so the prior for anything unaccounted for is that it was made up
+  too. `provenance.py` records an origin for all 60 values and a test fails if
+  the file holds one the table does not, or a different number than the one
+  recorded. Lulin is now 33 sourced against 12 guesses; the VLT profile is 3
+  against 12 and is not the default.
 
 ## Open questions
 

@@ -111,6 +111,29 @@ a 1 m telescope struggles most, so possibly not.
 
 ---
 
+## 6. Anything still marked GUESS
+
+`validation/provenance.py` records where each of the 60 numbers in
+`presets.json` came from. Twelve of Lulin's have no source at all, and the file
+was written before anything could check it — so these are not "probably fine",
+they are unexamined, and every unexamined value that has since been checked was
+wrong.
+
+The ones that would matter most if they are wrong:
+
+| value | current | why it matters |
+|---|---|---|
+| `SLT.optical_throughput` | 0.804 | LOT measures 0.27–0.48; there is no reason SLT is twice as efficient |
+| `SLT.secondary_mirror_diameter` | 0.12 | not published, and unlike LOT's it is not absorbed by a fitted throughput |
+| `Sophia.dark_current_rate` | 0.01 | no source; ~100x the datasheet's −90 °C figure |
+| `Sloan_u` (all three) | placeholder | the shape the other four had before they were measured |
+
+SLT has no photometry at all — none of the 123 frames is from it. A night of
+SLT frames on a Pan-STARRS field, in any filter, would move it from guesswork to
+measurement the same way LOT's did.
+
+---
+
 ## Not for the observatory: two we own
 
 These are ours to decide, recorded here so the list is complete.

@@ -87,8 +87,8 @@
           "camera": {
             "pixel_pitch": 13.0,
             "quantum_efficiency": 0.85,
-            "dark_current_rate": 0.01,
-            "readout_noise": 2.9,
+            "dark_current_rate": 0.017,
+            "readout_noise": 3.3,
             "full_well_capacity": 130000
           }
         }
