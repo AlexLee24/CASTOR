@@ -134,6 +134,10 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         n_pix, opt.single_exp_time
     )
 
+    # Stays None for solve_snr, where "how many exposures" is an input rather than
+    # an answer and there is nothing per-timestamp to report.
+    req_exp_int_arr = None
+
     match opt:
         case schema.BatchSolveForSNR(num_exposures=n_exp):
             total_exp_time = opt.single_exp_time * n_exp
@@ -180,6 +184,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             timestamps_iso=time_series_iso,
             total_snr=to_list(total_snr_arr),
             single_snr=to_list(single_snr_arr),
+            required_exposures=None if req_exp_int_arr is None else to_list(req_exp_int_arr),
             saturation_time_limit=to_list(t_sat_arr)
         ),
         # z_target_arr / z_moon_arr were already computed in Phase 1 for the airmass/sky-brightness

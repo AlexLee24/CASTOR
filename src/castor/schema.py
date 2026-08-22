@@ -419,6 +419,15 @@ class BatchCoreResult(StrictModel):
     timestamps_iso: list[str] = Field(..., description="Expanded discrete UTC timestamps.")
     total_snr: list[float] = Field(..., description="Total SNR array across the time series.")
     single_snr: list[float] = Field(..., description="Single exposure SNR array.")
+    required_exposures: list[float] | None = Field(
+        None,
+        description=(
+            "Exposures needed to reach the target SNR at each timestamp. Available only in "
+            "'solve_time' mode, and the only result array that responds to the calculation "
+            "goal — single_snr and saturation_time_limit describe the sky and the detector "
+            "and are the same whichever goal is set."
+        )
+    )
     saturation_time_limit: list[float] = Field(..., description="Saturation time limit array [s].")
 
 class BatchEphemeris(StrictModel):
