@@ -194,6 +194,15 @@
 
     /* Reads the instant back off the form rather than the response, because the
        response never carries it and the field itself is hidden while sweeping. */
+    /* Already local wall-clock, so unlike the series it needs no conversion — only the
+       separator and seconds Plotly's date parser expects. */
+    function observingInstantPlotTime() {
+        var raw = form.elements['environment.observing_time_utc'].value;
+        if (!raw) { return null; }
+        var t = raw.replace('T', ' ');
+        return t.length === 16 ? t + ':00' : t;
+    }
+
     function observingInstantText() {
         var raw = form.elements['environment.observing_time_utc'].value;
         return raw ? raw.replace('T', ' ') : null;
@@ -284,6 +293,17 @@
         return runs;
     }
 
+    /* "...T20:00:00" is UTC despite carrying no Z; adding one is what makes Date read
+       it as the instant it is rather than as local time. Emitted space-separated,
+       which Plotly accepts and which reads as a wall clock rather than a stamp. */
+    function toLocalPlotTime(iso) {
+        var d = new Date(iso + 'Z');
+        if (isNaN(d.getTime())) { return iso; }
+        var p = function (n) { return String(n).padStart(2, '0'); };
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+               ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
     function themeColor(name, fallback) {
         var value = getComputedStyle(root).getPropertyValue(name).trim();
         return value || fallback;
@@ -321,12 +341,37 @@
         var textMain = themeColor('--etc-text-main', '#e5e7eb');
         var gridColor = 'rgba(255, 255, 255, 0.08)';
 
-        var times = data.core.timestamps_iso;
+        /* Every time field on the form is labelled "(local)" and is typed in local
+           wall-clock, but the response stamps its series in UTC with no offset suffix
+           (see _expand_time_series), so Plotly parsed them as naive and drew a UTC
+           axis under a form that had promised local. Same instants, clock shifted —
+           you typed 04:00 and the chart said 20:00. Convert once, here, and label the
+           axis for the clock actually drawn. */
+        var times = data.core.timestamps_iso.map(toLocalPlotTime);
         var targetEl = data.ephemeris.target_elevation_deg;
         var moonEl = data.ephemeris.moon_elevation_deg;
         var sunEl = data.ephemeris.sun_elevation_deg || [];
         var singleSnr = data.core.single_snr;
         var tSat = data.core.saturation_time_limit;
+
+        /* Changing the goal used to leave the chart untouched, and correctly so: both
+           of the plotted series describe the sky and the detector, not the question.
+           The one array that does answer the question — how many frames this moment
+           costs you — was computed per timestamp and then dropped on the floor before
+           the response was assembled. With it returned, panel 2 can show the goal's
+           own answer instead of a quantity that ignores it. */
+        var requiredExp = data.core.required_exposures || null;
+        var solvingForTime = Array.isArray(requiredExp) && requiredExp.length === times.length;
+        var panel2Series = solvingForTime ? requiredExp : singleSnr;
+        // Kept short deliberately: a y-axis title is rotated, so its length is vertical,
+        // and this panel is only ~26% of the height. "Exposures to Reach Target SNR"
+        // overran its own domain and collided with the titles above and below it.
+        var panel2Title = solvingForTime ? 'Exposures Needed' : 'Single-Exposure SNR';
+        // Fewest frames is the good end when solving for time; highest SNR is the good
+        // end otherwise. The callout should point at whichever that is.
+        var panel2Better = solvingForTime
+            ? function (a, b) { return a < b; }
+            : function (a, b) { return a > b; };
 
         /* "Observable" is the whole point of the top panel, so say it once here and
            let the other two panels inherit it: the target has to be up, and the sky
@@ -351,7 +396,7 @@
             if (!anyObservable) { return values; }
             return values.map(function (v, i) { return observable[i] ? v : null; });
         }
-        var snrPlot = maskUnobservable(singleSnr);
+        var snrPlot = maskUnobservable(panel2Series);
         var tSatPlot = maskUnobservable(tSat);
 
         var traces = [
@@ -361,9 +406,11 @@
             { x: times, y: moonEl, name: 'Moon', type: 'scatter', mode: 'lines',
               line: { color: moon, width: 2 }, xaxis: 'x', yaxis: 'y',
               hovertemplate: '%{y:.1f}°<extra>Moon</extra>' },
-            { x: times, y: snrPlot, name: 'Single-Exposure SNR', type: 'scatter', mode: 'lines',
+            { x: times, y: snrPlot, name: panel2Title, type: 'scatter', mode: 'lines',
               line: { color: accent, width: 2 }, showlegend: false, xaxis: 'x2', yaxis: 'y2',
-              hovertemplate: '%{y:.1f}<extra>SNR / frame</extra>' },
+              hovertemplate: solvingForTime
+                  ? '%{y:,.0f}<extra>frames needed</extra>'
+                  : '%{y:.1f}<extra>SNR / frame</extra>' },
             { x: times, y: tSatPlot, name: 'Saturation Limit', type: 'scatter', mode: 'lines',
               line: { color: accent, width: 2 }, showlegend: false, xaxis: 'x3', yaxis: 'y3',
               hovertemplate: '%{y:,.0f} s<extra>saturates after</extra>' }
@@ -443,6 +490,28 @@
             line: { color: muted, width: 1, dash: 'solid' }, opacity: 0.4, layer: 'below'
         });
 
+        /* The single-point run continues underneath the sweep, and every card in the
+           results panel reports that one instant. Drawing it here is what stops those
+           numbers reading as a summary of the window: you can see which slice of the
+           chart they belong to, and moving the field moves the line. */
+        var markerTime = observingInstantPlotTime();
+        if (markerTime) {
+            ['x', 'x2', 'x3'].forEach(function (ax, panel) {
+                shapes.push({
+                    type: 'line', xref: ax,
+                    yref: (panel === 0 ? 'y' : 'y' + (panel + 1)) + ' domain',
+                    x0: markerTime, x1: markerTime, y0: 0, y1: 1,
+                    line: { color: textMain, width: 1, dash: 'dot' }, opacity: 0.55
+                });
+            });
+            annotations.push({
+                x: markerTime, y: 0, xref: 'x', yref: 'y domain',
+                text: 'figures below', showarrow: false,
+                xanchor: 'center', yanchor: 'bottom', yshift: 2,
+                font: { color: textMain, size: 9, family: 'inherit' }
+            });
+        }
+
         /* Every callout below reads the masked series, not the raw one. Labelling the
            best SNR or the tightest saturation limit at an hour the target is under
            the horizon is worse than not labelling it at all. */
@@ -456,11 +525,12 @@
         }
 
         // Panel 2: direct-label the peak only — never every point.
-        var peak = extremeIndex(snrPlot, function (a, b) { return a > b; });
+        var peak = extremeIndex(snrPlot, panel2Better);
         if (peak !== null) {
             annotations.push({
                 x: times[peak], y: snrPlot[peak], xref: 'x2', yref: 'y2',
-                text: fmt(snrPlot[peak], 0), showarrow: false, yshift: 14,
+                text: solvingForTime ? fmt(snrPlot[peak], 0) + ' frames' : fmt(snrPlot[peak], 0),
+                showarrow: false, yshift: 14,
                 xanchor: edgeAnchor(peak),
                 font: { color: textMain, size: 11, family: 'inherit' }
             });
@@ -555,9 +625,9 @@
             annotations: annotations,
             xaxis:  Object.assign({}, axisBase, { domain: [0, 1], anchor: 'y',  matches: 'x3', showticklabels: false }),
             xaxis2: Object.assign({}, axisBase, { domain: [0, 1], anchor: 'y2', matches: 'x3', showticklabels: false }),
-            xaxis3: Object.assign({}, axisBase, { domain: [0, 1], anchor: 'y3', title: { text: 'Time (UTC)', font: titleFont } }),
+            xaxis3: Object.assign({}, axisBase, { domain: [0, 1], anchor: 'y3', title: { text: 'Time (local)', font: titleFont } }),
             yaxis:  Object.assign({}, axisBase, { domain: [0.72, 1],    anchor: 'x',  title: { text: 'Elevation (°)', font: titleFont } }),
-            yaxis2: Object.assign({}, axisBase, { domain: [0.38, 0.64], anchor: 'x2', title: { text: 'Single-Exposure SNR', font: titleFont } }),
+            yaxis2: Object.assign({}, axisBase, { domain: [0.38, 0.64], anchor: 'x2', title: { text: panel2Title, font: titleFont } }),
             yaxis3: Object.assign({}, axisBase, { domain: [0, 0.26],    anchor: 'x3', title: { text: 'Saturation Limit (s)', font: titleFont },
                                                   type: 'log', range: satRange })
         };
@@ -729,6 +799,12 @@
             brightness === 'ab_mag' ? 'Apparent Magnitude (AB)' : 'Apparent Magnitude';
         el('unit-flux-value').innerHTML =
             brightness === 'jansky_flux' ? 'Jy' : 'erg/s/cm&sup2;/&Aring;';
+
+        // Same input, different job: the observation while sweeping is the window, and
+        // this instant is only the slice the result cards report.
+        el('label-observing-time').textContent = el('toggle-batch').checked
+            ? 'Instant for the figures below (local)'
+            : 'Observation Time (local)';
 
         syncGroups('sed', form.elements['target.sed.type'].value);
         syncGroups('options', form.elements['options.type'].value);

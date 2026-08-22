@@ -465,14 +465,18 @@
                             <span class="etc-switch" aria-hidden="true"></span>
                             <span class="etc-switch-label">Sweep time range</span>
                         </label>
-                        <!-- Deliberately NOT .dynamic-group: when the sweep is on this field is
-                             hidden but still submitted, because the single-point calculation
-                             keeps running alongside the batch one and still needs an instant.
-                             Matches AppState, which likewise keeps observing_time_utc in state
-                             while the Flet GUI swaps the visible field out. -->
-                        <div class="time-group" data-when="single">
+                        <!-- Deliberately NOT .dynamic-group: this field is always submitted,
+                             because the single-point calculation keeps running alongside the
+                             batch one and still needs an instant.
+
+                             It used to be hidden while sweeping, which left every figure in the
+                             results panel describing a moment the reader could neither see nor
+                             change. Shown in both modes now: sweeping adds the chart, it does
+                             not stop the single-point run, and the instant driving those numbers
+                             is the reader's to choose. The chart marks it. -->
+                        <div class="time-group" data-when="single batch">
                             <label class="etc-field">
-                                <span class="etc-field-label">Observation Time (local)</span>
+                                <span class="etc-field-label" id="label-observing-time">Observation Time (local)</span>
                                 <span class="etc-input-wrap">
                                     <input type="datetime-local" name="environment.observing_time_utc" required>
                                 </span>

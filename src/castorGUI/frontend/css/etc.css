@@ -448,6 +448,10 @@
    costs a resize and a redraw. Alerts stay above everything either way. */
 .castor-etc .etc-results-scroll.is-sweep > .etc-observing-window { order: -1; }
 .castor-etc .etc-results-scroll.is-sweep > .etc-alert { order: -2; }
+/* The hero keeps the top in both modes. Promoting the chart over it put the headline
+   figure below the fold, and the answer to "how good is this" is still a number — the
+   chart says when, not how good. Chart second, ahead of the card groups. */
+.castor-etc .etc-results-scroll.is-sweep > .etc-hero { order: -3; }
 
 .castor-etc .etc-observing-window { display: flex; flex-direction: column; gap: var(--etc-gap-group); }
 .castor-etc .etc-observing-window[hidden] { display: none; }
