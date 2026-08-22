@@ -453,6 +453,13 @@
    chart says when, not how good. Chart second, ahead of the card groups. */
 .castor-etc .etc-results-scroll.is-sweep > .etc-hero { order: -3; }
 
+/* Sweeping retires the figures that move with the target. Showing a chart of SNR
+   against time and then a card reading one instant's SNR underneath it asks the
+   reader to work out which is the answer; the chart is, and the card was only ever
+   the shape the panel had before there was a chart. What is left are the constants,
+   which no chart improves. */
+.castor-etc .etc-results-scroll.is-sweep > [data-time-varying] { display: none; }
+
 .castor-etc .etc-observing-window { display: flex; flex-direction: column; gap: var(--etc-gap-group); }
 .castor-etc .etc-observing-window[hidden] { display: none; }
 .castor-etc .etc-chart { width: 100%; min-height: 420px; }

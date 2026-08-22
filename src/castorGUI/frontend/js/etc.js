@@ -192,20 +192,15 @@
 
     var resultsScroll = root.querySelector('.etc-results-scroll');
 
-    /* Reads the instant back off the form rather than the response, because the
-       response never carries it and the field itself is hidden while sweeping. */
-    /* Already local wall-clock, so unlike the series it needs no conversion — only the
-       separator and seconds Plotly's date parser expects. */
-    function observingInstantPlotTime() {
-        var raw = form.elements['environment.observing_time_utc'].value;
-        if (!raw) { return null; }
-        var t = raw.replace('T', ' ');
-        return t.length === 16 ? t + ':00' : t;
-    }
+    // What the single-point run last computed for the hero. Held rather than painted so
+    // the sweep can own the headline, and hand it back if the sweep has no answer.
+    var lastSingleHero = null;
 
-    function observingInstantText() {
-        var raw = form.elements['environment.observing_time_utc'].value;
-        return raw ? raw.replace('T', ' ') : null;
+    function restoreHero() {
+        if (!lastSingleHero) { return; }
+        el('hero-label').textContent = lastSingleHero.label;
+        el('hero-value').textContent = lastSingleHero.value;
+        el('hero-desc').textContent = lastSingleHero.desc;
     }
 
     function renderSingle(data, error) {
@@ -227,28 +222,19 @@
 
         var core = data.core, budget = data.budget, diag = data.diagnostics, flags = data.flags;
 
-        if (core.required_exposures === null || core.required_exposures === undefined) {
-            el('hero-label').textContent = 'Signal-to-Noise Ratio (SNR)';
-            el('hero-value').textContent = fmt(core.total_snr, 2);
-            el('hero-desc').textContent = 'Calculated based on the given exposure time.';
-        } else {
-            el('hero-label').textContent = 'Required Exposures';
-            el('hero-value').textContent = core.required_exposures + ' frames';
-            el('hero-desc').textContent = 'Target SNR achieved: ' + fmt(core.total_snr, 2);
-        }
+        lastSingleHero = (core.required_exposures === null || core.required_exposures === undefined)
+            ? { label: 'Signal-to-Noise Ratio (SNR)',
+                value: fmt(core.total_snr, 2),
+                desc:  'Calculated based on the given exposure time.' }
+            : { label: 'Required Exposures',
+                value: core.required_exposures + ' frames',
+                desc:  'Target SNR achieved: ' + fmt(core.total_snr, 2) };
 
-        /* While sweeping, this number is still a single instant — the sweep is layered
-           on top of the single-point run, it does not replace it. The form hides the
-           observation-time field in that mode, so without saying so here the figure
-           belongs to a moment the reader cannot see; and now that the chart sits above
-           it, the obvious misreading is that it summarises the whole window. Name the
-           moment. */
-        if (el('toggle-batch').checked) {
-            var instant = observingInstantText();
-            el('hero-desc').textContent = instant
-                ? 'At ' + instant + ' — one instant inside the swept window, not a summary of it.'
-                : 'A single instant inside the swept window, not a summary of it.';
-        }
+        /* Computed either way, written only when it is the answer on show. While
+           sweeping the headline belongs to renderBatch, and painting an instant's
+           figure here would race the sweep for the same three elements — the two run
+           on separate debounces, so whichever landed last would win the hero. */
+        if (!el('toggle-batch').checked) { restoreHero(); }
 
         singleWarnings = (flags.warnings || []).slice();
         if (flags.is_saturated) {
@@ -302,6 +288,27 @@
         var p = function (n) { return String(n).padStart(2, '0'); };
         return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
                ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    /* Shared by the chart and the sweep headline so the two cannot disagree about
+       which hours count. -18 deg is astronomical twilight: the Sun far enough down
+       that its scattered light no longer sets the background. */
+    var ASTRONOMICAL_TWILIGHT_DEG = -18;
+
+    function observableMask(data) {
+        var target = data.ephemeris.target_elevation_deg;
+        var sun = data.ephemeris.sun_elevation_deg || [];
+        var hasSun = sun.length === target.length;
+        return target.map(function (v, i) {
+            return v > 0 && (!hasSun || sun[i] < ASTRONOMICAL_TWILIGHT_DEG);
+        });
+    }
+
+    function toLocalClock(iso) {
+        var d = new Date(iso + 'Z');
+        if (isNaN(d.getTime())) { return iso; }
+        var p = function (n) { return String(n).padStart(2, '0'); };
+        return p(d.getHours()) + ':' + p(d.getMinutes());
     }
 
     function themeColor(name, fallback) {
@@ -384,11 +391,8 @@
            runs to millions of seconds and flattens every real value against zero.
            They are not wrong, they are answers to a question nobody asked. Mask them
            and each panel autoscales to the hours you could actually use. */
-        var ASTRONOMICAL_TWILIGHT_DEG = -18;
         var hasSun = sunEl.length === times.length;
-        var observable = times.map(function (_, i) {
-            return targetEl[i] > 0 && (!hasSun || sunEl[i] < ASTRONOMICAL_TWILIGHT_DEG);
-        });
+        var observable = observableMask(data);
         var anyObservable = observable.some(Boolean);
         // With nothing observable there is nothing to autoscale to, so show the raw
         // curves rather than three empty panels.
@@ -490,27 +494,6 @@
             line: { color: muted, width: 1, dash: 'solid' }, opacity: 0.4, layer: 'below'
         });
 
-        /* The single-point run continues underneath the sweep, and every card in the
-           results panel reports that one instant. Drawing it here is what stops those
-           numbers reading as a summary of the window: you can see which slice of the
-           chart they belong to, and moving the field moves the line. */
-        var markerTime = observingInstantPlotTime();
-        if (markerTime) {
-            ['x', 'x2', 'x3'].forEach(function (ax, panel) {
-                shapes.push({
-                    type: 'line', xref: ax,
-                    yref: (panel === 0 ? 'y' : 'y' + (panel + 1)) + ' domain',
-                    x0: markerTime, x1: markerTime, y0: 0, y1: 1,
-                    line: { color: textMain, width: 1, dash: 'dot' }, opacity: 0.55
-                });
-            });
-            annotations.push({
-                x: markerTime, y: 0, xref: 'x', yref: 'y domain',
-                text: 'figures below', showarrow: false,
-                xanchor: 'center', yanchor: 'bottom', yshift: 2,
-                font: { color: textMain, size: 9, family: 'inherit' }
-            });
-        }
 
         /* Every callout below reads the masked series, not the raw one. Labelling the
            best SNR or the tightest saturation limit at an hour the target is under
@@ -639,11 +622,46 @@
         setChartStatus('');
     }
 
+    /* Sweeping, the honest headline is not one instant but the best the window has and
+       when it falls — the question a time range is opened to answer. Read off the same
+       observable hours the chart draws, so the number always has a point on the curve
+       behind it. */
+    function renderSweepHero(data) {
+        var times = data.core.timestamps_iso;
+        var mask = observableMask(data);
+        var anyObservable = mask.some(Boolean);
+        var required = data.core.required_exposures;
+        var solvingForTime = Array.isArray(required) && required.length === times.length;
+        var series = solvingForTime ? required : data.core.total_snr;
+        var better = solvingForTime
+            ? function (a, b) { return a < b; }
+            : function (a, b) { return a > b; };
+
+        var best = null;
+        for (var i = 0; i < series.length; i++) {
+            if (anyObservable && !mask[i]) { continue; }
+            if (!isFinite(series[i])) { continue; }
+            if (best === null || better(series[i], series[best])) { best = i; }
+        }
+        if (best === null) { restoreHero(); return; }
+
+        el('hero-label').textContent = solvingForTime
+            ? 'Fewest Exposures in Window' : 'Best SNR in Window';
+        el('hero-value').textContent = solvingForTime
+            ? fmt(series[best], 0) + ' frames' : fmt(series[best], 2);
+        el('hero-desc').textContent = anyObservable
+            ? 'At ' + toLocalClock(times[best]) + ' local, the best of the observable hours.'
+            : 'Nothing in this window is observable — this is the best of it regardless.';
+    }
+
     function renderBatch(data, error) {
         if (error) {
             batchWarnings = [];
             refreshWarnings();
             setChartStatus(error);
+            // The sweep is what the headline was showing, so put back the figure that
+            // is still true rather than leaving a stale window summary standing.
+            restoreHero();
             return;
         }
         batchWarnings = (data.flags.warnings || []).slice();
@@ -651,6 +669,8 @@
             batchWarnings.unshift('⚠️ At least one point in the time series exceeds the saturation limit — see the shaded window(s) below.');
         }
         refreshWarnings();
+
+        renderSweepHero(data);
 
         var expInput = form.elements['options.single_exp_time'];
         renderChart(data, parseFloat(expInput && expInput.value) || 0);
@@ -701,6 +721,8 @@
         if (!el('toggle-batch').checked) {
             el('observing-window').hidden = true;
             resultsScroll.classList.remove('is-sweep');
+            // The hero is showing a window that is no longer on screen.
+            restoreHero();
             batchWarnings = [];
             refreshWarnings();
             return;
@@ -799,12 +821,6 @@
             brightness === 'ab_mag' ? 'Apparent Magnitude (AB)' : 'Apparent Magnitude';
         el('unit-flux-value').innerHTML =
             brightness === 'jansky_flux' ? 'Jy' : 'erg/s/cm&sup2;/&Aring;';
-
-        // Same input, different job: the observation while sweeping is the window, and
-        // this instant is only the slice the result cards report.
-        el('label-observing-time').textContent = el('toggle-batch').checked
-            ? 'Instant for the figures below (local)'
-            : 'Observation Time (local)';
 
         syncGroups('sed', form.elements['target.sed.type'].value);
         syncGroups('options', form.elements['options.type'].value);

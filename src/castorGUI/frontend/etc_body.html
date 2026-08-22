@@ -466,17 +466,14 @@
                             <span class="etc-switch-label">Sweep time range</span>
                         </label>
                         <!-- Deliberately NOT .dynamic-group: this field is always submitted,
-                             because the single-point calculation keeps running alongside the
-                             batch one and still needs an instant.
-
-                             It used to be hidden while sweeping, which left every figure in the
-                             results panel describing a moment the reader could neither see nor
-                             change. Shown in both modes now: sweeping adds the chart, it does
-                             not stop the single-point run, and the instant driving those numbers
-                             is the reader's to choose. The chart marks it. -->
-                        <div class="time-group" data-when="single batch">
+                             because the single-point run continues under the sweep and still
+                             needs an instant. It stays hidden while sweeping because nothing
+                             on screen reports that instant any more — the time-varying figures
+                             are the chart's job, and what survives from the single-point
+                             response is the constants, which are the same at any instant. -->
+                        <div class="time-group" data-when="single">
                             <label class="etc-field">
-                                <span class="etc-field-label" id="label-observing-time">Observation Time (local)</span>
+                                <span class="etc-field-label">Observation Time (local)</span>
                                 <span class="etc-input-wrap">
                                     <input type="datetime-local" name="environment.observing_time_utc" required>
                                 </span>
@@ -531,8 +528,10 @@
                     <span class="etc-alert-text" id="warning-text"></span>
                 </div>
 
-                <h3 class="etc-section-title">Signal &amp; Noise Budget</h3>
-                <div class="etc-metrics">
+                <!-- Hidden while sweeping: every figure in here moves with the target, and the
+                     chart already plots it against time. See etc.css. -->
+                <h3 class="etc-section-title" data-time-varying>Signal &amp; Noise Budget</h3>
+                <div class="etc-metrics" data-time-varying>
                     <div class="etc-metric">
                         <div class="etc-metric-label">Source Rate</div>
                         <div class="etc-metric-value"><span id="res-source-rate">&mdash;</span><span class="etc-unit">e-/s</span></div>
@@ -551,6 +550,9 @@
                     </div>
                 </div>
 
+                <!-- Stays in both modes: FWHM, pixel scale, effective area, throughput, enclosed
+                     flux and aperture pixels are all functions of fixed inputs, so they do not
+                     move with time and there is nothing for the chart to say about them. -->
                 <h3 class="etc-section-title">Physical Diagnostics</h3>
                 <div class="etc-metrics">
                     <div class="etc-metric">
@@ -579,8 +581,10 @@
                     </div>
                 </div>
 
-                <h3 class="etc-section-title">Observation Limits</h3>
-                <div class="etc-metrics">
+                <!-- Hidden while sweeping: every figure in here moves with the target, and the
+                     chart already plots it against time. See etc.css. -->
+                <h3 class="etc-section-title" data-time-varying>Observation Limits</h3>
+                <div class="etc-metrics" data-time-varying>
                     <div class="etc-metric">
                         <div class="etc-metric-label">Saturation Time Limit</div>
                         <div class="etc-metric-value"><span id="res-sat-time">&mdash;</span><span class="etc-unit">s</span></div>
