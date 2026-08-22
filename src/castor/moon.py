@@ -60,6 +60,36 @@ def get_moon_and_target_geometry(
     
     return alpha_deg, rho_deg, z_moon_deg, z_target_deg
 
+def get_sun_elevation(
+    obs_time_utc: str | list[str],
+    lon: float = 120.8736,   # Default to Lulin Observatory
+    lat: float = 23.4700,
+    elevation: float = 2862.0
+) -> Numeric:
+    """
+    Calculate the Sun's altitude above the horizon, for daylight/twilight plotting.
+
+    Separate from get_moon_and_target_geometry, which already derives the Sun's
+    position for the lunar phase angle but returns only what the sky-brightness model
+    needs. Kept as its own entry point rather than widening that tuple: its callers
+    and their test doubles all agree on a four-value contract, and the visibility
+    plot is a presentation concern that has no business reshaping the photometry path.
+
+    Returns
+    -------
+    float
+        Sun altitude in degrees. Negative below the horizon; below -18 is
+        astronomical night.
+    """
+    obs_time = Time(obs_time_utc, format="isot", scale="utc")
+    location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg, height=elevation*u.m)
+    altaz_frame = AltAz(obstime=obs_time, location=location)
+
+    sun_altaz = get_sun(obs_time).transform_to(altaz_frame)
+
+    return cast(Numeric, sun_altaz.alt.deg)   # type: ignore
+
+
 # ==========================================
 # Phase 2: Sky Brightness Modeling
 # ==========================================

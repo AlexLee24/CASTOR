@@ -66,6 +66,14 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         elevation=env.location.elevation_m
     )
     
+    # Daylight is a plotting concern only, so it is fetched separately rather than
+    # threaded through the photometry path — see moon.get_sun_elevation.
+    sun_elev_arr = moon.get_sun_elevation(
+        obs_time_utc=time_series_iso,
+        lon=env.location.longitude_deg, lat=env.location.latitude_deg,
+        elevation=env.location.elevation_m
+    )
+
     # Batch-safe zenith angle clamping (np.clip in place of min)
     z_target_safe = np.clip(z_target_arr, 0.0, 89.0)
     airmass_arr = physics.calculate_airmass(z_target_safe)
@@ -179,7 +187,8 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         # not the z_target_safe used for airmass, so elevation can legitimately read negative.
         ephemeris=schema.BatchEphemeris(
             target_elevation_deg=to_list(90.0 - z_target_arr),
-            moon_elevation_deg=to_list(90.0 - z_moon_arr)
+            moon_elevation_deg=to_list(90.0 - z_moon_arr),
+            sun_elevation_deg=to_list(sun_elev_arr)
         ),
         flags=schema.SystemFlags(
             # is_saturated is True if saturation occurs at any point during the night

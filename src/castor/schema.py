@@ -433,6 +433,14 @@ class BatchEphemeris(StrictModel):
     moon_elevation_deg: list[float] = Field(
         ..., description="Moon's altitude above the horizon at each timestamp, in degrees."
     )
+    sun_elevation_deg: list[float] = Field(
+        ...,
+        description=(
+            "Sun's altitude above the horizon at each timestamp, in degrees. Purely for the "
+            "visibility plot — nothing in the SNR pipeline reads it. Above 0 is daylight; "
+            "0 to -18 is twilight; below -18 is astronomical night."
+        )
+    )
 
 class BatchObservationResponse(StrictModel):
     core: BatchCoreResult = Field(..., description="Vectorized calculation results over time.")
