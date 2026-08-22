@@ -17,6 +17,7 @@
     --etc-accent:        var(--kw-accent, #C5A059);
     --etc-accent-hover:  var(--kw-accent-hover, #d4b06a);
     --etc-moon:          #6FA8DC;   /* Design.MOON — second series in the chart */
+    --etc-sun:           #8F8FA8;   /* third series — context, so dimmer than the other two */
 
     /* ── Surfaces ──────────────────────────────────────────────────────── */
     --etc-panel-bg:      var(--kw-glass-bg, rgba(20, 20, 30, 0.60));
@@ -437,6 +438,16 @@
 /* Section titles inside the results column are direct flex children, so the
    gap already spaces them — cancel the field-oriented margin. */
 .castor-etc .etc-results-scroll > .etc-section-title { margin-bottom: 0; }
+
+/* Ticking "Sweep time range" changes what the reader came for. In single mode the
+   hero number is the answer and the panel is ordered around it; in sweep mode the
+   answer is the chart, and leaving it at the bottom of five card groups meant
+   scrolling past a screenful of single-instant detail to reach the thing you just
+   asked for. The container is already a flex column, so this is pure order — the
+   nodes never move, which matters because relocating a Plotly graph in the DOM
+   costs a resize and a redraw. Alerts stay above everything either way. */
+.castor-etc .etc-results-scroll.is-sweep > .etc-observing-window { order: -1; }
+.castor-etc .etc-results-scroll.is-sweep > .etc-alert { order: -2; }
 
 .castor-etc .etc-observing-window { display: flex; flex-direction: column; gap: var(--etc-gap-group); }
 .castor-etc .etc-observing-window[hidden] { display: none; }

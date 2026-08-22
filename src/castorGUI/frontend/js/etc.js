@@ -190,6 +190,15 @@
         'res-enclosed-flux', 'res-num-pixels', 'res-sat-time', 'res-optimal-time'
     ];
 
+    var resultsScroll = root.querySelector('.etc-results-scroll');
+
+    /* Reads the instant back off the form rather than the response, because the
+       response never carries it and the field itself is hidden while sweeping. */
+    function observingInstantText() {
+        var raw = form.elements['environment.observing_time_utc'].value;
+        return raw ? raw.replace('T', ' ') : null;
+    }
+
     function renderSingle(data, error) {
         if (error) {
             el('error-text').textContent = error;
@@ -217,6 +226,19 @@
             el('hero-label').textContent = 'Required Exposures';
             el('hero-value').textContent = core.required_exposures + ' frames';
             el('hero-desc').textContent = 'Target SNR achieved: ' + fmt(core.total_snr, 2);
+        }
+
+        /* While sweeping, this number is still a single instant — the sweep is layered
+           on top of the single-point run, it does not replace it. The form hides the
+           observation-time field in that mode, so without saying so here the figure
+           belongs to a moment the reader cannot see; and now that the chart sits above
+           it, the obvious misreading is that it summarises the whole window. Name the
+           moment. */
+        if (el('toggle-batch').checked) {
+            var instant = observingInstantText();
+            el('hero-desc').textContent = instant
+                ? 'At ' + instant + ' — one instant inside the swept window, not a summary of it.'
+                : 'A single instant inside the swept window, not a summary of it.';
         }
 
         singleWarnings = (flags.warnings || []).slice();
@@ -289,6 +311,12 @@
         var accent = themeColor('--etc-accent', '#C5A059');
         var moon = themeColor('--etc-moon', '#6FA8DC');
         var warning = themeColor('--etc-warning', '#fbbf24');
+        var sun = themeColor('--etc-sun', '#8f8fa8');
+        /* Deliberately a flat neutral, not the warning colour the below-horizon band
+           used to borrow. Panel 3 shades saturation risk in warning amber, and two
+           bands in one amber on one time axis read as the same hazard. Unobservable
+           is not a hazard, it is just when the sky is closed. */
+        var shadeUnobservable = 'rgba(148, 163, 184, 0.10)';
         var muted = themeColor('--etc-text-muted', '#9ca3af');
         var textMain = themeColor('--etc-text-main', '#e5e7eb');
         var gridColor = 'rgba(255, 255, 255, 0.08)';
@@ -296,47 +324,152 @@
         var times = data.core.timestamps_iso;
         var targetEl = data.ephemeris.target_elevation_deg;
         var moonEl = data.ephemeris.moon_elevation_deg;
+        var sunEl = data.ephemeris.sun_elevation_deg || [];
         var singleSnr = data.core.single_snr;
         var tSat = data.core.saturation_time_limit;
 
+        /* "Observable" is the whole point of the top panel, so say it once here and
+           let the other two panels inherit it: the target has to be up, and the sky
+           has to be dark. -18 deg is astronomical twilight — the Sun far enough down
+           that its scattered light no longer dominates the background.
+
+           Outside that window the engine still returns numbers, and they are the
+           reason this chart was unreadable: below the horizon the airmass clamp
+           makes the target almost infinitely extinguished, so the saturation limit
+           runs to millions of seconds and flattens every real value against zero.
+           They are not wrong, they are answers to a question nobody asked. Mask them
+           and each panel autoscales to the hours you could actually use. */
+        var ASTRONOMICAL_TWILIGHT_DEG = -18;
+        var hasSun = sunEl.length === times.length;
+        var observable = times.map(function (_, i) {
+            return targetEl[i] > 0 && (!hasSun || sunEl[i] < ASTRONOMICAL_TWILIGHT_DEG);
+        });
+        var anyObservable = observable.some(Boolean);
+        // With nothing observable there is nothing to autoscale to, so show the raw
+        // curves rather than three empty panels.
+        function maskUnobservable(values) {
+            if (!anyObservable) { return values; }
+            return values.map(function (v, i) { return observable[i] ? v : null; });
+        }
+        var snrPlot = maskUnobservable(singleSnr);
+        var tSatPlot = maskUnobservable(tSat);
+
         var traces = [
             { x: times, y: targetEl, name: 'Target', type: 'scatter', mode: 'lines',
-              line: { color: accent, width: 2 }, xaxis: 'x', yaxis: 'y' },
+              line: { color: accent, width: 2 }, xaxis: 'x', yaxis: 'y',
+              hovertemplate: '%{y:.1f}°<extra>Target</extra>' },
             { x: times, y: moonEl, name: 'Moon', type: 'scatter', mode: 'lines',
-              line: { color: moon, width: 2 }, xaxis: 'x', yaxis: 'y' },
-            { x: times, y: singleSnr, name: 'Single-Exposure SNR', type: 'scatter', mode: 'lines',
-              line: { color: accent, width: 2 }, showlegend: false, xaxis: 'x2', yaxis: 'y2' },
-            { x: times, y: tSat, name: 'Saturation Limit', type: 'scatter', mode: 'lines',
-              line: { color: accent, width: 2 }, showlegend: false, xaxis: 'x3', yaxis: 'y3' }
+              line: { color: moon, width: 2 }, xaxis: 'x', yaxis: 'y',
+              hovertemplate: '%{y:.1f}°<extra>Moon</extra>' },
+            { x: times, y: snrPlot, name: 'Single-Exposure SNR', type: 'scatter', mode: 'lines',
+              line: { color: accent, width: 2 }, showlegend: false, xaxis: 'x2', yaxis: 'y2',
+              hovertemplate: '%{y:.1f}<extra>SNR / frame</extra>' },
+            { x: times, y: tSatPlot, name: 'Saturation Limit', type: 'scatter', mode: 'lines',
+              line: { color: accent, width: 2 }, showlegend: false, xaxis: 'x3', yaxis: 'y3',
+              hovertemplate: '%{y:,.0f} s<extra>saturates after</extra>' }
         ];
+
+        /* The Sun answers "when is this actually night" directly, which the shading
+           alone only implies — and it is the one curve a reader can check against
+           their own sense of the date. Dimmer than Target and Moon on purpose: it is
+           context for the other two, not a third thing to compare them against. */
+        if (hasSun) {
+            traces.splice(2, 0, {
+                x: times, y: sunEl, name: 'Sun', type: 'scatter', mode: 'lines',
+                line: { color: sun, width: 1.5, dash: 'dot' }, xaxis: 'x', yaxis: 'y',
+                hovertemplate: '%{y:.1f}°<extra>Sun</extra>'
+            });
+        }
 
         var shapes = [];
         var annotations = [];
 
-        // Panel 1: shade the stretches where the target is below the horizon.
-        contiguousRuns(targetEl, function (v) { return v < 0; }).forEach(function (run) {
-            shapes.push({
-                type: 'rect', xref: 'x', yref: 'y domain',
-                x0: times[run[0]], x1: times[run[1]], y0: 0, y1: 1,
-                fillcolor: warning, opacity: 0.06, line: { width: 0 }, layer: 'below'
+        /* Anchor a callout away from whichever edge it sits against, or Plotly centres
+           it on the last tick and half the label lands outside the plot — which is what
+           pushed the saturation figure into the axis, and what sent the band's own label
+           off the right-hand side once the band drifted late in the window. */
+        function edgeAnchor(index) {
+            var frac = index / Math.max(1, times.length - 1);
+            return frac > 0.85 ? 'right' : (frac < 0.15 ? 'left' : 'center');
+        }
+
+        /* Shade every stretch you could NOT observe, on all three panels rather than
+           just the first. It used to be panel 1 only, in warning amber, at opacity
+           0.06 and with nothing anywhere naming it — a faint yellow slab that looked
+           like a rendering fault. Carrying it down the stack is what ties the empty
+           stretches in panels 2 and 3 to their cause. */
+        var unobservableRuns = contiguousRuns(observable, function (v) { return !v; });
+        if (anyObservable) {
+            unobservableRuns.forEach(function (run) {
+                ['x', 'x2', 'x3'].forEach(function (ax, panel) {
+                    shapes.push({
+                        type: 'rect', xref: ax,
+                        yref: (panel === 0 ? 'y' : 'y' + (panel + 1)) + ' domain',
+                        x0: times[run[0]], x1: times[run[1]], y0: 0, y1: 1,
+                        fillcolor: shadeUnobservable, line: { width: 0 }, layer: 'below'
+                    });
+                });
             });
+        }
+        /* Name the band in place rather than in the legend. A fourth legend entry has
+           to be long enough to be meaningful, and at this panel's width that wrapped
+           the strip onto four lines and squeezed the three plots. Labelling the widest
+           run directly also puts the words on the thing they describe, which is what
+           panel 3 already does for its saturation window. */
+        var widestRun = null;
+        unobservableRuns.forEach(function (run) {
+            if (!widestRun || (run[1] - run[0]) > (widestRun[1] - widestRun[0])) { widestRun = run; }
         });
+        if (anyObservable && widestRun) {
+            var bandMid = Math.floor((widestRun[0] + widestRun[1]) / 2);
+            annotations.push({
+                x: times[bandMid], y: 1,
+                xref: 'x', yref: 'y domain',
+                text: 'target down / sky not dark', showarrow: false,
+                xanchor: edgeAnchor(bandMid), yanchor: 'top', yshift: -4,
+                font: { color: muted, size: 10, family: 'inherit' }
+            });
+        } else if (!anyObservable) {
+            annotations.push({
+                x: times[Math.floor(times.length / 2)], y: 1, xref: 'x', yref: 'y domain',
+                text: 'not observable at any point in this window', showarrow: false,
+                xanchor: 'center', yanchor: 'top', yshift: -4,
+                font: { color: warning, size: 10, family: 'inherit' }
+            });
+        }
         shapes.push({
             type: 'line', xref: 'x', yref: 'y',
             x0: times[0], x1: times[times.length - 1], y0: 0, y1: 0,
             line: { color: muted, width: 1, dash: 'solid' }, opacity: 0.4, layer: 'below'
         });
 
+        /* Every callout below reads the masked series, not the raw one. Labelling the
+           best SNR or the tightest saturation limit at an hour the target is under
+           the horizon is worse than not labelling it at all. */
+        function extremeIndex(values, better) {
+            var best = null;
+            for (var i = 0; i < values.length; i++) {
+                if (values[i] === null || !isFinite(values[i])) { continue; }
+                if (best === null || better(values[i], values[best])) { best = i; }
+            }
+            return best;
+        }
+
         // Panel 2: direct-label the peak only — never every point.
-        var peak = singleSnr.indexOf(Math.max.apply(null, singleSnr));
-        annotations.push({
-            x: times[peak], y: singleSnr[peak], xref: 'x2', yref: 'y2',
-            text: fmt(singleSnr[peak], 0), showarrow: false, yshift: 14,
-            font: { color: textMain, size: 11, family: 'inherit' }
-        });
+        var peak = extremeIndex(snrPlot, function (a, b) { return a > b; });
+        if (peak !== null) {
+            annotations.push({
+                x: times[peak], y: snrPlot[peak], xref: 'x2', yref: 'y2',
+                text: fmt(snrPlot[peak], 0), showarrow: false, yshift: 14,
+                xanchor: edgeAnchor(peak),
+                font: { color: textMain, size: 11, family: 'inherit' }
+            });
+        }
 
         // Panel 3: saturation-risk windows + the chosen exposure as a threshold.
-        var riskRuns = contiguousRuns(tSat, function (v) { return v < singleExpTime; });
+        var riskRuns = contiguousRuns(tSatPlot, function (v) {
+            return v !== null && v < singleExpTime;
+        });
         riskRuns.forEach(function (run) {
             shapes.push({
                 type: 'rect', xref: 'x3', yref: 'y3 domain',
@@ -363,12 +496,31 @@
                 font: { color: warning, size: 10, family: 'inherit' }
             });
         }
-        var trough = tSat.indexOf(Math.min.apply(null, tSat));
-        annotations.push({
-            x: times[trough], y: tSat[trough], xref: 'x3', yref: 'y3',
-            text: fmt(tSat[trough], 0) + 's', showarrow: false, yshift: -14,
-            font: { color: textMain, size: 11, family: 'inherit' }
-        });
+        var trough = extremeIndex(tSatPlot, function (a, b) { return a < b; });
+        if (trough !== null) {
+            annotations.push({
+                x: times[trough], y: tSatPlot[trough], xref: 'x3', yref: 'y3',
+                text: fmt(tSatPlot[trough], 0) + 's', showarrow: false, yshift: -14,
+                xanchor: edgeAnchor(trough),
+                font: { color: textMain, size: 11, family: 'inherit' }
+            });
+        }
+
+        /* Log, not linear-from-zero. The limit and the exposure it is compared against
+           are routinely three or four orders of magnitude apart — 120 s against tens
+           of thousands here — and on a linear axis anchored at zero the threshold line
+           lies flat on the baseline, exactly where "you are about to saturate" and
+           "you have all the headroom in the world" look identical. The range is opened
+           past both ends so the dashed threshold is always on screen even when nothing
+           comes near it. */
+        function saturationRange() {
+            var vals = tSatPlot.filter(function (v) { return v !== null && isFinite(v) && v > 0; });
+            vals.push(singleExpTime);
+            var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+            if (!(lo > 0) || !isFinite(hi)) { return undefined; }
+            return [Math.log10(lo / 2), Math.log10(hi * 2)];
+        }
+        var satRange = saturationRange();
 
         var axisBase = {
             gridcolor: gridColor, zeroline: false, linecolor: gridColor,
@@ -384,12 +536,21 @@
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
             font: { family: 'inherit', color: muted },
-            margin: { l: 62, r: 16, t: 8, b: 44 },
+            margin: { l: 62, r: 16, t: 30, b: 44 },
             height: 460,
             showlegend: true,
-            legend: { orientation: 'h', x: 1, xanchor: 'right', y: 1.04, yanchor: 'bottom',
+            legend: { orientation: 'h', x: 0, xanchor: 'left', y: 1.06, yanchor: 'bottom',
                       font: { color: textMain, size: 11 }, bgcolor: 'rgba(0,0,0,0)' },
             hovermode: 'x unified',
+            /* Plotly's default hover box is near-white and inherits layout.font, which
+               here is the muted grey meant for axis ticks — grey on white, illegible,
+               which is exactly how it was shipping. Theme it like the panels it sits
+               over and give the text the main foreground colour. */
+            hoverlabel: {
+                bgcolor: themeColor('--etc-surface-1', '#14141E'),
+                bordercolor: themeColor('--etc-border-color', 'rgba(255,255,255,0.10)'),
+                font: { color: textMain, size: 11, family: 'inherit' }
+            },
             shapes: shapes,
             annotations: annotations,
             xaxis:  Object.assign({}, axisBase, { domain: [0, 1], anchor: 'y',  matches: 'x3', showticklabels: false }),
@@ -398,7 +559,7 @@
             yaxis:  Object.assign({}, axisBase, { domain: [0.72, 1],    anchor: 'x',  title: { text: 'Elevation (°)', font: titleFont } }),
             yaxis2: Object.assign({}, axisBase, { domain: [0.38, 0.64], anchor: 'x2', title: { text: 'Single-Exposure SNR', font: titleFont } }),
             yaxis3: Object.assign({}, axisBase, { domain: [0, 0.26],    anchor: 'x3', title: { text: 'Saturation Limit (s)', font: titleFont },
-                                                  rangemode: 'tozero' })
+                                                  type: 'log', range: satRange })
         };
 
         window.Plotly.react(el('etc-chart'), traces, layout, {
@@ -469,6 +630,7 @@
 
         if (!el('toggle-batch').checked) {
             el('observing-window').hidden = true;
+            resultsScroll.classList.remove('is-sweep');
             batchWarnings = [];
             refreshWarnings();
             return;
@@ -476,6 +638,8 @@
         // Reveal the section immediately so flipping the switch has a visible
         // effect, rather than nothing happening until the request comes back.
         el('observing-window').hidden = false;
+        // Promotes the chart to the top of the results panel — see etc.css.
+        resultsScroll.classList.add('is-sweep');
         setChartStatus('Calculating…');
         scheduleBatch();
     }
