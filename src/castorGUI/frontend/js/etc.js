@@ -506,8 +506,60 @@
         });
     }
 
+    /* Jansky and wavelength flux are one input wearing two units, because
+       castor.schema calls both fields flux_value. Swapping only the unit label
+       left the number behind, so switching system silently restated the target
+       twelve orders of magnitude away and the SNR moved with it. Convert instead:
+       the discriminator picks the units, it does not redefine the source.
+
+       Only this pair converts. Vega and AB share target_mag and differ by a
+       band-dependent offset (~0.16 mag at r'), which is a real astronomical
+       distinction rather than a change of units — quietly shifting the number
+       there would be inventing a photometric transform the engine never applied. */
+    var C_ANGSTROM_PER_S = 2.99792458e18;      // physics.SPEED_OF_LIGHT_CGS * 1e8
+    var JY_IN_CGS = 1e-23;                     // erg/s/cm^2/Hz per Jansky
+
+    function fluxNuToLambdaFactor() {
+        var nm = parseFloat(form.elements['instrument.optic_filter.central_wavelength'].value);
+        if (!isFinite(nm) || nm <= 0) { return null; }
+        var angstrom = nm * 10.0;
+        return C_ANGSTROM_PER_S / (angstrom * angstrom);
+    }
+
+    function convertFluxValue(from, to) {
+        var input = form.elements['target.brightness.flux_value'];
+        var value = parseFloat(input.value);
+        var factor = fluxNuToLambdaFactor();
+        if (!isFinite(value) || factor === null) { return; }
+        // toExponential, not toPrecision: these values straddle 1e-17 and 1e-5, and
+        // toPrecision spells the latter 0.00005249, which reads as a different kind of
+        // number from the 5.248e-5 the field ships with.
+        if (from === 'jansky_flux' && to === 'wavelength_flux') {
+            input.value = (value * JY_IN_CGS * factor).toExponential(3);
+        } else if (from === 'wavelength_flux' && to === 'jansky_flux') {
+            input.value = (value / factor / JY_IN_CGS).toExponential(3);
+        }
+    }
+
+    /* The unit the flux input is currently holding, which is NOT the same thing as
+       the selected brightness type: picking Vega or AB hides the field but leaves
+       whatever was in it. Tracking the selection instead meant a detour through a
+       magnitude system lost the conversion — wavelength -> AB -> Jansky relabelled
+       erg/s/cm2/A as Jy without touching the number. Seeded to the unit the shipped
+       default is written in. */
+    var fluxValueUnit = 'jansky_flux';
+
+    function syncFluxValueUnit(brightness) {
+        if (brightness !== 'jansky_flux' && brightness !== 'wavelength_flux') { return; }
+        if (fluxValueUnit !== brightness) {
+            convertFluxValue(fluxValueUnit, brightness);
+            fluxValueUnit = brightness;
+        }
+    }
+
     function syncConditionalFields() {
         var brightness = form.elements['target.brightness.type'].value;
+        syncFluxValueUnit(brightness);
         syncGroups('brightness', brightness);
         el('label-target-mag').textContent =
             brightness === 'ab_mag' ? 'Apparent Magnitude (AB)' : 'Apparent Magnitude';
@@ -955,6 +1007,12 @@
         if (typeof data.batch_enabled === 'boolean') {
             el('toggle-batch').checked = data.batch_enabled;
         }
+        // The file's own discriminator says what unit its flux_value is in. Adopt it
+        // rather than letting syncConditionalFields convert a value already correct.
+        var loadedBrightness = form.elements['target.brightness.type'].value;
+        if (loadedBrightness === 'jansky_flux' || loadedBrightness === 'wavelength_flux') {
+            fluxValueUnit = loadedBrightness;
+        }
         // Same reasoning as AppState.load_from_dict: leaving the selectors on their
         // previous choice would claim a provenance these numbers no longer have.
         SELECTOR_IDS.forEach(function (id) { el(id).value = ''; });
@@ -970,12 +1028,30 @@
     // Init
     // ========================================================================
 
+    /* The night LOT observed SN 2025wny, not "now".
+
+       The rest of the form boots on a real measurement - LOT 1 m, Sloan r', image A
+       at AB 19.6 - and an observing time of "now" would quietly break it: the target
+       is a pre-dawn winter object, so for most of the year "now" puts it under the
+       horizon and the first thing a new user sees is an airmass warning against
+       numbers that are otherwise exactly right. Pinning the epoch keeps the whole
+       default self-consistent, at the cost of opening on a past date, which is the
+       honest trade: this is a worked example first and a blank form second.
+
+       These are fixed UTC instants rendered into the browser's own wall clock, not
+       fixed local strings - a hard-coded "04:00" would mean a different instant, and
+       a different airmass, for every timezone the page is opened in. 20:00Z is 04:00
+       the next morning at Lulin, near the target's transit and clear of airmass 2.
+       The sweep brackets it across the observable window, 02:00 to 06:00 local, so
+       the batch chart opens on the target actually climbing out of the murk. */
+    var LOT_EPOCH_UTC = '2025-09-28T20:00:00Z';
+    var LOT_SWEEP_START_UTC = '2025-09-28T18:00:00Z';
+    var LOT_SWEEP_END_UTC = '2025-09-28T22:00:00Z';
+
     function initDefaultTimes() {
-        var now = new Date();
-        var later = new Date(now.getTime() + 6 * 3600 * 1000);
-        form.elements['environment.observing_time_utc'].value = toLocalInputValue(now);
-        form.elements['batch.start_time_utc'].value = toLocalInputValue(now);
-        form.elements['batch.end_time_utc'].value = toLocalInputValue(later);
+        form.elements['environment.observing_time_utc'].value = isoToLocalInputValue(LOT_EPOCH_UTC);
+        form.elements['batch.start_time_utc'].value = isoToLocalInputValue(LOT_SWEEP_START_UTC);
+        form.elements['batch.end_time_utc'].value = isoToLocalInputValue(LOT_SWEEP_END_UTC);
     }
 
     initTabs();

@@ -199,18 +199,35 @@
                         <!-- One coordinate, not two settings: a pair that is always read
                              and edited together sits on one row, like the FWHM pairs on the
                              Environment tab. -->
+                        <!-- The default target is SN 2025wny ("SN Winny"), image A: the
+                             strongly lensed superluminous supernova at z=2.01 that Lulin's
+                             own LOT resolved into its separate lensed images on 2025-09-29
+                             (HOLISMOKES XIX, arXiv:2510.21694; LOT data via the DETECT
+                             programme).
+
+                             It is the default because it is the one target that agrees with
+                             every other default on the page. The hardware selectors open on
+                             LOT 1 m + Sophia + Sloan r', the observing time below is pinned
+                             to that night, and the r-band AB 19.6 here is what LOT actually
+                             measured for image A - so the calculator boots on a real
+                             measurement it can reproduce, not on placeholder numbers.
+
+                             Images B and C came in at AB 21.3 and 21.5. Both are worth
+                             typing in: at the default 120 s they land near SNR 10, which is
+                             the "is this exposure long enough" question the tool exists to
+                             answer. -->
                         <div class="etc-field-row">
                             <label class="etc-field">
                                 <span class="etc-field-label">Right Ascension</span>
                                 <span class="etc-input-wrap">
-                                    <input type="number" name="target.ra" value="180.0" step="any" min="0" max="359.9999" required>
+                                    <input type="number" name="target.ra" value="109.1437" step="any" min="0" max="359.9999" required>
                                     <span class="etc-unit">deg</span>
                                 </span>
                             </label>
                             <label class="etc-field">
                                 <span class="etc-field-label">Declination</span>
                                 <span class="etc-input-wrap">
-                                    <input type="number" name="target.dec" value="45.0" step="any" min="-90" max="90" required>
+                                    <input type="number" name="target.dec" value="38.3523" step="any" min="-90" max="90" required>
                                     <span class="etc-unit">deg</span>
                                 </span>
                             </label>
@@ -234,7 +251,7 @@
                             <span class="etc-field-label">Brightness System</span>
                             <select name="target.brightness.type" id="select-brightness-type">
                                 <option value="vega_mag">Vega Magnitude</option>
-                                <option value="ab_mag">AB Magnitude</option>
+                                <option value="ab_mag" selected>AB Magnitude</option>
                                 <option value="jansky_flux">Jansky Flux (Jy)</option>
                                 <option value="wavelength_flux">Wavelength Flux (erg/s/cm&sup2;/&Aring;)</option>
                             </select>
@@ -246,25 +263,40 @@
                             <label class="etc-field">
                                 <span class="etc-field-label" id="label-target-mag">Apparent Magnitude</span>
                                 <span class="etc-input-wrap">
-                                    <input type="number" name="target.brightness.target_mag" value="15.0" step="any">
+                                    <input type="number" name="target.brightness.target_mag" value="19.6" step="any">
                                     <span class="etc-unit">mag</span>
                                 </span>
                             </label>
                         </div>
                         <div class="dynamic-group" data-brightness="vega_mag">
+                            <!-- Band-specific, so it tracks the filter rather than the target:
+                                 2.805e-9 is the zero point at the default Sloan r' (623 nm).
+                                 The 3.63e-9 this used to ship is the Johnson V value, which
+                                 read a target 30% fainter than it is on a form whose default
+                                 filter is not V. Change the filter and this wants changing
+                                 with it - it is the one brightness field that is a property
+                                 of the instrument, not of the source. -->
                             <label class="etc-field">
                                 <span class="etc-field-label">Zero Point Flux</span>
                                 <span class="etc-input-wrap">
-                                    <input type="number" name="target.brightness.zero_point_flux" value="3.63e-9" step="any">
+                                    <input type="number" name="target.brightness.zero_point_flux" value="2.805e-9" step="any">
                                     <span class="etc-unit">erg/s/cm&sup2;/&Aring;</span>
                                 </span>
                             </label>
                         </div>
+                        <!-- castor.schema names the Jansky and the wavelength-flux field
+                             flux_value alike, so one input serves both and the unit label
+                             swaps. That makes a single stored default ambiguous: 5.248e-5 Jy
+                             and 4.054e-17 erg/s/cm2/A are the same brightness twelve orders
+                             of magnitude apart. The value below is the Jansky one - Jansky is
+                             the first of the two in the selector - and syncConditionalFields
+                             converts it when the system changes, so whichever you land on is
+                             still image A at AB 19.6. -->
                         <div class="dynamic-group" data-brightness="jansky_flux wavelength_flux" hidden>
                             <label class="etc-field">
                                 <span class="etc-field-label">Flux Density</span>
                                 <span class="etc-input-wrap">
-                                    <input type="number" name="target.brightness.flux_value" value="100.0" step="any">
+                                    <input type="number" name="target.brightness.flux_value" value="5.248e-5" step="any">
                                     <span class="etc-unit" id="unit-flux-value">Jy</span>
                                 </span>
                             </label>
@@ -326,10 +358,15 @@
                         <hr class="etc-divider">
 
                         <h3 class="etc-section-title">Atmosphere &amp; Background</h3>
-                        <label class="etc-switch-row" title="Layers the real-time moon/geometry contribution on top of the mu_dark baseline">
+                        <!-- Renamed from "Auto sky background", which claimed too much: it
+                             reads as though the sky brightness gets derived for you and the
+                             field below stops mattering. Nothing is derived - mu_dark is
+                             required either way and is always the baseline. All this adds is
+                             moonlight. -->
+                        <label class="etc-switch-row" title="Adds scattered moonlight (Krisciunas &amp; Schaefer 1991) on top of the mu_dark baseline below, from the Moon's phase, its separation from the target, and both altitudes at the observing time you set. mu_dark is never derived: with this off the sky is exactly mu_dark, and with it on and the Moon below the horizon it adds nothing. Single-instant results only - a time sweep always includes moonlight, whatever this is set to.">
                             <input type="checkbox" class="etc-switch-input" name="environment.auto_calc_background">
                             <span class="etc-switch" aria-hidden="true"></span>
-                            <span class="etc-switch-label">Auto sky background</span>
+                            <span class="etc-switch-label">Add moonlight to sky background</span>
                         </label>
                         <label class="etc-field">
                             <span class="etc-field-label">Dark Sky Brightness (mu_dark, baseline)</span>
@@ -384,7 +421,7 @@
                         <label class="etc-field">
                             <span class="etc-field-label">Single Exposure Time</span>
                             <span class="etc-input-wrap">
-                                <input type="number" name="options.single_exp_time" value="300" step="any" min="0.001" required>
+                                <input type="number" name="options.single_exp_time" value="120" step="any" min="0.001" required>
                                 <span class="etc-unit">s</span>
                             </span>
                         </label>
