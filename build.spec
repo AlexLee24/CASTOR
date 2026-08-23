@@ -20,7 +20,7 @@ excludes = [
 ]
 
 a = Analysis(
-    ['src/castorGUI/app.py'],
+    ['src/castorGUI/desktop.py'],
     pathex=pathex,
     binaries=[],
     datas=datas,
