@@ -39,6 +39,7 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 13 | SOPHIA's QE is one flat number | BUILD | `GUESS` row |
 | 14 | The VLT profile is mostly invention | DECIDE | 12 `GUESS` rows |
 | 15 | FORS2's throughput is a fudge that works in one band | BUILD | strict xfail, `test_eso.py` |
+| 16 | Everything measured here looks in one direction | OBSERVE | `test_lulin.py` |
 
 ---
 
@@ -123,8 +124,11 @@ the telescope's and has been for twenty years.
 | our fit | 0.123 ± 0.105 | 0.189 ± 0.027 | 0.108 ± 0.049 |
 
 The 2005 values fall monotonically towards the red, which is what extinction
-does; ours puts r' highest, which it cannot be. The frames span nights rather
-than airmass, so night-to-night transparency is masquerading as an airmass term.
+does; ours puts r' highest, which it cannot be, and it is now clear why. The
+range looks adequate — 1.03 to 1.59 — but it is accumulated across 18 separate
+nights. **The largest airmass span any single night manages is 0.19, and the
+median is 0.08**, so what the fit actually measured was night-to-night
+transparency wearing an airmass term's clothes.
 But our r' is 3.6σ from the 2005 value, so the two genuinely disagree rather than
 one refining the other. The 2011 file's Sloan column looks like a fourth source
 and is not — see the trap at the end of this file.
@@ -213,17 +217,23 @@ and the rectangular approximation meets current precision needs.
 `mu_sky = -2.5 log10(Flux_dark + Flux_moon)`. Two components, and zodiacal light
 is not one of them — it is sunlight scattered off interplanetary dust, it depends
 on ecliptic latitude and solar elongation, and near the ecliptic it is a
-substantial fraction of a dark sky. The project's own slides name it a core issue
-and propose ESO's SkyCalc as the route. `skycalc.py` in this directory already
-holds a six-component Paranal sky at 1 nm, which is that route's input.
+substantial fraction of a dark sky. Against the six-component SkyCalc export in
+`skycalc.py`, zodiacal light plus scattered starlight is **37% of a moonless g'
+sky**, 21% in r' and 10% in i'.
 
 ## 10. Galactic background is not modelled — BUILD
 
 The same gap and the same fix: integrated starlight plus diffuse galactic light,
-strongly dependent on galactic latitude, absent from `mu_sky`. Also named a core
-issue in the slides. Together with question 9 this is the largest identified
-omission in the sky model, and both are currently absorbed into whatever the user
-types for `mu_dark`.
+strongly dependent on galactic latitude, absent from `mu_sky`. Both are named a
+core issue in the project's slides, which propose ESO's SkyCalc as the route.
+
+**Adding them naively would double-count.** `mu_dark` is a *measured* ground-level
+brightness, so it already contains both, at whatever sightline it was measured
+down. Computing them separately and adding them on top repeats the mistake the
+extinction term made and the slides named — *"Hidden Errors (Two Wrongs Make a
+Right)"*. Doing this properly means redefining `mu_dark` as airglow and
+atmosphere only, and that means knowing how much to take out — which is
+question 16.
 
 ## 11. Readout overhead is not modelled — BUILD
 
@@ -270,6 +280,30 @@ in `test_eso.py`.
 It is the same disease the project diagnosed in the original prototype and named
 *"Hidden Errors (Two Wrongs Make a Right)"*, and question 2 is a second instance:
 an unknown secondary cancelling a fitted throughput.
+
+## 16. Everything measured here looks in one direction — OBSERVE
+
+**Measured.** 123 frames over 18 nights, and one target: the headers give four
+names — AT2025wny, SN2025wny, ZTF25abnjznp, 20251017-AT2025wny — to one
+supernova. Ecliptic latitude spans 0.1°, galactic latitude 0.1°, solar elongation
+7°.
+
+**What it costs.** The measured `mu_dark` values, 21.44 / 20.92 / 20.04, are not
+Lulin's dark sky. They are Lulin's dark sky *towards ecliptic +16 and galactic
++21*, where zodiacal light and scattered starlight are a large share of the
+total. A user pointing at the ecliptic pole gets a materially darker sky than
+`presets.json` predicts, and the file has no way to say so. This is a known bias
+in a shipped value, which makes it worse than questions 9 and 10 — those are
+merely missing.
+
+It also means those two questions cannot be *calibrated* here at all, only
+modelled. A model can still be anchored: SkyCalc can be asked for this exact
+sightline, so the measured value stays the absolute reference while the model
+supplies only the variation. That is the safe form, and it is the one to build.
+
+**What would settle it.** Fields spread in ecliptic and galactic latitude — which
+the airmass night in question 4 could carry for free if the fields are chosen for
+it rather than for convenience.
 
 ---
 
