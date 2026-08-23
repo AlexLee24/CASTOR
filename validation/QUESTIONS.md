@@ -39,6 +39,7 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 13 | SOPHIA's QE is one flat number | BUILD | `GUESS` row |
 | 14 | The VLT profile is mostly invention | DECIDE | 12 `GUESS` rows |
 | 15 | FORS2's throughput is a fudge that works in one band | BUILD | strict xfail, `test_eso.py` |
+| 16 | Everything measured here looks in one direction | OBSERVE | `test_lulin.py` |
 
 ---
 
@@ -123,8 +124,11 @@ the telescope's and has been for twenty years.
 | our fit | 0.123 ± 0.105 | 0.189 ± 0.027 | 0.108 ± 0.049 |
 
 The 2005 values fall monotonically towards the red, which is what extinction
-does; ours puts r' highest, which it cannot be. The frames span nights rather
-than airmass, so night-to-night transparency is masquerading as an airmass term.
+does; ours puts r' highest, which it cannot be, and it is now clear why. The
+range looks adequate — 1.03 to 1.59 — but it is accumulated across 18 separate
+nights. **The largest airmass span any single night manages is 0.19, and the
+median is 0.08**, so what the fit actually measured was night-to-night
+transparency wearing an airmass term's clothes.
 But our r' is 3.6σ from the 2005 value, so the two genuinely disagree rather than
 one refining the other. The 2011 file's Sloan column looks like a fourth source
 and is not — see the trap at the end of this file.
@@ -190,10 +194,13 @@ lookup cannot express a spectrum. Doing it properly — a sky spectrum and a
 throughput curve integrated against the real bandpass — closes four other things
 at once:
 
-- **the sky's growth with airmass.** Flat matches LCO exactly and stopped the
-  double-counting that used to make it *fall*, but ESO's sky is 17.6% brighter at
-  X=1.5 and 31.8% at X=2.0 and ours does not move. Closing it needs a van Rhijn
-  term over the emitted components, not another scalar. Strict xfail in
+- **the sky's growth with airmass, which is band-dependent.** Flat matches LCO
+  exactly and stopped the double-counting that used to make it *fall*, but the
+  sky does grow: from X=1.1 to X=2.0 SkyCalc puts it at +23% in g' and +58% in
+  i'. The ratio between those is the whole point — i' is mostly upper atmosphere
+  and airglow, emitted inside the column and lengthening with it, while over half
+  of g' is zodiacal light, which arrives from outside and is extinguished
+  instead. A scalar fitted in one band is wrong in every other. Strict xfail in
   `test_eso.py`.
 - **the moon model has no colour.** Krisciunas & Schaefer is Johnson V and the
   only band dependence CASTOR gives it is the extinction coefficient. Moonlight
@@ -213,17 +220,25 @@ and the rectangular approximation meets current precision needs.
 `mu_sky = -2.5 log10(Flux_dark + Flux_moon)`. Two components, and zodiacal light
 is not one of them — it is sunlight scattered off interplanetary dust, it depends
 on ecliptic latitude and solar elongation, and near the ecliptic it is a
-substantial fraction of a dark sky. The project's own slides name it a core issue
-and propose ESO's SkyCalc as the route. `skycalc.py` in this directory already
-holds a six-component Paranal sky at 1 nm, which is that route's input.
+substantial fraction of a dark sky. Queried from SkyCalc at the sightline our own
+photometry looks down, and rescaled to Lulin's measured brightness, zodiacal
+light plus scattered starlight is **27% of a moonless g' sky**, 27% of r' and
+14% of i'. (The uncorrected Paranal figures are 53 / 35 / 16 — see question 16
+for why Lulin's are smaller.)
 
 ## 10. Galactic background is not modelled — BUILD
 
 The same gap and the same fix: integrated starlight plus diffuse galactic light,
-strongly dependent on galactic latitude, absent from `mu_sky`. Also named a core
-issue in the slides. Together with question 9 this is the largest identified
-omission in the sky model, and both are currently absorbed into whatever the user
-types for `mu_dark`.
+strongly dependent on galactic latitude, absent from `mu_sky`. Both are named a
+core issue in the project's slides, which propose ESO's SkyCalc as the route.
+
+**Adding them naively would double-count.** `mu_dark` is a *measured* ground-level
+brightness, so it already contains both, at whatever sightline it was measured
+down. Computing them separately and adding them on top repeats the mistake the
+extinction term made and the slides named — *"Hidden Errors (Two Wrongs Make a
+Right)"*. Doing this properly means redefining `mu_dark` as airglow and
+atmosphere only, and that means knowing how much to take out — which is
+question 16.
 
 ## 11. Readout overhead is not modelled — BUILD
 
@@ -270,6 +285,114 @@ in `test_eso.py`.
 It is the same disease the project diagnosed in the original prototype and named
 *"Hidden Errors (Two Wrongs Make a Right)"*, and question 2 is a second instance:
 an unknown secondary cancelling a fitted throughput.
+
+## 16. Everything measured here looks in one direction — OBSERVE
+
+**Measured.** 123 frames over 18 nights, and one target: the headers give four
+names — AT2025wny, SN2025wny, ZTF25abnjznp, 20251017-AT2025wny — to one
+supernova. Ecliptic latitude spans 0.1°, galactic latitude 0.1°, solar elongation
+7°.
+
+**What it costs.** The measured `mu_dark` values, 21.44 / 20.92 / 20.04, are not
+Lulin's dark sky. They are Lulin's dark sky *towards ecliptic +16 and galactic
++21*, where zodiacal light and scattered starlight are a large share of the
+total. Corrected to Lulin's own brightness, the full swing from the ecliptic
+plane to the pole is **0.17 mag in g'**, 0.19 in r' and 0.10 in i', saturating
+above about 60° of ecliptic latitude. `presets.json` carries one number per band and has no way to
+say which direction it applies to. This is a known bias in a shipped value,
+which makes it worse than questions 9 and 10 — those are merely missing.
+
+It also means those two questions cannot be *calibrated* here at all, only
+modelled. A model can still be anchored, and the anchoring turns out to be
+cheap: SkyCalc answers for this exact sightline, so the measured value stays the
+absolute reference while the model supplies only the variation. The obvious
+objection — that SkyCalc has no Lulin, only ESO sites — bites less than it looks. Altitude is
+irrelevant — across La Silla, Paranal and Armazones, 2400 m to 3060 m, the
+component shares move by 0.1 percentage point. Geography is not, and the check
+is direct: SkyCalc's moonless Paranal sky at our sightline is 22.16 / 21.21 /
+20.21 AB mag/arcsec² in g'r'i' where the frames measure 21.44 / 20.92 / 20.04.
+
+**Lulin is brighter in every band, by 0.72 / 0.29 / 0.17, and the colour says
+what it is.** Airglow lives in the near-infrared OH bands, so an airglow excess
+would be red-weighted; this is monotonically the other way. That is scattered
+artificial light or aerosol, and SkyCalc has no term for either at a site it does
+not have.
+
+It does not block the correction, because zodiacal light is interplanetary and
+therefore identical from both mountains. Lulin's total is measured and 1.94×
+Paranal's in g', so the zodiacal share is smaller by exactly that ratio and the
+pointing term shrinks with it. What it *does* mean is that the excess is a third
+component nobody has characterised, and artificial light scatters worse towards
+the horizon and towards towns — so the real sky at Lulin varies with azimuth and
+elevation for a reason no model here contains, and 123 frames down one sightline
+cannot separate it. `skycalc.AT_LULIN` holds the corrected numbers,
+`skycalc.LULIN_VS_PARANAL` the comparison, and `skycalc.query()` regenerates
+both.
+
+**What would settle it.** Fields spread in ecliptic and galactic latitude — which
+the airmass night in question 4 could carry for free if the fields are chosen for
+it rather than for convenience.
+
+---
+
+## Building 9, 10 and 16: the plan, with the numbers already in hand
+
+Written out because the measuring is done and only the coding is left. Nothing
+below needs the observatory, a new night, or an answer from anyone.
+
+**The target.** `mu_sky` gains a term and `mu_dark` changes meaning:
+
+```
+mu_sky = -2.5 log10( Flux_local(mu_dark) + Flux_zodiacal(pointing) + Flux_moon )
+```
+
+where `mu_dark` stops being "the dark sky" and becomes **airglow, upper
+atmosphere and Lulin's own light pollution** — everything emitted or scattered
+below the top of the atmosphere. Zodiacal light and scattered starlight leave it
+and are computed from where the telescope is pointing.
+
+**Step 1 — take the interplanetary part out of the measured values.** Already
+computed: at Lulin, zodiacal plus starlight is 27.4% of the g' sky, 26.7% of r'
+and 13.7% of i' (`skycalc.AT_LULIN`). So the three band `mu_dark` entries in
+`presets.json` become
+
+| band | now (total) | becomes (local only) |
+|---|---|---|
+| g' | 21.44 | **21.79** |
+| r' | 20.92 | **21.26** |
+| i' | 20.04 | **20.20** |
+
+and their provenance changes from MEASURED to DERIVED, since a model supplied
+the split. The site-wide fallback 21.5 and u' have no measurement to split and
+should stay as they are, labelled.
+
+**Step 2 — give the engine the pointing.** It already has what it needs:
+`target.coordinates` and the observation time are how airmass is computed, so
+ecliptic latitude and solar elongation are a coordinate transform away, no new
+input. The zodiacal term is a function of those two and the band.
+
+**Step 3 — the zodiacal model itself.** `skycalc.query()` regenerates it for any
+geometry. A table over ecliptic latitude at a few elongations, interpolated,
+is enough — the dependence is smooth and saturates above about 60° of ecliptic
+latitude. The whole swing is 0.17 mag in g', 0.19 in r', 0.10 in i', so this is
+a correction and not a rewrite.
+
+**Step 4 — what will break, and should.** `test_provenance.py` fails on any
+changed preset until the table is updated. `test_lulin.py` asserts CASTOR
+reproduces the measured sky to under 0.5%; that comparison has to move to the
+new decomposition or it will be comparing a local-only `mu_dark` against a total
+measurement. Anything asserting `mu_dark` is a scalar per band needs the
+pointing argument threaded through.
+
+**What this still will not do.** The light pollution in step 1 is folded into
+`mu_dark` as if it were isotropic, and it is not — artificial light scatters
+worse towards the horizon and towards towns. That part stays uncharacterised
+until there are frames pointing in more than one direction, which is why 16 is
+an OBSERVE and not a BUILD.
+
+**Do not** compute zodiacal light and add it to the present `mu_dark`. That
+counts a quarter of the sky twice, and it is the same error the extinction term
+made.
 
 ---
 

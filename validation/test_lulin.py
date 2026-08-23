@@ -77,6 +77,44 @@ def test_sophia_pixels_are_fifteen_microns(lot):
     assert lot["camera"].pixel_pitch == 15.0
 
 
+def test_the_frames_are_one_target_down_one_sightline():
+    """The limit that bounds most of what this suite can conclude.
+
+    123 frames over 18 nights reads like coverage. It is not: the headers give
+    four names to one supernova, so the ecliptic latitude spans 0.1 degrees, the
+    galactic latitude spans 0.1, and the solar elongation spans 7. Every
+    throughput, every sky brightness and every extinction coefficient here is
+    measured looking in one direction.
+
+    Asserted rather than remarked because two open questions turn on it.
+    Zodiacal light and scattered starlight (QUESTIONS.md 9 and 10) cannot be
+    calibrated against data with no pointing diversity, only modelled. And the
+    measured mu_dark is the sky *towards ecliptic +16*, where those two are a
+    large share of a moonless total — it is not a site constant, and
+    presets.json has no way to say so.
+    """
+    s = lulin.SIGHTLINE
+    assert s["targets"] == 1 and s["header_names"] == 4
+    for key in ("ecliptic_latitude_deg", "galactic_latitude_deg"):
+        lo, hi = s[key]
+        assert hi - lo < 0.5
+
+
+def test_no_night_sweeps_enough_airmass_to_fit_extinction():
+    """Why QUESTIONS.md 4 needs telescope time and not more reduction.
+
+    Fitting an airmass term needs one night that moves through airmass, so that
+    transparency is held roughly fixed while the column changes. Every night
+    here is a 20 to 70 minute snapshot: the largest span is 0.19 and the median
+    0.08, against an overall 1.03 to 1.59 accumulated across 18 separate nights.
+    What the fit measured was therefore mostly night-to-night transparency,
+    which is exactly why it returned r' as the most extinguished band.
+    """
+    s = lulin.SIGHTLINE
+    assert s["largest_single_night_airmass_span"] < 0.25
+    assert s["airmass"][1] - s["airmass"][0] > 0.5   # plenty of range, wrong axis
+
+
 def test_the_mirrors_are_the_ones_trebur_supplied(lot):
     """Closes the question this suite held open with a strict xfail.
 

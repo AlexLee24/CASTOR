@@ -29,7 +29,7 @@ PROVENANCE = {
     "lulin.environment.location.latitude_deg": (23.47, DOCUMENT, "site pages give 23.469447; frame SITELAT 23.4686"),
     "lulin.environment.location.longitude_deg": (120.87, DOCUMENT, "site pages give 120.872624; frame SITELONG 120.8736"),
     "lulin.environment.location.elevation_m": (2862.0, DOCUMENT, "site pages and frame SITEELEV agree"),
-    "lulin.environment.mu_dark": (21.5, GUESS, "fallback only; g'r'i' measured on their filters"),
+    "lulin.environment.mu_dark": (21.5, GUESS, "fallback only; g'r'i' measured on their filters, all down one sightline"),
     "lulin.environment.extinction_coeff": (0.17, GUESS, "three sources disagree; see QUESTIONS.md 4"),
     "lulin.median_seeing_fwhm": (1.4, GUESS, "no source, but 123 frames give a median FWHM of 1.34\""),
 
@@ -77,9 +77,9 @@ PROVENANCE = {
     "lulin.filters.Sloan_u.filter_transmission": (1.0, DOCUMENT, "peak of the same curve; 0.9 was the placeholder all five once carried"),
 
     # ---- Lulin per-band values, from the photometry -------------------------
-    "lulin.filters.Sloan_g.environment.mu_dark": (21.44, MEASURED, "moonless frames, 7 nights"),
-    "lulin.filters.Sloan_r.environment.mu_dark": (20.92, MEASURED, "moonless frames, 12 nights"),
-    "lulin.filters.Sloan_i.environment.mu_dark": (20.04, MEASURED, "moonless frames, 7 nights"),
+    "lulin.filters.Sloan_g.environment.mu_dark": (21.44, MEASURED, "moonless frames, 7 nights, one sightline at ecliptic +16 / galactic +21"),
+    "lulin.filters.Sloan_r.environment.mu_dark": (20.92, MEASURED, "moonless frames, 12 nights, one sightline at ecliptic +16 / galactic +21"),
+    "lulin.filters.Sloan_i.environment.mu_dark": (20.04, MEASURED, "moonless frames, 7 nights, one sightline at ecliptic +16 / galactic +21"),
     "lulin.filters.Sloan_g.telescope.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
     "lulin.filters.Sloan_r.telescope.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
     "lulin.filters.Sloan_i.telescope.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),

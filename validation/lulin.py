@@ -64,6 +64,33 @@ MEASURED_BANDPASS = {
     "Sloan_z": dict(centroid=962.1, fwhm=278.0, peak=0.998, integral=274.6),
 }
 
+#: What the 123 frames actually cover, which is much less than 123 frames and
+#: 18 nights suggests. Every one of them is the same supernova — the headers
+#: give it four names, AT2025wny / SN2025wny / ZTF25abnjznp / 20251017-AT2025wny,
+#: and they are one object. So every number this module reports is measured down
+#: a single line of sight, and every night is a 20 to 70 minute snapshot rather
+#: than a track.
+#:
+#: Two things follow, and both are limits rather than errors:
+#:
+#: `mu_dark` is not "Lulin's dark sky". It is Lulin's dark sky towards ecliptic
+#: latitude +16 and galactic latitude +21, where zodiacal light and scattered
+#: starlight are a substantial part of the total. A user pointing somewhere else
+#: gets a different sky, and presets.json cannot currently say so.
+#:
+#: The extinction fit was never going to work. Separating an airmass term from
+#: night-to-night transparency needs one night that sweeps airmass; the largest
+#: sweep any single night here manages is 0.19, and the median is 0.08.
+SIGHTLINE = {
+    "targets": 1, "header_names": 4, "frames": 123, "nights": 18,
+    "ecliptic_latitude_deg": (15.9, 16.0),
+    "galactic_latitude_deg": (21.0, 21.1),
+    "solar_elongation_deg": (128.0, 135.2),
+    "airmass": (1.03, 1.59),
+    "largest_single_night_airmass_span": 0.19,
+    "median_single_night_airmass_span": 0.08,
+}
+
 #: Every transmission curve Lulin publishes, measured the same way as
 #: MEASURED_BANDPASS above: passband taken as the contiguous run above 5% of
 #: peak, integrated to 1100 nm where silicon stops responding. `leak` is

@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 import lco_etc
+import skycalc
 from castor import moon
 
 #: One geometry, held fixed, so only the band can vary.
@@ -103,3 +104,114 @@ def test_mu_sky_leaves_the_model_in_one_system_and_is_read_in_another():
 
     source = inspect.getsource(calculator)
     assert "convert_ab_to_wavelength_flux(mu_sky" in source
+
+
+# ==========================================
+# What the sky is made of, along our sightline
+# ==========================================
+
+def test_half_the_g_band_dark_sky_never_touched_the_atmosphere():
+    """The number that decides how questions 9 and 10 must be built.
+
+    At the sightline all 123 frames look down, zodiacal light plus scattered
+    starlight is 53% of a moonless g' sky, 35% of r' and 16% of i'. Every one of
+    those photons is already inside the measured mu_dark, because mu_dark is a
+    brightness someone measured from the ground.
+
+    So computing zodiacal light from the pointing and adding it to mu_dark would
+    count half the g' sky twice. That is the same shape of error the extinction
+    term made, and the one the project's slides named "Hidden Errors (Two Wrongs
+    Make a Right)". The safe construction subtracts before it adds.
+    """
+    share = skycalc.SIGHTLINE_STUDY["zodiacal_and_starlight_share"]
+    assert share["g'"] > 0.5
+    assert share["g'"] > share["r'"] > share["i'"]      # bluer sky, more zodiacal
+
+
+def test_pointing_alone_moves_the_dark_sky_by_a_third_of_a_magnitude():
+    """How wrong one site-wide mu_dark can be, and it is not small.
+
+    From the ecliptic plane to the pole the g' sky darkens by 0.35 mag, r' by
+    0.26 and i' by 0.12, saturating above about 60 degrees of ecliptic latitude.
+    presets.json carries a single number per band, measured at +15.9, and has no
+    way to say which direction it applies to.
+    """
+    table = skycalc.SIGHTLINE_STUDY["pointing_dmag"]
+    swing = {b: table[90.0][b] - table[0.0][b] for b in ("g'", "r'", "i'")}
+    assert swing["g'"] == pytest.approx(0.349, abs=0.005)
+    assert swing["g'"] > swing["r'"] > swing["i'"]
+    # It saturates: the last 30 degrees buy nothing.
+    assert table[90.0]["g'"] == pytest.approx(table[60.0]["g'"], abs=0.001)
+
+
+def test_the_sky_grows_with_airmass_at_a_rate_that_depends_on_the_band():
+    """Why the xfail in test_eso.py cannot be closed with a scalar.
+
+    From X=1.1 to X=2.0 the sky brightens by 23% in g' but 58% in i'. The cause
+    is the component mix rather than anything about the filters: i' is mostly
+    upper atmosphere and airglow, which are emitted inside the column and
+    lengthen with it, while over half of g' is zodiacal light, which arrives from
+    outside and is extinguished on the way in. One number fitted to one band
+    would be wrong in every other.
+    """
+    growth = skycalc.SIGHTLINE_STUDY["growth_to_airmass_2"]
+    assert growth["i'"] > 2.0 * growth["g'"]
+    assert growth["u'"] < growth["g'"] < growth["r'"] < growth["i'"]
+
+
+def test_the_component_shares_do_not_care_about_the_observatory_altitude():
+    """Bounds one of the two ways standing in Paranal for Lulin could hurt.
+
+    SkyCalc knows only ESO's sites. Lulin at 2862 m sits between La Silla at 2400
+    and Armazones at 3060, and across that whole range the zodiacal-plus-
+    starlight share of the g' sky moves by 0.1 percentage point.
+
+    What this does *not* test is geography: all three are in northern Chile, and
+    airglow amplitude varies with geomagnetic latitude, season and solar cycle.
+    Lulin is at 23.5 N against Paranal's 24.6 S, comparable in magnitude and
+    opposite in hemisphere, and nothing here checks that. The reason it is
+    tolerable anyway is that no absolute brightness is taken from SkyCalc: the
+    measured mu_dark stays the anchor and the model supplies only ratios.
+    """
+    sites = skycalc.SIGHTLINE_STUDY["site_insensitivity"]
+    assert max(sites.values()) - min(sites.values()) < 0.002
+
+
+def test_lulin_is_brighter_than_paranal_and_the_colour_says_why():
+    """The in-situ check on borrowing an ESO model, and it does not come free.
+
+    SkyCalc's moonless Paranal sky at our own sightline is 22.16 / 21.21 / 20.21
+    AB mag/arcsec2 in g'r'i'. The frames measure 21.44 / 20.92 / 20.04. Lulin is
+    brighter in every band, by 0.72 / 0.29 / 0.17.
+
+    The colour identifies it. Airglow's strength is in the near-infrared OH
+    bands, so an airglow excess would be red-weighted; this is monotonically the
+    other way. Scattered artificial light and aerosols both look like this, and
+    neither is in a model for a site it does not have.
+    """
+    excess = {b: v["excess"] for b, v in skycalc.LULIN_VS_PARANAL.items()
+              if v["excess"] is not None}
+    assert all(e > 0 for e in excess.values())
+    assert excess["g'"] > excess["r'"] > excess["i'"]      # blue-weighted, not airglow
+    assert excess["g'"] > 0.5
+
+
+def test_the_lulin_shares_follow_from_the_measured_excess_alone():
+    """Why the site mismatch does not stop the work.
+
+    Zodiacal light is interplanetary: its absolute surface brightness is the same
+    from any mountain pointed at the same ecliptic coordinates. Lulin's total is
+    measured and 1.94x Paranal's in g', so the zodiacal share is smaller by
+    exactly that ratio — 27% rather than 53% — and the pointing term shrinks with
+    it, from 0.35 mag plane-to-pole to 0.17. No new observation is needed for
+    this correction; the anchor is our own photometry throughout.
+    """
+    for band in ("g'", "r'", "i'"):
+        ratio = 10.0 ** (0.4 * skycalc.LULIN_VS_PARANAL[band]["excess"])
+        expected = skycalc.SIGHTLINE_STUDY["zodiacal_and_starlight_share"][band] / ratio
+        assert skycalc.AT_LULIN["zodiacal_and_starlight_share"][band] == pytest.approx(
+            expected, abs=0.002)
+    # And the pointing swing shrinks in step, most in the band that changed most.
+    at_lulin = skycalc.AT_LULIN["pointing_dmag_plane_to_pole"]
+    assert at_lulin["g'"] == pytest.approx(0.174, abs=0.005)
+    assert at_lulin["g'"] < 0.6 * 0.349
