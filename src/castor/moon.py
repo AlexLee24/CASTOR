@@ -4,9 +4,21 @@ from typing import TypeAlias, cast, Any
 
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun, get_body
+from astropy.utils import iers
 import astropy.units as u
 
 Numeric: TypeAlias = float | NDArray[np.float64]
+
+# astropy's IERS_Auto raises ValueError rather than extrapolating once its bundled
+# Earth-orientation table is more than 30 days stale relative to *now* — a policy
+# aimed at applications doing sub-arcsecond astrometry, not at seeing-limited
+# pointing. It bites on the exact thing an exposure time calculator is for:
+# planning a night more than a month out, offline. None here means "extrapolate
+# and warn" instead of "raise" — astropy's own fallback is a 50-year polar-motion
+# mean, good to the arcsecond, which is well inside seeing_fwhm for any target this
+# reaches. This is a process-wide astropy setting, so it is set once at import time
+# rather than per call.
+iers.conf.auto_max_age = None
 
 __all__ = [
     "calculate_sky_brightness",
