@@ -335,6 +335,67 @@ it rather than for convenience.
 
 ---
 
+## Building 9, 10 and 16: the plan, with the numbers already in hand
+
+Written out because the measuring is done and only the coding is left. Nothing
+below needs the observatory, a new night, or an answer from anyone.
+
+**The target.** `mu_sky` gains a term and `mu_dark` changes meaning:
+
+```
+mu_sky = -2.5 log10( Flux_local(mu_dark) + Flux_zodiacal(pointing) + Flux_moon )
+```
+
+where `mu_dark` stops being "the dark sky" and becomes **airglow, upper
+atmosphere and Lulin's own light pollution** — everything emitted or scattered
+below the top of the atmosphere. Zodiacal light and scattered starlight leave it
+and are computed from where the telescope is pointing.
+
+**Step 1 — take the interplanetary part out of the measured values.** Already
+computed: at Lulin, zodiacal plus starlight is 27.4% of the g' sky, 26.7% of r'
+and 13.7% of i' (`skycalc.AT_LULIN`). So the three band `mu_dark` entries in
+`presets.json` become
+
+| band | now (total) | becomes (local only) |
+|---|---|---|
+| g' | 21.44 | **21.79** |
+| r' | 20.92 | **21.26** |
+| i' | 20.04 | **20.20** |
+
+and their provenance changes from MEASURED to DERIVED, since a model supplied
+the split. The site-wide fallback 21.5 and u' have no measurement to split and
+should stay as they are, labelled.
+
+**Step 2 — give the engine the pointing.** It already has what it needs:
+`target.coordinates` and the observation time are how airmass is computed, so
+ecliptic latitude and solar elongation are a coordinate transform away, no new
+input. The zodiacal term is a function of those two and the band.
+
+**Step 3 — the zodiacal model itself.** `skycalc.query()` regenerates it for any
+geometry. A table over ecliptic latitude at a few elongations, interpolated,
+is enough — the dependence is smooth and saturates above about 60° of ecliptic
+latitude. The whole swing is 0.17 mag in g', 0.19 in r', 0.10 in i', so this is
+a correction and not a rewrite.
+
+**Step 4 — what will break, and should.** `test_provenance.py` fails on any
+changed preset until the table is updated. `test_lulin.py` asserts CASTOR
+reproduces the measured sky to under 0.5%; that comparison has to move to the
+new decomposition or it will be comparing a local-only `mu_dark` against a total
+measurement. Anything asserting `mu_dark` is a scalar per band needs the
+pointing argument threaded through.
+
+**What this still will not do.** The light pollution in step 1 is folded into
+`mu_dark` as if it were isotropic, and it is not — artificial light scatters
+worse towards the horizon and towards towns. That part stays uncharacterised
+until there are frames pointing in more than one direction, which is why 16 is
+an OBSERVE and not a BUILD.
+
+**Do not** compute zodiacal light and add it to the present `mu_dark`. That
+counts a quarter of the sky twice, and it is the same error the extinction term
+made.
+
+---
+
 ## Traps
 
 Not open questions. Recorded because each one looks like a source and is not, and
