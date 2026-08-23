@@ -84,20 +84,51 @@ def _icon(source, destination, size):
     return out.save(destination)
 
 
+#: Apple's required .iconset members: (filename, pixel size). The @2x entries
+#: are what a Retina Dock actually samples — omit them and Big Sur silently
+#: falls back to its own generic rounded-square plate behind an inset copy of
+#: whatever size it could find, which is the "icon in a box" look this exists
+#: to avoid. 16 px was missing from the previous approach entirely.
+ICONSET_MEMBERS = (
+    ("icon_16x16.png", 16), ("icon_16x16@2x.png", 32),
+    ("icon_32x32.png", 32), ("icon_32x32@2x.png", 64),
+    ("icon_128x128.png", 128), ("icon_128x128@2x.png", 256),
+    ("icon_256x256.png", 256), ("icon_256x256@2x.png", 512),
+    ("icon_512x512.png", 512), ("icon_512x512@2x.png", 1024),
+)
+
+
 def _desktop(source):
     """The platform icon containers build.spec points at.
 
-    Written out rather than letting PyInstaller convert a PNG at build time:
-    that path needs Pillow installed wherever the build runs, and this way a
-    Windows build gets the right .ico without anyone having to think about it.
-    Regenerating the .icns needs macOS — Pillow shells out to iconutil — which
-    is why both are committed.
+    The .ico is written directly — Pillow's writer needs only the size list.
+    The .icns is not: Pillow's own ICNS encoder skips 16 px and writes a single
+    entry per byte-size with no @1x/@2x distinction, which is exactly the
+    malformed shape that makes Big Sur+ distrust an icon and re-box it in a
+    system-drawn plate. `iconutil` is the tool Apple's own icon compiler uses
+    and is what actually settles that, which needs macOS and is why both output
+    files are committed rather than built fresh every time.
     """
+    import shutil, subprocess, tempfile
+
     DESKTOP.mkdir(parents=True, exist_ok=True)
     image = Image.open(source).convert("RGBA")
-    image.resize((1024, 1024), Image.LANCZOS).save(DESKTOP / "castor.icns")
     image.save(DESKTOP / "castor.ico",
                sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+
+    if shutil.which("iconutil") is None:
+        print("  iconutil not found (not macOS) — castor.icns left as committed")
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        iconset = Path(tmp) / "castor.iconset"
+        iconset.mkdir()
+        for name, size in ICONSET_MEMBERS:
+            image.resize((size, size), Image.LANCZOS).save(iconset / name)
+        subprocess.run(
+            ["iconutil", "-c", "icns", str(iconset), "-o", str(DESKTOP / "castor.icns")],
+            check=True,
+        )
 
 
 def main():

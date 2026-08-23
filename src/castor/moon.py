@@ -4,9 +4,21 @@ from typing import TypeAlias, cast, Any
 
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz, get_sun, get_body
+from astropy.utils import iers
 import astropy.units as u
 
 Numeric: TypeAlias = float | NDArray[np.float64]
+
+# astropy's IERS_Auto raises ValueError rather than extrapolating once its bundled
+# Earth-orientation table is more than 30 days stale relative to *now* — a policy
+# aimed at applications doing sub-arcsecond astrometry, not at seeing-limited
+# pointing. It bites on the exact thing an exposure time calculator is for:
+# planning a night more than a month out, offline. None here means "extrapolate
+# and warn" instead of "raise" — astropy's own fallback is a 50-year polar-motion
+# mean, good to the arcsecond, which is well inside seeing_fwhm for any target this
+# reaches. This is a process-wide astropy setting, so it is set once at import time
+# rather than per call.
+iers.conf.auto_max_age = None
 
 __all__ = [
     "calculate_sky_brightness",
@@ -25,8 +37,8 @@ def get_moon_and_target_geometry(
     target_ra: float, 
     target_dec: float, 
     obs_time_utc: str | list[str],
-    lon: float = 120.8736,   # Default to Lulin Observatory
-    lat: float = 23.4700,
+    lon: float = 120.87,     # Default to Lulin Observatory; unused when the caller
+    lat: float = 23.47,      # supplies env.location, which calculator.py always does
     elevation: float = 2862.0
 ) -> tuple[Numeric, Numeric, Numeric, Numeric]:
     """
@@ -62,8 +74,8 @@ def get_moon_and_target_geometry(
 
 def get_sun_elevation(
     obs_time_utc: str | list[str],
-    lon: float = 120.8736,   # Default to Lulin Observatory
-    lat: float = 23.4700,
+    lon: float = 120.87,     # Default to Lulin Observatory; unused when the caller
+    lat: float = 23.47,      # supplies env.location, which calculator.py always does
     elevation: float = 2862.0
 ) -> Numeric:
     """
@@ -136,8 +148,8 @@ def calculate_sky_brightness(
     obs_time_utc: str | list[str],
     mu_dark: float,
     extinction_coeff: float,
-    lon: float = 120.8736,
-    lat: float = 23.4700,
+    lon: float = 120.87,
+    lat: float = 23.47,
     elevation: float = 2862.0
 ) -> Numeric:
     """

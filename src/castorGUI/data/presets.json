@@ -155,7 +155,16 @@
       }
     },
     "vlt": {
-      "name": "VLT / FORS2 (hardware only)",
+      "name": "VLT / FORS2 (Paranal)",
+      "environment": {
+        "location": {
+          "latitude_deg": -24.6275,
+          "longitude_deg": -70.4042,
+          "elevation_m": 2635.0
+        },
+        "mu_dark": 21.61,
+        "extinction_coeff": 0.135
+      },
       "telescopes": {
         "VLT": {
           "name": "VLT 8.0 m",
@@ -197,6 +206,88 @@
           }
         }
       }
+    },
+    "other": {
+      "name": "Other",
+      "environment": {
+        "location": {
+          "latitude_deg": 24.1144,
+          "longitude_deg": 121.2220,
+          "elevation_m": 2756.0
+        },
+        "mu_dark": 21.1,
+        "extinction_coeff": 0.17
+      },
+      "telescopes": {
+        "RedCat51": {
+          "name": "William Optics RedCat 51",
+          "telescope": {
+            "primary_mirror_diameter": 0.051,
+            "secondary_mirror_diameter": 0.0,
+            "focal_length": 0.250,
+            "optical_throughput": 0.9
+          }
+        },
+        "RedCat71": {
+          "name": "William Optics RedCat 71",
+          "telescope": {
+            "primary_mirror_diameter": 0.071,
+            "secondary_mirror_diameter": 0.0,
+            "focal_length": 0.350,
+            "optical_throughput": 0.9
+          }
+        },
+        "FLT91": {
+          "name": "William Optics Fluorostar 91",
+          "telescope": {
+            "primary_mirror_diameter": 0.091,
+            "secondary_mirror_diameter": 0.0,
+            "focal_length": 0.540,
+            "optical_throughput": 0.9
+          }
+        },
+        "ZS73III": {
+          "name": "William Optics Zenithstar 73 III",
+          "telescope": {
+            "primary_mirror_diameter": 0.073,
+            "secondary_mirror_diameter": 0.0,
+            "focal_length": 0.430,
+            "optical_throughput": 0.9
+          }
+        },
+        "FSQ106": {
+          "name": "Takahashi FSQ-106EDX4",
+          "telescope": {
+            "primary_mirror_diameter": 0.106,
+            "secondary_mirror_diameter": 0.0,
+            "focal_length": 0.530,
+            "optical_throughput": 0.9
+          }
+        }
+      },
+      "cameras": {
+        "ASI2600MC": {
+          "name": "ZWO ASI2600MC Pro",
+          "camera": {
+            "pixel_pitch": 3.76,
+            "quantum_efficiency": 0.80,
+            "dark_current_rate": 0.000514,
+            "readout_noise": 1.51,
+            "full_well_capacity": 16760
+          }
+        },
+        "ASI533MC": {
+          "name": "ZWO ASI533MC Pro",
+          "camera": {
+            "pixel_pitch": 3.76,
+            "quantum_efficiency": 0.80,
+            "dark_current_rate": 0.000514,
+            "readout_noise": 1.5,
+            "full_well_capacity": 16650
+          }
+        }
+      },
+      "filters": {}
     }
   }
 }

@@ -1022,8 +1022,16 @@
                 select.value = first;
                 applyFragment(cat.section, entries[first][cat.key]);
                 if (cat.kind === 'filters') { applyBand(entries[first]); }
+                collapseDetails(cat.panel);
+            } else {
+                // A real profile can still leave one catalogue empty — "other" has
+                // no filters yet. fillSelect above already fell that select back to
+                // Custom, but setting .value in JS fires no change event, so
+                // bindSlice's own reveal-on-Custom never runs. Do here what that
+                // handler would have done: there is no data behind the selection,
+                // so show the fields that are now the only way to describe it.
+                revealDetails(cat.panel);
             }
-            collapseDetails(cat.panel);
         });
         renderSpecs();
     }

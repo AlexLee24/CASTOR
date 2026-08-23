@@ -269,10 +269,27 @@ it is not.
 
 ## 14. The VLT profile is mostly invention — DECIDE
 
-Twelve of its fifteen values are `GUESS`, against Lulin's twelve out of
-forty-five. It is not the default, but it is selectable, and a user who picks it
-gets an answer assembled mostly from numbers nobody sourced. Either source it,
-mark it in the GUI as a demonstration profile, or drop it.
+**Partly closed.** VLT had no `environment` at all — no location, no sky — while
+every amateur-gear question this session was busy asking who could source one.
+The difference is that Paranal's site is not a question: it is one of the most
+precisely documented observatory locations there is, and leaving it unset was
+an oversight from treating VLT like a genuinely portable hardware family
+rather than what it actually is, a fixed installation.
+
+It now has one, fully sourced. Location and `mu_dark` are ESO's own published
+figures (Paranal astroclimate page, Table 1: zenith-corrected V-band mean from
+3900 FORS1 images over 174 nights). `extinction_coeff` is Patat et al. 2011's
+measured spectral extinction curve for Paranal, integrated against V_HIGH+114's
+own measured transmission curve rather than read off a table by eye —
+`eso_etc.paranal_extinction_for_filter()` reproduces it, and
+`test_paranal_extinction_falls_toward_the_red()` guards the transcription.
+
+Twelve of fifteen *instrument* values are still `GUESS` — the telescope's
+secondary and focal length, the CCD's pixel pitch and QE, both filters'
+centres and bandwidths. It is still not the default, still selectable, and a
+user who picks it still gets an instrument assembled mostly from numbers
+nobody sourced. Source them, mark VLT in the GUI as a demonstration profile,
+or drop it — that decision is unchanged.
 
 ## 15. FORS2's throughput is a fudge that works in one band — BUILD
 

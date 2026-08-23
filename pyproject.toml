@@ -11,9 +11,6 @@ dependencies = [
     "numpy>=2.4.4",
     "pydantic>=2.13.3",
     "pywebview>=6.2.1",
-    "scipy>=1.17.1",
-    "skyfield>=1.54",
-    "speclite>=1.0.0",
     "uvicorn>=0.51.0",
 ]
 
