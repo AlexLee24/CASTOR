@@ -232,7 +232,7 @@ def test_json_carries_the_request_the_response_and_the_choices(run, lulin):
     payload = json.loads(run(*lulin, "--json").stdout)
 
     assert payload["response"]["core"]["total_snr"] > 0
-    assert payload["request"]["instrument"]["telescope"]["primary_mirror_diameter"] == 1.0
+    assert payload["request"]["instrument"]["telescope"]["primary_mirror_diameter"] == 1.02
     assert any(item["path"] == "options.aperture_factor" for item in payload["assumed"])
 
 def test_json_stdout_is_only_json(run, lulin):

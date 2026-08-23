@@ -116,7 +116,7 @@ def test_naming_only_the_site_resolves_a_real_configuration(shipped):
     """First entry listed in each catalogue is the default."""
     fragment = shipped.resolve("lulin")
 
-    assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 1.0  # LOT
+    assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 1.02  # LOT
     assert fragment["instrument"]["camera"]["readout_noise"] == 7.9               # Sophia
     assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8  # Sloan r'
 
@@ -125,7 +125,7 @@ def test_named_entries_override_the_defaults(shipped):
 
     assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 0.406
     assert fragment["instrument"]["camera"]["pixel_pitch"] == 13.0
-    assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 354.0
+    assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 353.4
 
 def test_a_site_fills_in_its_sky_and_location(shipped):
     """The location is the site's alone; the sky is the site's until a band knows better.
@@ -190,7 +190,7 @@ def test_empty_catalogue_is_only_an_error_when_something_was_asked_for(tmp_path)
 def test_resolved_preset_completes_into_a_valid_request(shipped, remainder):
     request = schema.ObservationRequest.model_validate(merged(shipped.resolve("lulin"), remainder))
 
-    assert request.instrument.telescope.primary_mirror_diameter == 1.0
+    assert request.instrument.telescope.primary_mirror_diameter == 1.02
     assert request.environment.location.latitude_deg == 23.47
 
 def test_resolved_preset_runs_through_the_engine(shipped, remainder):

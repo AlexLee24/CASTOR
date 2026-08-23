@@ -55,8 +55,8 @@
         "LOT": {
           "name": "LOT 1.0 m",
           "telescope": {
-            "primary_mirror_diameter": 1.0,
-            "secondary_mirror_diameter": 0.3,
+            "primary_mirror_diameter": 1.02,
+            "secondary_mirror_diameter": 0.36,
             "focal_length": 8.054,
             "optical_throughput": 0.381
           }
@@ -79,7 +79,7 @@
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.01,
             "readout_noise": 7.9,
-            "full_well_capacity": 100000
+            "full_well_capacity": 150000
           }
         },
         "SLT_default": {
@@ -111,9 +111,9 @@
         "Sloan_u": {
           "name": "Sloan u'",
           "optic_filter": {
-            "central_wavelength": 354.0,
-            "filter_bandwidth": 56.0,
-            "filter_transmission": 0.9
+            "central_wavelength": 353.4,
+            "filter_bandwidth": 64.8,
+            "filter_transmission": 1.0
           }
         },
         "Sloan_g": {

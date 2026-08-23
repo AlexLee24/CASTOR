@@ -77,15 +77,56 @@ def test_sophia_pixels_are_fifteen_microns(lot):
     assert lot["camera"].pixel_pitch == 15.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Every frame header carries APTAREA 772125 mm2, which is a 130 mm "
-           "central obstruction on the 1 m primary. The preset says 300 mm, "
-           "typical for an f/8 Ritchey-Chretien. They differ by 8% in "
-           "collecting area and Lulin publishes neither. Needs asking.",
-)
-def test_collecting_area_agrees_with_the_frame_headers(lot):
-    assert lot["area"] == pytest.approx(lulin.HEADER_APTAREA_M2, rel=0.01)
+def test_the_mirrors_are_the_ones_trebur_supplied(lot):
+    """Closes the question this suite held open with a strict xfail.
+
+    Lulin publishes the 2001 offer document, and it states both figures
+    outright: primary 1030 mm outside with an optical diameter above 1020, and
+    secondary 360 mm outside above 350. The preset's 300 mm had no source, and
+    the 130 mm the frame headers seemed to imply was never a mirror at all.
+
+    Light is stopped by the secondary's whole glass disc, so the obstruction is
+    the outside 360 rather than the figured 350. The primary contributes its
+    optical diameter, since the last 10 mm of the blank is not figured.
+    """
+    assert lot["telescope"].primary_mirror_diameter == lulin.OFFER["primary_optical_mm"] / 1000
+    assert lot["telescope"].secondary_mirror_diameter == lulin.OFFER["secondary_outside_mm"] / 1000
+
+
+def test_the_header_area_is_the_hole_in_the_primary_not_the_secondary(lot):
+    """Where the phantom 130 mm secondary came from.
+
+    APTAREA matches pi/4 * (1030^2 - 280^2) to 0.08% — the primary's outside
+    diameter less the hole bored through its middle. That hole is behind the
+    secondary and takes no light out of the beam that the secondary has not
+    already taken; the number MaxIm wrote is not a collecting area. Read against
+    a nominal 1 m aperture it implies a 130 mm obstruction, which is the value
+    this suite spent a while trying to reconcile with a real mirror.
+
+    Against the real geometry the header is 7.9% high, so it was never harmless:
+    it over-states how much light the telescope collects.
+    """
+    import math
+    hole = math.pi / 4 * ((lulin.OFFER["primary_outside_mm"] / 1000) ** 2
+                          - (lulin.OFFER["primary_hole_mm"] / 1000) ** 2)
+    assert lulin.HEADER_APTAREA_M2 == pytest.approx(hole, rel=0.001)
+    assert lulin.HEADER_APTAREA_M2 / lot["area"] == pytest.approx(1.079, abs=0.005)
+
+
+def test_adopting_the_documented_mirrors_left_the_photometry_alone(lot):
+    """Why no throughput had to be refitted.
+
+    Only the product A_eff x T_sys is constrained by the frames, so changing the
+    geometry normally forces the throughput the other way. Here it did not: the
+    documented 1020/360 gives 0.7153 m2 against the 0.7147 the fit assumed from
+    an invented 1000/300, a difference of 0.09%. The two errors in the old pair
+    had been cancelling almost exactly.
+
+    Which is luck, not vindication — and it is the reason the *level* in
+    QUESTIONS.md 1 can now be compared against the coating specification at all.
+    """
+    assert lot["area"] == pytest.approx(0.7153, abs=0.0002)
+    assert lot["area"] / 0.7147 == pytest.approx(1.0, abs=0.002)
 
 
 # ==========================================
@@ -109,13 +150,42 @@ def test_filters_match_their_measured_curves(lot, name):
     assert optic.central_wavelength == pytest.approx(curve["centroid"], abs=0.5)
 
 
-def test_the_u_band_filter_is_still_unverified(lot):
-    """Lulin publishes no curve for LOT u', so it keeps the placeholder shape.
+def test_the_u_band_filter_is_slt_glass_standing_in_for_lot_glass(lot):
+    """u' is no longer a placeholder, and is not LOT's filter either.
 
-    Marked here rather than silently left: 0.9 transmission is what the other
-    four carried before measurement, and all four turned out wrong.
+    Lulin publishes no curve for LOT's up_Astrondon_2017. It does publish one
+    for SLT's up_Astrodon_2018, and the preset now carries that: 353.4 nm and an
+    equivalent width of 64.8 nm at unit peak, against a placeholder 354/56/0.9
+    that was 14% narrow and 10% dim. Two Astrodon u' filters bought a year apart
+    are close, but they are not the same piece of glass, and predictions for
+    LOT u' should be read as an Astrodon u' rather than as this telescope's.
     """
-    assert lot["filters"]["Sloan_u"].filter_transmission == 0.9
+    optic = lot["filters"]["Sloan_u"]
+    curve = lulin.PUBLISHED_BANDPASS[("SLT", "u")]
+    assert optic.filter_bandwidth * optic.filter_transmission == pytest.approx(
+        curve["integral"], rel=0.02)
+    assert optic.central_wavelength == pytest.approx(curve["centroid"], abs=0.5)
+
+
+def test_every_filter_lulin_publishes_leaks_in_the_infrared(lot):
+    """A limit on what the top-hat model can be right about, in one band badly.
+
+    None of these filters closes in the infrared; the detector does. Below
+    1100 nm, where silicon still responds, 3 to 9% of what the Sloan filters
+    pass is already outside their own band — small, and absorbed by the fitted
+    throughputs. Johnson U is not small: 22.6% out of band, and 96%
+    transmission at 1200 nm. A rectangle cannot express that, and how much of
+    the leak actually matters depends on the colour of the source, which is
+    exactly what the spectral work in QUESTIONS.md 8 would fix.
+
+    presets.json is Sloan-only, so nothing here changes a preset; it bounds how
+    far the four measured Sloan entries can be trusted.
+    """
+    sloan = [v["leak"] for k, v in lulin.PUBLISHED_BANDPASS.items()
+             if k[1] in ("u", "g", "r", "i")]
+    assert max(sloan) < 0.06
+    assert lulin.PUBLISHED_BANDPASS[("SLT", "U")]["leak"] > 0.20
+    assert min(lulin.TRANSMISSION_AT_1200.values()) > 0.30
 
 
 # ==========================================

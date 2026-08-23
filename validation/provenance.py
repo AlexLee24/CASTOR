@@ -34,8 +34,8 @@ PROVENANCE = {
     "lulin.median_seeing_fwhm": (1.4, GUESS, "no source, but 123 frames give a median FWHM of 1.34\""),
 
     # ---- Lulin, LOT ---------------------------------------------------------
-    "lulin.telescopes.LOT.primary_mirror_diameter": (1.0, DOCUMENT, "site pages; frame APTDIA 1000 mm"),
-    "lulin.telescopes.LOT.secondary_mirror_diameter": (0.3, GUESS, "frame APTAREA implies 0.130; see QUESTIONS.md 2"),
+    "lulin.telescopes.LOT.primary_mirror_diameter": (1.02, DOCUMENT, "Trebur offer, optical specified >1020 mm; 1030 outside. \"1 m\" is the name"),
+    "lulin.telescopes.LOT.secondary_mirror_diameter": (0.36, DOCUMENT, "Trebur offer, outside 360 mm; the whole disc obstructs, not the figured 350"),
     "lulin.telescopes.LOT.focal_length": (8.054, DERIVED, "reproduces the 0.3841\"/pix the frames solve"),
     "lulin.telescopes.LOT.optical_throughput": (0.381, MEASURED, "geometric mean; g'r'i' carry their own"),
 
@@ -48,9 +48,9 @@ PROVENANCE = {
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
     "lulin.cameras.Sophia.quantum_efficiency": (0.85, GUESS, "datasheet curve gives 90/96/87% at g'r'i'; harmless where the band throughput is measured, wrong 3x in z'; QUESTIONS.md 13"),
-    "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet gives 0.0001 at -90 C, frames run at -80 C; QUESTIONS.md 6"),
-    "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet 1 MHz port says 7.0"),
-    "lulin.cameras.Sophia.full_well_capacity": (100000, DOCUMENT, "datasheet, single pixel typical"),
+    "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet -152 gives 0.00025 at -90 C, frames run at -80 C; QUESTIONS.md 6"),
+    "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet -152 1 MHz port says 8.5"),
+    "lulin.cameras.Sophia.full_well_capacity": (150000, DOCUMENT, "datasheet -152, single pixel typical; 100000 was the 13.5 um -132 column"),
 
     # ---- Lulin, Andor iKon-M DU934P-BEX2-DD ---------------------------------
     "lulin.cameras.SLT_default.pixel_pitch": (13.0, DOCUMENT, "datasheet and the SLT page, 13 x 13 um"),
@@ -72,9 +72,9 @@ PROVENANCE = {
     "lulin.filters.Sloan_z.central_wavelength": (962.1, DOCUMENT, "measured curve"),
     "lulin.filters.Sloan_z.filter_bandwidth": (278.0, DOCUMENT, "measured curve, truncated at 1100 nm"),
     "lulin.filters.Sloan_z.filter_transmission": (0.998, DOCUMENT, "measured curve"),
-    "lulin.filters.Sloan_u.central_wavelength": (354.0, GUESS, "no curve published for LOT u'"),
-    "lulin.filters.Sloan_u.filter_bandwidth": (56.0, GUESS, "no curve published for LOT u'"),
-    "lulin.filters.Sloan_u.filter_transmission": (0.9, GUESS, "the value the other four carried before measurement"),
+    "lulin.filters.Sloan_u.central_wavelength": (353.4, DOCUMENT, "SLT's Astrodon 2018 u'; LOT's up_Astrondon_2017 has no published curve"),
+    "lulin.filters.Sloan_u.filter_bandwidth": (64.8, DOCUMENT, "equivalent width of the same curve; the 56.0 placeholder was 14% narrow"),
+    "lulin.filters.Sloan_u.filter_transmission": (1.0, DOCUMENT, "peak of the same curve; 0.9 was the placeholder all five once carried"),
 
     # ---- Lulin per-band values, from the photometry -------------------------
     "lulin.filters.Sloan_g.environment.mu_dark": (21.44, MEASURED, "moonless frames, 7 nights"),

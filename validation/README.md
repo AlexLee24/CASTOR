@@ -133,6 +133,14 @@ Each of these is asserted by a test, so it either stays true or announces itself
   that file may be adopted as a source. The 2026 slides had already named the
   pattern in the original prototype: *"Hidden Errors (Two Wrongs Make a Right)"*.
 
+- **Lulin publishes more than anyone had looked for.** Trebur's 2001 offer
+  document gives LOT's mirrors outright, SOPHIA's datasheet is on the same page,
+  and the filter inventory carries transmission curves for SLT's Astrodon 2018
+  ugriz and UBVRI sets as well as LOT's 2019 griz. Between them they closed the
+  secondary mirror, corrected a full well that was 50% low, and replaced the u'
+  placeholder with a measured curve. Every one of those had been sitting behind
+  a link on the observatory's own site.
+
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
@@ -148,7 +156,11 @@ labelled with who can close it — the observatory, a night of telescope time, u
 or a decision. Nothing open is recorded only here, in a `GUESS` row, or in an
 xfail reason; if it is open, it is in that file.
 
-Three items have been closed by looking harder rather than by asking. Lulin's SLT
+Four items have been closed by looking harder rather than by asking. Lulin
+publishes Trebur's 2001 offer document, which gives LOT's mirrors outright — a
+360 mm secondary, not the 300 the preset guessed, and not the 130 the frame
+headers seemed to imply, which turns out to be the hole through the primary
+rather than any obstruction at all. Lulin's SLT
 page names the camera in full — Andor iKon-M DU934P-BEX2-DD CCD-26868 — which
 fixes the sensor variant and with it the 130 ke- well depth. A photon transfer
 curve over the frames puts read noise at 7.9 e-, confirming the header gain to 2%
