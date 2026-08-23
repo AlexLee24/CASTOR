@@ -109,6 +109,48 @@ PROVENANCE = {
     "vlt.filters.V_HIGH+114.central_wavelength": (550.0, GUESS, "measured curve centroid is 549.2"),
     "vlt.filters.V_HIGH+114.filter_bandwidth": (114.0, GUESS, "matches the filter's name; curve FWHM agrees"),
     "vlt.filters.V_HIGH+114.filter_transmission": (0.51, GUESS, "measured curve peaks at 0.897; the 0.51 absorbs an optical throughput twice too high"),
+
+    # ---- Other, the user's own amateur rig ----------------------------------
+    # Nominally sited at Hehuan Mountain's Yuanfeng viewpoint, an IDA-certified
+    # dark-sky park entrance, but the gear travels — this is a starting point,
+    # not a claim about where any given exposure was actually taken.
+    "other.environment.location.latitude_deg": (24.1144, DOCUMENT, "darksky.tw park boundary map, Yuanfeng (south) anchor"),
+    "other.environment.location.longitude_deg": (121.2220, DOCUMENT, "darksky.tw park boundary map, Yuanfeng (south) anchor"),
+    "other.environment.location.elevation_m": (2756.0, DOCUMENT, "Yuanfeng checkpoint, Taiwan Highway 14A km 24.3"),
+    "other.environment.mu_dark": (21.1, GUESS, "SQM reading reported at Yuanfeng by Taiwan's dark-sky monitoring group; park average is quoted 21.3-21.7. SQM is not exactly Johnson V"),
+    "other.environment.extinction_coeff": (0.17, DERIVED, "borrowed from Lulin's own site value; Yuanfeng is 2756 m against Lulin's 2862 m, both Taiwan high-mountain sites"),
+
+    "other.telescopes.RedCat51.primary_mirror_diameter": (0.051, DOCUMENT, "William Optics spec"),
+    "other.telescopes.RedCat51.secondary_mirror_diameter": (0.0, DOCUMENT, "refractor; no central obstruction"),
+    "other.telescopes.RedCat51.focal_length": (0.250, DOCUMENT, "William Optics spec, f/4.9"),
+    "other.telescopes.RedCat51.optical_throughput": (0.9, GUESS, "no photometric measurement; a plausible multi-coated apo figure, not validated end to end"),
+    "other.telescopes.RedCat71.primary_mirror_diameter": (0.071, DOCUMENT, "William Optics spec"),
+    "other.telescopes.RedCat71.secondary_mirror_diameter": (0.0, DOCUMENT, "refractor; no central obstruction"),
+    "other.telescopes.RedCat71.focal_length": (0.350, DOCUMENT, "William Optics spec, f/4.9"),
+    "other.telescopes.RedCat71.optical_throughput": (0.9, GUESS, "no photometric measurement; a plausible multi-coated apo figure, not validated end to end"),
+    "other.telescopes.FLT91.primary_mirror_diameter": (0.091, DOCUMENT, "William Optics spec (Fluorostar 91)"),
+    "other.telescopes.FLT91.secondary_mirror_diameter": (0.0, DOCUMENT, "refractor; no central obstruction"),
+    "other.telescopes.FLT91.focal_length": (0.540, DOCUMENT, "William Optics spec, f/5.9"),
+    "other.telescopes.FLT91.optical_throughput": (0.9, GUESS, "no photometric measurement; a plausible multi-coated apo figure, not validated end to end"),
+    "other.telescopes.ZS73III.primary_mirror_diameter": (0.073, DOCUMENT, "William Optics spec"),
+    "other.telescopes.ZS73III.secondary_mirror_diameter": (0.0, DOCUMENT, "refractor; no central obstruction"),
+    "other.telescopes.ZS73III.focal_length": (0.430, DOCUMENT, "William Optics spec, f/5.9"),
+    "other.telescopes.ZS73III.optical_throughput": (0.9, GUESS, "no photometric measurement; a plausible multi-coated apo figure, not validated end to end"),
+    "other.telescopes.FSQ106.primary_mirror_diameter": (0.106, DOCUMENT, "Takahashi spec (FSQ-106EDX4)"),
+    "other.telescopes.FSQ106.secondary_mirror_diameter": (0.0, DOCUMENT, "refractor; no central obstruction"),
+    "other.telescopes.FSQ106.focal_length": (0.530, DOCUMENT, "Takahashi spec, f/5.0"),
+    "other.telescopes.FSQ106.optical_throughput": (0.9, GUESS, "no photometric measurement; a plausible multi-coated apo figure, not validated end to end"),
+
+    "other.cameras.ASI2600MC.pixel_pitch": (3.76, DOCUMENT, "ZWO spec, Sony IMX571"),
+    "other.cameras.ASI2600MC.quantum_efficiency": (0.80, DOCUMENT, "ZWO spec, peak QE"),
+    "other.cameras.ASI2600MC.dark_current_rate": (0.000514, DERIVED, "interpolated between ZWO's own published 0.0022 e-/s at 0C and 0.00012 e-/s at -20C to a -10C operating point, assuming the halving-per-degree scaling this suite used for SOPHIA"),
+    "other.cameras.ASI2600MC.readout_noise": (1.51, DOCUMENT, "community-measured at gain 100 (HCG mode); ZWO's headline 1.0e is a different, higher gain"),
+    "other.cameras.ASI2600MC.full_well_capacity": (16760, DOCUMENT, "community-measured at gain 100; ZWO's headline 73ke is gain 0"),
+    "other.cameras.ASI533MC.pixel_pitch": (3.76, DOCUMENT, "ZWO spec, Sony IMX533"),
+    "other.cameras.ASI533MC.quantum_efficiency": (0.80, DOCUMENT, "ZWO spec, peak QE"),
+    "other.cameras.ASI533MC.dark_current_rate": (0.000514, GUESS, "no ASI533-specific figure found; borrowed the ASI2600's own -10C interpolation as a same-generation Sony back-illuminated sensor proxy"),
+    "other.cameras.ASI533MC.readout_noise": (1.5, DOCUMENT, "community-measured at gain 100 (HCG mode); ZWO's headline 1.0e is a different, higher gain"),
+    "other.cameras.ASI533MC.full_well_capacity": (16650, DERIVED, "no ASI533-specific figure found; derived from its own commonly-cited ~13.4 stop dynamic range at gain 100 times its 1.5e read noise, which lands within 1% of the ASI2600's own directly-measured gain-100 full well"),
 }
 
 

@@ -65,7 +65,7 @@ def merged(fragment, remainder):
 # ==========================================
 
 def test_shipped_file_parses(shipped):
-    assert list(shipped.profiles) == ["lulin", "vlt"]
+    assert list(shipped.profiles) == ["lulin", "vlt", "other"]
 
 def test_key_order_survives_loading(shipped):
     """Order is the file author's way of naming defaults, so it has to be preserved."""
