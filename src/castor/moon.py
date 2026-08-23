@@ -25,8 +25,8 @@ def get_moon_and_target_geometry(
     target_ra: float, 
     target_dec: float, 
     obs_time_utc: str | list[str],
-    lon: float = 120.8736,   # Default to Lulin Observatory
-    lat: float = 23.4700,
+    lon: float = 120.87,     # Default to Lulin Observatory; unused when the caller
+    lat: float = 23.47,      # supplies env.location, which calculator.py always does
     elevation: float = 2862.0
 ) -> tuple[Numeric, Numeric, Numeric, Numeric]:
     """
@@ -62,8 +62,8 @@ def get_moon_and_target_geometry(
 
 def get_sun_elevation(
     obs_time_utc: str | list[str],
-    lon: float = 120.8736,   # Default to Lulin Observatory
-    lat: float = 23.4700,
+    lon: float = 120.87,     # Default to Lulin Observatory; unused when the caller
+    lat: float = 23.47,      # supplies env.location, which calculator.py always does
     elevation: float = 2862.0
 ) -> Numeric:
     """
@@ -136,8 +136,8 @@ def calculate_sky_brightness(
     obs_time_utc: str | list[str],
     mu_dark: float,
     extinction_coeff: float,
-    lon: float = 120.8736,
-    lat: float = 23.4700,
+    lon: float = 120.87,
+    lat: float = 23.47,
     elevation: float = 2862.0
 ) -> Numeric:
     """

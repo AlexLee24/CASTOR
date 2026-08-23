@@ -11,9 +11,15 @@ datas = [
 ]
 
 # 你想排除的「垃圾」模組全部寫在這裡，想加幾個就加幾個
+#
+# astropy.visualization pulls in matplotlib at import time (wcsaxes/__init__.py
+# calls pytest.importorskip("matplotlib") itself), and CASTOR only ever touches
+# astropy.time / astropy.coordinates / astropy.units — so it goes too, along
+# with everything matplotlib alone was dragging in (Pillow, fonttools, ...).
 excludes = [
     'pytest',
     'matplotlib',
+    'astropy.visualization',
     'tkinter',
     'IPython',
     'notebook'
@@ -25,7 +31,10 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=[],
-    hookspath=[],
+    # Shadows pyinstaller-hooks-contrib's hook-astropy.py, which crashes the
+    # whole build over one submodule needing matplotlib — see the docstring
+    # in pyinstaller_hooks/hook-astropy.py.
+    hookspath=['pyinstaller_hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=excludes,
