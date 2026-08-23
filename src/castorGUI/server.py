@@ -64,6 +64,7 @@ class DevStaticFiles(StaticFiles):
 app = FastAPI(title="CASTOR ETC")
 app.mount("/css", DevStaticFiles(directory=FRONTEND_DIR / "css"), name="css")
 app.mount("/js", DevStaticFiles(directory=FRONTEND_DIR / "js"), name="js")
+app.mount("/img", DevStaticFiles(directory=FRONTEND_DIR / "img"), name="img")
 
 
 def _versioned(shell: str) -> str:

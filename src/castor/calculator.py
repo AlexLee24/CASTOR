@@ -125,28 +125,37 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     # Sky flux conversion (mu_sky is assumed to be in the AB magnitude system)
     f_lambda_sky = float(physics.convert_ab_to_wavelength_flux(mu_sky, inst.optic_filter.central_wavelength))
 
-    # Compute the sky background count rate
+    # Compute the sky background count rate. No extinction term: mu_sky was
+    # measured from the ground, so the atmosphere is already in it (ATBD 4.2.2 C).
     sky_rate = float(physics.calculate_sky_background_rate(
-        f_lambda_sky, env.extinction_coeff, airmass, 
+        f_lambda_sky,
         inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, pixel_scale
     ))
 
-    # Branch the calculation based on target morphology
+    # Branch the calculation based on target morphology. Each also says what its
+    # brightest pixel is: saturation is a property of the target and the optics, so
+    # it must not move when the photometric aperture drawn around them changes.
     match tgt.morphology:
         case schema.PointMorphology():
             source_rate = float(physics.calculate_point_source_rate(
                 f_lambda_target, env.extinction_coeff, airmass,
                 inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, f_enc
             ))
+            # Divide f_enc back out: calculate_peak_pixel_rate wants the star's whole
+            # flux, and source_rate is only the part the aperture kept.
+            peak_rate = float(physics.calculate_peak_pixel_rate(
+                source_rate / f_enc, total_fwhm, pixel_scale
+            ))
         case schema.ExtendedMorphology():
             source_rate = float(physics.calculate_extended_source_rate(
                 f_lambda_target, env.extinction_coeff, airmass,
                 inst.optic_filter.filter_bandwidth, eff_area, photon_energy, total_throughput, n_pix, pixel_scale
             ))
+            # No PSF peak to find: the model holds surface brightness uniform, so
+            # every pixel in the aperture sees the same rate as every other.
+            peak_rate = source_rate / n_pix
         case _:
             raise ValueError("Unknown target morphology")
-
-    peak_rate = float(physics.calculate_peak_pixel_rate(source_rate, total_fwhm, pixel_scale))
 
     # ---------------------------------------------------------
     # Phase 3 & 4: Strategy Execution & Assembly (strategy solving and response assembly)

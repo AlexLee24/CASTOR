@@ -35,7 +35,7 @@ if str(_THIS_DIR) not in sys.path:
 
 from server import app  # noqa: E402
 
-WINDOW_TITLE = "CASTOR ETC"
+WINDOW_TITLE = "CASTOR"
 STARTUP_TIMEOUT_SECONDS = 15
 
 

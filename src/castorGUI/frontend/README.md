@@ -10,6 +10,7 @@ frontend/
 ├── css/etc.css        # all styling, scoped under .castor-etc
 ├── js/etc.js          # the controller — talks to the engine over HTTP
 ├── js/plotly.min.js   # vendored charting library (standalone build only)
+├── img/               # logo and icons, generated from assets/ — do not hand-edit
 └── index.html         # standalone page shell (see server.py)
 ```
 
@@ -100,6 +101,10 @@ def castor_static(filename):
 ```
 
 Kinder keeps its existing CDN `<script>` for Plotly; no vendored copy is served.
+
+The icons in `img/` are not part of the partial, because a `<head>` is not: only
+the standalone shell can link them. A host that wants the same tab icon links it
+from its own template — `castor_static` already serves the file.
 
 ## Conventions
 

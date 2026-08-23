@@ -55,7 +55,7 @@ flowchart LR
     FWC([full_well_capacity])
     
     %% Observation Settings
-    kap([APERTURE_FACTOR = 1.5])
+    kap([APERTURE_FACTOR = 0.85])
     t_tot([total_exp_time])
     t_single_in([single_exp_time])
     N_exp_in([num_exposures])
@@ -210,7 +210,7 @@ This profile holds user-configurable settings that dictate the desired constrain
 
 | Python Field | Math Symbol | Unit | Description |
 | --- | --- | --- | --- |
-| `aperture_factor` | $k_{\text{ap}}$ | dimensionless | Multiplier defining the photometric aperture radius (default: 1.5). |
+| `aperture_factor` | $k_{\text{ap}}$ | dimensionless | Multiplier defining the photometric aperture radius, in units of $FWHM_{\text{tot}}$. No schema default; callers supply it, and both shipped clients send 0.85 (§5.2). |
 | `total_exp_time` | $t_{\text{total}}$ | s | Cumulative integration time across all frames. |
 | `single_exp_time` | $t_{\text{single}}$ | s | Integration time for an individual sub-exposure frame. |
 | `num_exposures` | $N_{\text{exp}}$ | count | Total number of exposure frames. |
@@ -308,9 +308,13 @@ For extended sources (e.g., galaxies), the input brightness represents a **surfa
 $$Rate_{\text{src, ext}} = Rate_{\text{base}} \cdot (N_{\text{pix}} \cdot S_{\text{pixel}}^2)$$
 
 **C. Sky Background Count Rate ($Rate_{\text{sky}}$)**
-Similar to extended sources, the sky brightness ($\mu_{\text{sky}}$) is first converted into a surface flux density ($F_{\text{sky}, \lambda}$). Because background noise is evaluated on a per-pixel basis, the geometric factor is the area of a single pixel:
+The sky brightness ($\mu_{\text{sky}}$) is first converted into a surface flux density ($F_{\text{sky}, \lambda}$). Because background noise is evaluated on a per-pixel basis, the geometric factor is the area of a single pixel.
 
-$$Rate_{\text{sky}} = Rate_{\text{base, sky}} \cdot S_{\text{pixel}}^2$$
+Unlike A and B, the sky does **not** carry the extinction term. $\mu_{\text{sky}}$ descends from $\mu_{\text{dark}}$, a surface brightness measured from the ground and therefore already through the atmosphere; attenuating it by $10^{-0.4 \cdot k_{\text{ext}} X}$ counts the same atmosphere a second time. The geometric factor is applied to the collected rate directly:
+
+$$Rate_{\text{sky}} = F_{\text{sky}, \lambda} \cdot \Delta\lambda \cdot A_{\text{eff}} \cdot \frac{1}{E_p} \cdot T_{\text{sys}} \cdot S_{\text{pixel}}^2$$
+
+Note that A and B both describe light originating outside the atmosphere — a galaxy's surface brightness is as much a top-of-atmosphere quantity as a star's total flux — which is why they share $Rate_{\text{base}}$ and the sky does not.
 
 ### 4.3 Stage 4: Final Output Metrics
 
@@ -352,13 +356,13 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 
 * **Lunar Contribution Exclusion:** The dynamic computation of moon flux relies on the Krisciunas and Schaefer model. Its detailed mathematical formulation is omitted from the core text because it is a standard formula.
 
-* **Sky Background Extinction:** $Rate_{\text{sky}}$ is currently computed using the same $10^{-0.4 \cdot (k_{\text{ext}} \cdot X)}$ extinction term as target starlight (§4.2.2). Whether airglow-type sky emission should be attenuated by the same atmospheric-extinction model as light arriving from outside the atmosphere has not been confirmed; this is a candidate for future review rather than a settled design decision.
+* **Sky Background Airmass Dependence:** $Rate_{\text{sky}}$ no longer applies the $10^{-0.4 \cdot (k_{\text{ext}} \cdot X)}$ extinction term that target starlight carries (§4.2.2 C). It previously did, which both double-counted an atmosphere already present in the measured $\mu_{\text{dark}}$ and inverted the sign of the real airmass dependence: sky surface brightness *rises* with airmass, since a longer line of sight contains more emitting atmosphere. ESO's FORS2 model puts the sky 17.6% brighter at $X = 1.5$ and 31.8% brighter at $X = 2.0$, and LCO's calculator holds it flat; the previous behaviour lost 6% and 12%. The current treatment is flat — correct in sign to the extent that it no longer moves the wrong way, but it does not yet model the increase. A van Rhijn term over the atmospheric emission components is the remaining work, and belongs with spectral background modelling rather than as another scalar factor. Quantified in `validation/test_eso.py`.
 
 ### 5.2 Optical and PSF Assumptions
 
 * **Gaussian Point Spread Function (PSF):** The derivation of the enclosed flux fraction ($f_{\text{enc}}$) and peak pixel count rates ($Rate_{\text{peak}}$) assumes an idealized, symmetric Gaussian PSF for point sources. Real-world optical aberrations, tracking errors, or structural diffraction spikes may introduce asymmetry that deviates from this model.
 
-* **Aperture Photometry Constraints:** Signal extraction relies on a fixed aperture multiplier ($k_{\text{ap}} = 1.5$), which assumes optimal circular aperture photometry. Complex crowded fields or extended morphology may require adaptive aperture sizing not covered by this baseline.
+* **Aperture Photometry Constraints:** Signal extraction uses a single circular aperture of radius $k_{\text{ap}} \cdot FWHM_{\text{tot}}$, with no adaptive sizing, deblending or PSF fitting; crowded fields and extended morphology may need more. The shipped clients default $k_{\text{ap}}$ to 0.85. There is no one correct value: for a Gaussian PSF the SNR-optimal radius is $0.673 \cdot FWHM$ when the sky dominates and rises towards $1.0 \cdot FWHM$ when the source does, so 0.85 is the choice that stays within 5% of the best achievable SNR across both regimes. The previous default of 1.5 enclosed 99.8% of the source but admitted three times the sky area, giving up 36% of the SNR on a background-limited target. Quantified in `validation/test_eso.py`.
 
 ### 5.3 Detector and Noise Limitations
 

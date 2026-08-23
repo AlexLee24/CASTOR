@@ -119,10 +119,13 @@ def test_geometric_divergence(dummy_stage3_params):
         enclosed_flux_fraction=0.5
     )
     
-    # 2. Sky background (single pixel, S_pixel = 2.0, area = 4)
+    # 2. Sky background (single pixel, S_pixel = 2.0, area = 4). It takes no
+    #    extinction, so the comparison is only geometric with the atmosphere off.
+    sky_params = {k: v for k, v in params.items()
+                  if k not in ("extinction_coeff", "airmass")}
     rate_sky = calculate_sky_background_rate(
-        **params, 
-        f_lambda_sky=base_flux, 
+        **sky_params,
+        f_lambda_sky=base_flux,
         pixel_scale=2.0
     )
     
@@ -135,8 +138,39 @@ def test_geometric_divergence(dummy_stage3_params):
     )
     
     # Assert the purely geometric ratio between them
-    assert rate_sky == pytest.approx(rate_point * 8.0)
-    assert rate_ext == pytest.approx(rate_sky * 10.0)
+    attenuation = 10.0 ** (-0.4 * params["extinction_coeff"] * params["airmass"])
+    assert rate_sky == pytest.approx(rate_point * 8.0 / attenuation)
+    assert rate_ext == pytest.approx(rate_sky * 10.0 * attenuation)
+
+def test_sky_background_does_not_respond_to_airmass(dummy_stage3_params):
+    """The sky is emitted inside the atmosphere, so it is not dimmed by crossing it.
+
+    mu_sky descends from mu_dark, a brightness measured from the ground. The
+    atmosphere is already in that number, and applying the extinction term again
+    would both double-count it and push the sky the wrong way — real sky surface
+    brightness rises with airmass, because a longer line of sight holds more
+    emitting atmosphere. Target light, arriving from outside, still dims normally.
+    """
+    params = dummy_stage3_params.copy()
+    base_flux = params.pop("f_lambda")
+    sky_params = {k: v for k, v in params.items()
+                  if k not in ("extinction_coeff", "airmass")}
+
+    # Not "ignores them" — cannot be given them. A parameter that is accepted and
+    # discarded is an invitation to pass it and assume it did something.
+    import inspect
+    accepted = inspect.signature(calculate_sky_background_rate).parameters
+    assert "airmass" not in accepted and "extinction_coeff" not in accepted
+
+    with pytest.raises(TypeError):
+        calculate_sky_background_rate(
+            **sky_params, f_lambda_sky=base_flux, pixel_scale=1.0, airmass=2.0)
+
+    zenith = calculate_point_source_rate(
+        **{**params, "airmass": 1.0}, f_lambda_total=base_flux, enclosed_flux_fraction=1.0)
+    low = calculate_point_source_rate(
+        **{**params, "airmass": 2.0}, f_lambda_total=base_flux, enclosed_flux_fraction=1.0)
+    assert low < zenith
 
 # ==========================================
 # Stage 4: Final Output Metrics

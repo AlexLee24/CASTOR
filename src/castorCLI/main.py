@@ -55,7 +55,7 @@ ASSUMPTIONS: tuple[tuple[str, Any, str], ...] = (
     ("target.sed.type", "flat", "a choice of contract, not a measurement"),
     ("target.brightness.type", "ab_mag", "the one brightness type needing no zero point"),
     ("instrument.throughput_correction", 1.0, "means no correction, not a measured one"),
-    ("options.aperture_factor", 1.5, "the aperture convention the web form has always sent"),
+    ("options.aperture_factor", 0.85, "near worst-case-optimal, but the best aperture is the one you will actually use"),
     ("environment.auto_calc_background", True, "layers the real moon over the site's dark sky"),
     ("environment.diffraction_fwhm", 0.2, "form default — really depends on aperture and band"),
     ("environment.optical_fwhm", 0.1, "form default — really a property of these optics"),

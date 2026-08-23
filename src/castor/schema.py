@@ -207,7 +207,7 @@ class EnvironmentCondition(StrictModel):
 
 class BaseOptions(StrictModel):
     aperture_factor: PositiveFloat = Field(
-        ..., # Deliberately no default value; the frontend must always supply it explicitly (typically 1.5)
+        ..., # Deliberately no default value; the frontend must always supply it explicitly (both shipped clients send 0.85 — see ATBD 5.2)
         description="Multiplier defining the photometric aperture radius. (ATBD: k_ap)"
     )
     single_exp_time: PositiveFloat = Field(

@@ -23,7 +23,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from castor import schema
 
@@ -78,8 +78,52 @@ class TelescopeEntry(_NamedEntry):
 class CameraEntry(_NamedEntry):
     camera: schema.CameraSchema
 
+class BandSky(BaseModel):
+    """What the sky looks like through one particular filter.
+
+    Sky brightness is not a property of a place on its own. Measured at Lulin it
+    runs 21.44 in g', 20.92 in r' and 20.04 in i' — 1.4 magnitudes apart, which is
+    a factor of 3.8 in background flux, so a single site-wide figure is wrong for
+    at least two bands whichever one it is. Extinction is band-dependent for the
+    same reason and may be given here too, though Lulin's is not yet measured well
+    enough to state.
+
+    Only the site's own values are overridden. A profile that is a hardware family
+    has no sky to override and giving one here is rejected at load.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    mu_dark: float | None = None
+    extinction_coeff: float | None = None
+
+
+class BandTelescope(BaseModel):
+    """The part of the optical train's efficiency that depends on the band.
+
+    Everything between the sky and the electrons except the filter itself: mirrors,
+    corrector, window, and the detector's response where it is not flat. CASTOR's
+    request has one number for the telescope and one for the camera, both
+    band-independent, so this is where a measurement that varies with wavelength
+    has to land. Measured at Lulin it runs 0.27 to 0.48 across g'r'i'.
+
+    It goes on the filter rather than into filter_transmission because that field
+    now holds the manufacturer's measured curve, and overwriting a number that can
+    be checked against a published document with one that cannot is how the FORS2
+    preset came to be wrong in every band but one.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    optical_throughput: float | None = None
+
+
 class FilterEntry(_NamedEntry):
     optic_filter: schema.FilterSchema
+
+    # Fragments the filter contributes to the rest of the configuration, applied
+    # only when this filter is the one selected. Shaped like the sections they
+    # merge into, the same way every other fragment in the file is.
+    environment: BandSky | None = None
+    telescope: BandTelescope | None = None
 
 class SiteEnvironment(BaseModel):
     """The slice of EnvironmentCondition that belongs to a place rather than a night.
@@ -154,6 +198,14 @@ class PresetFile(BaseModel):
             if entry is not None:
                 instrument[section] = getattr(entry, section).model_dump()
 
+        # The chosen filter has the last word on anything that depends on the band.
+        # Applied after the site and the rig so it overrides them, and only for the
+        # filter actually selected — the others describe a different bandpass.
+        chosen = selection["optic_filter"][1]
+        if chosen is not None:
+            _overlay(fragment.get("environment"), chosen.environment)
+            _overlay(instrument.get("telescope"), chosen.telescope)
+
         if instrument:
             fragment["instrument"] = instrument
 
@@ -216,7 +268,38 @@ def load(path: Path | str | None = None) -> PresetFile:
     except json.JSONDecodeError as exc:
         raise PresetError(f"{source} is not valid JSON: {exc}") from exc
 
-    return PresetFile.model_validate(data)
+    presets = PresetFile.model_validate(data)
+
+    # A filter may correct the sky it looks through, but only where there is a sky
+    # to correct. Silently dropping the value would leave a number in the file that
+    # looks applied and never is, which is the kind of thing this suite exists to
+    # stop, so it is an error at load rather than a surprise at resolve.
+    for profile_id, profile in presets.profiles.items():
+        if profile.environment is not None:
+            continue
+        for filter_id, entry in profile.filters.items():
+            if entry.environment is not None:
+                raise PresetError(
+                    f"{source}: profile {profile_id!r} has no environment of its own, "
+                    f"so filter {filter_id!r} cannot override one. A profile without "
+                    f"an environment block is a hardware family, not a site."
+                )
+
+    return presets
+
+def _overlay(target: dict[str, Any] | None, override: BaseModel | None) -> None:
+    """Write a band's values over a section already resolved, in place.
+
+    Fields left unset carry no opinion and leave the site or rig value standing,
+    which is what makes a filter able to correct only its sky and say nothing about
+    extinction. Nothing happens when there is no section to write into: a hardware
+    family has no environment, and load() has already refused any filter that tried
+    to give it one.
+    """
+    if target is None or override is None:
+        return
+    target.update({k: v for k, v in override.model_dump().items() if v is not None})
+
 
 def _pick(
     catalogue: dict[str, Any],
