@@ -164,6 +164,43 @@ SIGHTLINE_STUDY = {
     "site_insensitivity": {"lasilla": 0.532, "paranal": 0.532, "armazones": 0.533},  # g'
 }
 
+#: SkyCalc's absolute moonless sky at OUR_SIGHTLINE, X=1.10, Paranal, converted
+#: to AB mag/arcsec2 over Lulin's passbands, against what the frames measure.
+#: Lulin is *brighter* in every band and the excess is strongly blue-weighted.
+#:
+#: That colour is the diagnosis. An airglow excess would be red-weighted, since
+#: airglow's strength is in the near-infrared OH bands; this is the opposite
+#: shape. Scattered artificial light and aerosol scattering both look like this,
+#: and SkyCalc models neither for a site it does not have. 21.44 in g' is also
+#: simply a brighter sky than a genuinely dark site reaches, which is usually
+#: quoted around 22.0 to 22.3.
+LULIN_VS_PARANAL = {          # AB mag/arcsec2
+    "u'": dict(skycalc=22.74, measured=None, excess=None),
+    "g'": dict(skycalc=22.16, measured=21.44, excess=0.72),
+    "r'": dict(skycalc=21.21, measured=20.92, excess=0.29),
+    "i'": dict(skycalc=20.21, measured=20.04, excess=0.17),
+}
+
+#: The study above, corrected for that excess, and these are the numbers to use.
+#:
+#: The correction needs no assumption beyond one fact: zodiacal light is
+#: interplanetary, so its absolute surface brightness is the same seen from any
+#: mountain pointed at the same ecliptic coordinates. Lulin's *total* is measured
+#: and larger, so the zodiacal share is smaller by exactly the flux ratio, and
+#: the pointing term shrinks with it. The absolute anchor stays our own
+#: photometry throughout; SkyCalc supplies only what is interplanetary.
+#:
+#: What this cannot do: the excess is itself direction-dependent. Artificial
+#: light scatters worse towards the horizon and towards towns, and 123 frames
+#: down one sightline cannot separate that from anything. So `pointing_dmag`
+#: below is the zodiacal part of the pointing dependence only, and the real sky
+#: at Lulin varies with azimuth and elevation for a reason this model does not
+#: contain. See QUESTIONS.md 16.
+AT_LULIN = {
+    "zodiacal_and_starlight_share": {"g'": 0.274, "r'": 0.267, "i'": 0.137},
+    "pointing_dmag_plane_to_pole": {"g'": 0.174, "r'": 0.193, "i'": 0.101},
+}
+
 
 def _regenerate():
     wavelength, raw = np.loadtxt(RAW, comments="#")[:, 0], np.loadtxt(RAW, comments="#")[:, 1:7]

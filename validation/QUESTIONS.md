@@ -220,9 +220,11 @@ and the rectangular approximation meets current precision needs.
 `mu_sky = -2.5 log10(Flux_dark + Flux_moon)`. Two components, and zodiacal light
 is not one of them — it is sunlight scattered off interplanetary dust, it depends
 on ecliptic latitude and solar elongation, and near the ecliptic it is a
-substantial fraction of a dark sky. Queried from SkyCalc **at the sightline our
-own photometry looks down**, zodiacal light plus scattered starlight is **53% of
-a moonless g' sky**, 35% of r' and 16% of i'.
+substantial fraction of a dark sky. Queried from SkyCalc at the sightline our own
+photometry looks down, and rescaled to Lulin's measured brightness, zodiacal
+light plus scattered starlight is **27% of a moonless g' sky**, 27% of r' and
+14% of i'. (The uncorrected Paranal figures are 53 / 35 / 16 — see question 16
+for why Lulin's are smaller.)
 
 ## 10. Galactic background is not modelled — BUILD
 
@@ -294,9 +296,9 @@ supernova. Ecliptic latitude spans 0.1°, galactic latitude 0.1°, solar elongat
 **What it costs.** The measured `mu_dark` values, 21.44 / 20.92 / 20.04, are not
 Lulin's dark sky. They are Lulin's dark sky *towards ecliptic +16 and galactic
 +21*, where zodiacal light and scattered starlight are a large share of the
-total. SkyCalc puts the full swing from the ecliptic plane to the pole at
-**0.35 mag in g'**, 0.26 in r' and 0.12 in i', saturating above about 60° of
-ecliptic latitude. `presets.json` carries one number per band and has no way to
+total. Corrected to Lulin's own brightness, the full swing from the ecliptic
+plane to the pole is **0.17 mag in g'**, 0.19 in r' and 0.10 in i', saturating
+above about 60° of ecliptic latitude. `presets.json` carries one number per band and has no way to
 say which direction it applies to. This is a known bias in a shipped value,
 which makes it worse than questions 9 and 10 — those are merely missing.
 
@@ -304,10 +306,28 @@ It also means those two questions cannot be *calibrated* here at all, only
 modelled. A model can still be anchored, and the anchoring turns out to be
 cheap: SkyCalc answers for this exact sightline, so the measured value stays the
 absolute reference while the model supplies only the variation. The obvious
-objection — that SkyCalc has no Lulin, only ESO sites — does not bite. Across La
-Silla, Paranal and Armazones, 2400 m to 3060 m, the component shares move by 0.1
-percentage point. `skycalc.SIGHTLINE_STUDY` holds the queried numbers and
-`skycalc.query()` regenerates them.
+objection — that SkyCalc has no Lulin, only ESO sites — bites less than it looks. Altitude is
+irrelevant — across La Silla, Paranal and Armazones, 2400 m to 3060 m, the
+component shares move by 0.1 percentage point. Geography is not, and the check
+is direct: SkyCalc's moonless Paranal sky at our sightline is 22.16 / 21.21 /
+20.21 AB mag/arcsec² in g'r'i' where the frames measure 21.44 / 20.92 / 20.04.
+
+**Lulin is brighter in every band, by 0.72 / 0.29 / 0.17, and the colour says
+what it is.** Airglow lives in the near-infrared OH bands, so an airglow excess
+would be red-weighted; this is monotonically the other way. That is scattered
+artificial light or aerosol, and SkyCalc has no term for either at a site it does
+not have.
+
+It does not block the correction, because zodiacal light is interplanetary and
+therefore identical from both mountains. Lulin's total is measured and 1.94×
+Paranal's in g', so the zodiacal share is smaller by exactly that ratio and the
+pointing term shrinks with it. What it *does* mean is that the excess is a third
+component nobody has characterised, and artificial light scatters worse towards
+the horizon and towards towns — so the real sky at Lulin varies with azimuth and
+elevation for a reason no model here contains, and 123 frames down one sightline
+cannot separate it. `skycalc.AT_LULIN` holds the corrected numbers,
+`skycalc.LULIN_VS_PARANAL` the comparison, and `skycalc.query()` regenerates
+both.
 
 **What would settle it.** Fields spread in ecliptic and galactic latitude — which
 the airmass night in question 4 could carry for free if the fields are chosen for

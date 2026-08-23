@@ -175,3 +175,43 @@ def test_the_component_shares_do_not_care_about_the_observatory_altitude():
     """
     sites = skycalc.SIGHTLINE_STUDY["site_insensitivity"]
     assert max(sites.values()) - min(sites.values()) < 0.002
+
+
+def test_lulin_is_brighter_than_paranal_and_the_colour_says_why():
+    """The in-situ check on borrowing an ESO model, and it does not come free.
+
+    SkyCalc's moonless Paranal sky at our own sightline is 22.16 / 21.21 / 20.21
+    AB mag/arcsec2 in g'r'i'. The frames measure 21.44 / 20.92 / 20.04. Lulin is
+    brighter in every band, by 0.72 / 0.29 / 0.17.
+
+    The colour identifies it. Airglow's strength is in the near-infrared OH
+    bands, so an airglow excess would be red-weighted; this is monotonically the
+    other way. Scattered artificial light and aerosols both look like this, and
+    neither is in a model for a site it does not have.
+    """
+    excess = {b: v["excess"] for b, v in skycalc.LULIN_VS_PARANAL.items()
+              if v["excess"] is not None}
+    assert all(e > 0 for e in excess.values())
+    assert excess["g'"] > excess["r'"] > excess["i'"]      # blue-weighted, not airglow
+    assert excess["g'"] > 0.5
+
+
+def test_the_lulin_shares_follow_from_the_measured_excess_alone():
+    """Why the site mismatch does not stop the work.
+
+    Zodiacal light is interplanetary: its absolute surface brightness is the same
+    from any mountain pointed at the same ecliptic coordinates. Lulin's total is
+    measured and 1.94x Paranal's in g', so the zodiacal share is smaller by
+    exactly that ratio — 27% rather than 53% — and the pointing term shrinks with
+    it, from 0.35 mag plane-to-pole to 0.17. No new observation is needed for
+    this correction; the anchor is our own photometry throughout.
+    """
+    for band in ("g'", "r'", "i'"):
+        ratio = 10.0 ** (0.4 * skycalc.LULIN_VS_PARANAL[band]["excess"])
+        expected = skycalc.SIGHTLINE_STUDY["zodiacal_and_starlight_share"][band] / ratio
+        assert skycalc.AT_LULIN["zodiacal_and_starlight_share"][band] == pytest.approx(
+            expected, abs=0.002)
+    # And the pointing swing shrinks in step, most in the band that changed most.
+    at_lulin = skycalc.AT_LULIN["pointing_dmag_plane_to_pole"]
+    assert at_lulin["g'"] == pytest.approx(0.174, abs=0.005)
+    assert at_lulin["g'"] < 0.6 * 0.349
