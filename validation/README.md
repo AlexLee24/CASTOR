@@ -21,11 +21,15 @@ pytest validation   # this suite, on purpose
 | `lco_etc.py` | Las Cumbres Observatory's published calculator, transcribed |
 | `eso_etc.py` | ESO's FORS2 ETC — captured reference results, plus a live client |
 | `lulin.py` | LOT/SOPHIA measured against real frames and Lulin's own documents |
+| `lulin_prototype.py` | The two Perl calculators CASTOR was refactored from, 2005 and 2011 |
 | `provenance.py` | Where every number in presets.json came from, or that it came from nowhere |
 | `skycalc.py` | Loading and rebinning ESO SkyCalc radiance exports |
 | `test_lco.py` | Count-rate chain and extinction conventions against LCO |
 | `test_eso.py` | The top-hat bandpass against a full spectral integration |
 | `test_sky_model.py` | How the Krisciunas & Schaefer moon term behaves per band |
+| `test_lulin.py` | Throughput, sky and detector against 123 calibrated frames |
+| `test_lulin_prototype.py` | Which of the ancestors' numbers survive, and which are placeholders |
+| `test_provenance.py` | Fails on any preset value the provenance table does not account for |
 
 ## What the references are, and are not
 
@@ -35,6 +39,13 @@ the collecting-area table "not used in code" and comments out the zero-point
 fluxes. Comparing CASTOR against it checks a prediction against a calibration.
 Where the two disagree, the interesting question is which *convention* differs,
 not which number is right.
+
+**The prototypes** are not an outside reference at all — they are CASTOR's own
+ancestry. The project's slides record the chain as Kinoshita Daisuke's Perl CGI,
+then Ting-Wan Chen, then this refactor, so where `presets.json` holds a number
+nobody can source, `etc.cgi` (2005) and `etc2.cgi` (2011) are the likeliest
+places it came from. Read them as archaeology, and read them warily: the 2011
+file was never finished, and its Sloan tables are the Bessell tables relabelled.
 
 **ESO** gives us two references. Their **ETC** (`etc.eso.org/fors`, and a REST
 API behind it) is a real physical model over measured instrument curves, and is
@@ -113,6 +124,15 @@ Each of these is asserted by a test, so it either stays true or announces itself
   comes out far too blue and nearly vanishes in the near-infrared, where a full
   moon is under-counted by about a factor of ten.
 
+- **The ancestors had the same disease, and one of them documented the cure.**
+  The 2011 prototype decomposes throughput exactly as the ATBD specifies, into
+  optics x filter x quantum efficiency — so the VLT preset hiding an optimistic
+  throughput inside a filter transmission violates a form the project has had
+  since 2011. It also fabricated its Sloan tables by relabelling the Bessell
+  ones, twenty-four numbers with no exceptions, which is why nothing Sloan from
+  that file may be adopted as a source. The 2026 slides had already named the
+  pattern in the original prototype: *"Hidden Errors (Two Wrongs Make a Right)"*.
+
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
@@ -123,11 +143,15 @@ Each of these is asserted by a test, so it either stays true or announces itself
 
 ## Open questions
 
-Five for the observatory and two for us, written up so they can be asked without
-reading this directory: **[QUESTIONS.md](QUESTIONS.md)**.
+**[QUESTIONS.md](QUESTIONS.md)** is the single index: fifteen items, each
+labelled with who can close it — the observatory, a night of telescope time, us,
+or a decision. Nothing open is recorded only here, in a `GUESS` row, or in an
+xfail reason; if it is open, it is in that file.
 
-Two that were on that list are now closed, by looking harder rather than by
-asking. Lulin's SLT page names the camera in full — Andor iKon-M DU934P-BEX2-DD
-CCD-26868 — which fixes the sensor variant and with it the 130 ke- well depth.
-And a photon transfer curve over the frames puts read noise at 7.9 e-, the
-datasheet's 1 MHz port, while confirming the header gain to 2%.
+Three items have been closed by looking harder rather than by asking. Lulin's SLT
+page names the camera in full — Andor iKon-M DU934P-BEX2-DD CCD-26868 — which
+fixes the sensor variant and with it the 130 ke- well depth. A photon transfer
+curve over the frames puts read noise at 7.9 e-, confirming the header gain to 2%
+and identifying the 1 MHz port. And the question of whether the telescope's
+optics could explain the r' excess is answered in the negative by the 2011
+prototype's own decomposition, which leaves them flat to 2.3% across g' to i'.

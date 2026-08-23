@@ -30,7 +30,7 @@ PROVENANCE = {
     "lulin.environment.location.longitude_deg": (120.87, DOCUMENT, "site pages give 120.872624; frame SITELONG 120.8736"),
     "lulin.environment.location.elevation_m": (2862.0, DOCUMENT, "site pages and frame SITEELEV agree"),
     "lulin.environment.mu_dark": (21.5, GUESS, "fallback only; g'r'i' measured on their filters"),
-    "lulin.environment.extinction_coeff": (0.17, GUESS, "fit inconclusive, see QUESTIONS.md 3"),
+    "lulin.environment.extinction_coeff": (0.17, GUESS, "three sources disagree; see QUESTIONS.md 4"),
     "lulin.median_seeing_fwhm": (1.4, GUESS, "no source, but 123 frames give a median FWHM of 1.34\""),
 
     # ---- Lulin, LOT ---------------------------------------------------------
@@ -43,12 +43,12 @@ PROVENANCE = {
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
     "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
-    "lulin.telescopes.SLT.optical_throughput": (0.804, GUESS, "no photometry; LOT measures 0.27-0.48"),
+    "lulin.telescopes.SLT.optical_throughput": (0.804, GUESS, "no photometry; LOT measures 0.27-0.48; QUESTIONS.md 5"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
-    "lulin.cameras.Sophia.quantum_efficiency": (0.85, GUESS, "datasheet curve gives 90/96/87% at g'r'i'; harmless where the band throughput is measured, not elsewhere"),
-    "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet gives 0.0001 at -90 C, frames run at -80 C"),
+    "lulin.cameras.Sophia.quantum_efficiency": (0.85, GUESS, "datasheet curve gives 90/96/87% at g'r'i'; harmless where the band throughput is measured, wrong 3x in z'; QUESTIONS.md 13"),
+    "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet gives 0.0001 at -90 C, frames run at -80 C; QUESTIONS.md 6"),
     "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet 1 MHz port says 7.0"),
     "lulin.cameras.Sophia.full_well_capacity": (100000, DOCUMENT, "datasheet, single pixel typical"),
 

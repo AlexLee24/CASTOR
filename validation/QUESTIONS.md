@@ -1,151 +1,276 @@
 # Open questions
 
-Things measuring CASTOR against real data raised that the data cannot answer.
-Each one says what was measured, what is not known, and what would change if it
-were — so it can be asked without reading the rest of this directory.
+Everything CASTOR does not know, in one place, with the same field on every
+entry: **who can close it**. That field is the point of the file. Until now the
+open items were spread across this document, the standing findings in
+[README.md](README.md), the `GUESS` rows in `provenance.py`, four strict xfail
+reasons and a docstring, and the honest answer to "what is still open?" was that
+nobody could say without reading all five.
 
 Everything here concerns Lulin unless it says otherwise. Numbers come from 123
 calibrated LOT/SOPHIA frames over 15 nights (2025-09-29 to 2026-02-15), reduced
-against Pan-STARRS DR2; method is in `lulin.py`.
+against Pan-STARRS DR2; method is in `lulin.py`. Where a prototype is cited it
+is one of the two Perl calculators CASTOR was refactored from, transcribed in
+`lulin_prototype.py`.
+
+**Who can close it**
+
+| | |
+|---|---|
+| **ASK** | Only the observatory knows. A conversation closes it. |
+| **OBSERVE** | Needs telescope time. Nobody can answer it from a desk. |
+| **BUILD** | Ours. No permission required, only work. |
+| **DECIDE** | Ours, and the work is small once somebody chooses. |
+
+| # | Question | Who | Held open by |
+|---|---|---|---|
+| 1 | Why is r' 1.81x g' and i'? | ASK | — |
+| 2 | How big is LOT's secondary? | ASK | strict xfail, `test_lulin.py` |
+| 3 | Were the prototype's efficiencies measured, and on which camera? | ASK | — |
+| 4 | What is the extinction in each band? | OBSERVE | strict xfail, `test_lulin.py` |
+| 5 | SLT has no photometry at all | OBSERVE | 12 `GUESS` rows |
+| 6 | SOPHIA's dark current at −80 °C | OBSERVE | `GUESS` row |
+| 7 | Is u' worth measuring? | DECIDE | 3 `GUESS` rows |
+| 8 | Sky and throughput are tables where the physics is a curve | BUILD | strict xfail, `test_eso.py` |
+| 9 | Zodiacal light is not modelled | BUILD | — |
+| 10 | Galactic background is not modelled | BUILD | — |
+| 11 | Readout overhead is not modelled | BUILD | — |
+| 12 | `background_dominance_factor` has no source | DECIDE | docstring only |
+| 13 | SOPHIA's QE is one flat number | BUILD | `GUESS` row |
+| 14 | The VLT profile is mostly invention | DECIDE | 12 `GUESS` rows |
+| 15 | FORS2's throughput is a fudge that works in one band | BUILD | strict xfail, `test_eso.py` |
 
 ---
 
-## 1. Why is r' nearly twice as efficient as g' and i'?
+## 1. Why is r' nearly twice as efficient as g' and i'? — ASK
 
 **Measured.** Total system throughput above the atmosphere, from aperture
-photometry on 14 photometric nights:
+photometry on 14 photometric nights: g' 0.265, r' 0.480, i' 0.265. Both ratios
+are 1.81.
 
-| band | T_sys |
-|---|---|
-| g' | 0.265 |
-| r' | 0.480 |
-| i' | 0.265 |
+**Ruled out, twice over.** Not the detector: SOPHIA's datasheet QE reads 90%,
+96% and 87% at the three band centres, which gives ratios of 1.07 and 1.13. Not
+the filters: their transmission curves are published and measured, and the
+bandpass arithmetic was checked against a full spectral integration. And now not
+the optics either — the 2011 prototype decomposes throughput into
+`m1 x m2 x glass x T_peak x QE`, and its optical chain is flat to 2.3% from g'
+to i'. On the observatory's own model the telescope cannot do this.
 
-**Ruled out.** Not the detector: the SOPHIA datasheet's QE curve reads 90%, 96%
-and 87% at the three band centres — flat to within 10% where a factor of 1.8 is
-needed. Not the filters: their transmission curves are measured and published,
-and their integrals are known to a percent. Not the bandpass arithmetic, which
-was checked against a full spectral integration.
-
-**Not known.** What is left is the optics, something band-dependent in the
-reduction, or LOT genuinely running at 40–70% of a nominal system. A 2002
-telescope on original coatings could well be the last of those, and aluminium
-does dip in the near infrared, but not by a factor of two.
+**Weakly corroborated.** The 2005 prototype's totals, interpolated onto our band
+centres, give 0.37 / 0.47 / 0.32 — the same peak at r', and r' agrees to 3%. But
+that total includes an unnamed camera's QE, so the shape may be that detector.
+See question 3.
 
 **What changes with an answer.** Nothing about the calculator: the measured
-numbers are in `presets.json` and it now predicts correctly whichever the cause
-is. This matters to the observatory, not to CASTOR — if it is coating loss,
-that is a recoating case, and the numbers here are the evidence for it.
+numbers are in `presets.json` and it predicts correctly whichever the cause is.
+This matters to the observatory. If it is coating loss, these numbers are the
+evidence for a recoating case.
 
----
-
-## 2. How big is LOT's secondary?
+## 2. How big is LOT's secondary? — ASK
 
 **Measured.** Every frame header carries `APTAREA = 772125 mm²`, which on a
 1000 mm primary is a 130 mm central obstruction. `presets.json` says 300 mm,
-which is typical for an f/8 Ritchey–Chrétien. The difference is 8% in collecting
-area. Lulin's site publishes neither figure.
-
-**Not known.** Which is right, and where MaxIm's value came from.
+typical for an f/8 Ritchey–Chrétien. The 2005 prototype applies no obstruction at
+all, taking the full metre. Three sources, three answers, and Lulin's site
+publishes none of them. The spread is 8% in collecting area.
 
 **What changes with an answer.** Currently nothing, and this is worth being
 explicit about: the throughput above was fitted using the preset's own collecting
 area, so the two errors cancel exactly. Changing the secondary **without
-refitting the throughput** would break agreement by 8%. There is a strict xfail
-in `test_lulin.py` holding this open so it cannot be changed quietly.
+refitting the throughput** would break agreement by 8%. A strict xfail in
+`test_lulin.py` holds this open so it cannot be changed quietly.
 
----
+## 3. Were the prototype's efficiencies measured, and on which camera? — ASK
 
-## 3. What is the extinction in each band?
+**Known.** The 2005 file gives total throughputs of U 0.07 / B 0.27 / V 0.54 /
+R 0.46 / I 0.20 and never names its camera. The 2011 rewrite lists three cameras
+with per-band QE — PI1300B, SI1100, NCUcam-1 — and none of them is SOPHIA, which
+post-dates it. The 2011 file is also an unfinished draft: `XXX` for most dark
+currents, blank Sloan QE for one camera, a duplicated hash key.
 
-**Measured, badly.** Fitting zero point against airmass gives:
+**Not known.** Whether either set of numbers was measured or estimated.
 
-| band | k (mag/airmass) | uncertainty | airmass range |
+**What changes with an answer.** It decides question 1. If they were estimates,
+the 2005 agreement at r' is coincidence and our photometry is the only evidence
+that exists. If they were measured on a camera whose QE was flat, the shape is
+the telescope's and has been for twenty years.
+
+## 4. What is the extinction in each band? — OBSERVE
+
+**Three sources, none good enough to overrule the others.**
+
+| source | g' | r' | i' |
 |---|---|---|---|
-| g' | 0.123 | ±0.105 | 1.04–1.48 |
-| r' | 0.189 | ±0.027 | 1.03–1.55 |
-| i' | 0.108 | ±0.049 | 1.05–1.38 |
+| `presets.json` | 0.17 | 0.17 | 0.17 |
+| 2005 prototype, interpolated | 0.161 | 0.092 | 0.074 |
+| our fit | 0.123 ± 0.105 | 0.189 ± 0.027 | 0.108 ± 0.049 |
 
-`presets.json` carries 0.17 for the whole site, in every band.
+The 2005 values fall monotonically towards the red, which is what extinction
+does; ours puts r' highest, which it cannot be. The frames span nights rather
+than airmass, so night-to-night transparency is masquerading as an airmass term.
+But our r' is 3.6σ from the 2005 value, so the two genuinely disagree rather than
+one refining the other. The 2011 file's Sloan column looks like a fourth source
+and is not — see the trap at the end of this file.
 
-**Not known.** Only r' is usefully constrained, and it comes out *higher* than
-g', which is backwards — extinction should fall towards the red. The frames span
-nights rather than airmass, so night-to-night transparency is masquerading as an
-airmass term.
+`presets.json` therefore keeps its single site-wide 0.17, which is certainly
+wrong in detail and at least is not wrong in a specific direction.
 
 **What would settle it.** One photometric night, one field, frames from as close
-to the zenith as it gets down to airmass ~2, in each filter. That is a short
-programme and it would also give the end-to-end SNR check its cleanest test.
+to the zenith as it gets down to airmass ~2, in each filter. A short programme,
+and it would also give the end-to-end SNR check its cleanest test.
 
----
+## 5. SLT has no photometry at all — OBSERVE
 
-## 4. SOPHIA's dark current at its operating temperature
+None of the 123 frames is from SLT. Twelve of its preset values have no source,
+and the one that matters is `optical_throughput = 0.804` — LOT measures 0.27 to
+0.48, and there is no reason the 40 cm is twice as efficient as the metre.
+`secondary_mirror_diameter = 0.12` is also unpublished and, unlike LOT's, is not
+absorbed by a fitted throughput.
 
-**Known.** The datasheet quotes 0.0001 e-/pixel/s at −90 °C. The frames run at
-−80 °C (`SET-TEMP` and `CCD-TEMP` both say so). `presets.json` says 0.01, about
-100× the −90 °C figure.
+**What would settle it.** A night of SLT frames on a Pan-STARRS field, in any
+filter, moves it from guesswork to measurement exactly as LOT's did. Cheapest if
+it rides along with question 4 on the same night.
 
-**Not known.** The value at −80 °C. Dark current roughly doubles every 5–7 °C,
-which would put it near 0.0004 — but that is a rule of thumb, not a measurement,
-so nothing has been changed.
+## 6. SOPHIA's dark current at −80 °C — OBSERVE
+
+**Known.** The datasheet quotes 0.0001 e-/pix/s at −90 °C. The frames run at −80
+(`SET-TEMP` and `CCD-TEMP` agree). `presets.json` says 0.01, about 100x the
+−90 °C figure, with no source.
+
+**Not known.** The value at −80 °C. The 2011 prototype tabulates two other
+cameras across that range and they fall by 33x and 100x from −50 to −80 — a
+halving every 5.9 °C and every 4.5 °C. Even the sign is not in doubt, but a
+factor of three between two cameras in one document is why a rule of thumb
+cannot replace a measurement, and nothing has been changed.
 
 **What changes with an answer.** Very little in practice: at 300 s even 0.01
-e-/s contributes 3 e- against a sky of ~750, so it is far below the noise. It is
-listed because the preset currently states a number with no source, not because
-it is doing damage. A dark frame at −80 °C would settle it in one measurement.
+e-/s contributes 3 e- against a sky of ~750. It is listed because the preset
+states a number with no source. One dark frame at −80 °C settles it, and that is
+faster than asking.
+
+## 7. Is u' worth measuring? — DECIDE
+
+Lulin publishes transmission curves for the Astrodon g'r'i'z' set but not for u',
+and none for the Johnson–Cousins filters. The u' entry therefore still carries
+the placeholder shape the other four had before they were measured — bandwidth
+56 nm, transmission 0.9 — and all four of those turned out wrong, one by 55%.
+There is no photometry either: none of the 123 frames is u'.
+
+**The decision comes first.** u' is the band where a 1 m struggles most. If
+nobody observes in it, recording that and leaving the placeholder labelled is a
+legitimate answer and costs nothing. If somebody does, it needs a night.
+
+## 8. Sky and throughput are tables where the physics is a curve — BUILD
+
+Both are now stored per filter, which works and is honest, but a filter-indexed
+lookup cannot express a spectrum. Doing it properly — a sky spectrum and a
+throughput curve integrated against the real bandpass — closes four other things
+at once:
+
+- **the sky's growth with airmass.** Flat matches LCO exactly and stopped the
+  double-counting that used to make it *fall*, but ESO's sky is 17.6% brighter at
+  X=1.5 and 31.8% at X=2.0 and ours does not move. Closing it needs a van Rhijn
+  term over the emitted components, not another scalar. Strict xfail in
+  `test_eso.py`.
+- **the moon model has no colour.** Krisciunas & Schaefer is Johnson V and the
+  only band dependence CASTOR gives it is the extinction coefficient. Moonlight
+  comes out far too blue and nearly vanishes in the near infrared, where a full
+  moon is under-counted by roughly a factor of ten.
+- **`target.sed` is never read.** The schema accepts and validates it (ATBD 3.2)
+  and the flux unification path ignores it, so a field the API advertises does
+  nothing.
+- **the blackbody SED is hidden in the GUI**, for the same reason.
+
+The 2026 project slides record why this was deferred, and the reasons still
+hold: spectral data is incomplete, uncertain inputs make debugging impossible,
+and the rectangular approximation meets current precision needs.
+
+## 9. Zodiacal light is not modelled — BUILD
+
+`mu_sky = -2.5 log10(Flux_dark + Flux_moon)`. Two components, and zodiacal light
+is not one of them — it is sunlight scattered off interplanetary dust, it depends
+on ecliptic latitude and solar elongation, and near the ecliptic it is a
+substantial fraction of a dark sky. The project's own slides name it a core issue
+and propose ESO's SkyCalc as the route. `skycalc.py` in this directory already
+holds a six-component Paranal sky at 1 nm, which is that route's input.
+
+## 10. Galactic background is not modelled — BUILD
+
+The same gap and the same fix: integrated starlight plus diffuse galactic light,
+strongly dependent on galactic latitude, absent from `mu_sky`. Also named a core
+issue in the slides. Together with question 9 this is the largest identified
+omission in the sky model, and both are currently absorbed into whatever the user
+types for `mu_dark`.
+
+## 11. Readout overhead is not modelled — BUILD
+
+CASTOR returns integration time. An observer planning a night needs elapsed time,
+and both prototypes reported it: 2005 as two named modes, 40 s and 2 s; 2011 as a
+readout-frequency table per camera. Neither the schema nor `presets.json` has a
+place to put it. This is a feature the ancestor had and the refactor dropped.
+
+## 12. `background_dominance_factor` has no source — DECIDE
+
+The optimal single exposure time uses a default of 1.0, the crossover where
+background shot noise just overtakes read noise, and `physics.py` says so in its
+own docstring: "Provisional default — not yet backed by a specific reference
+guideline, revisit before relying on it for real observation planning." That
+warning has never been anywhere but the docstring. Either find a reference, or
+decide the crossover is the right convention and say so in the ATBD.
+
+## 13. SOPHIA's quantum efficiency is one flat number — BUILD
+
+`presets.json` gives 0.85 for every band; the datasheet curve reads 90 / 96 / 87 /
+28% at g' r' i' z'. In g'r'i' this is harmless because the measured band
+throughputs absorb it. In **u' and z' it is not** — those two have no measured
+throughput, so they inherit the site value and multiply it by a QE that is wrong
+by a factor of three in z'. Fixing it properly is part of question 8; labelling
+it is not.
+
+## 14. The VLT profile is mostly invention — DECIDE
+
+Twelve of its fifteen values are `GUESS`, against Lulin's twelve out of
+forty-five. It is not the default, but it is selectable, and a user who picks it
+gets an answer assembled mostly from numbers nobody sourced. Either source it,
+mark it in the GUI as a demonstration profile, or drop it.
+
+## 15. FORS2's throughput is a fudge that works in one band — BUILD
+
+`presets.json` gives optical throughput 0.771 and QE 0.781, a product of 0.602
+where ESO's own rates imply about 0.36. `v_HIGH+114` agrees to 8% only because a
+0.51 "filter transmission" absorbs the difference; `g_HIGH+115` over-predicts by
+148%. The fix is real per-component numbers, not a different fudge. Strict xfail
+in `test_eso.py`.
+
+It is the same disease the project diagnosed in the original prototype and named
+*"Hidden Errors (Two Wrongs Make a Right)"*, and question 2 is a second instance:
+an unknown secondary cancelling a fitted throughput.
 
 ---
 
-## 5. Is LOT u' worth measuring?
+## Traps
 
-**Known.** Lulin publishes transmission curves for the Astrodon g'r'i'z' set but
-not for u', and none for the Johnson–Cousins filters. The u' entry in
-`presets.json` therefore still carries the placeholder shape the other four had
-before they were measured — bandwidth 56 nm, transmission 0.9 — and all four of
-those turned out wrong, one by 55%. There is also no photometry: none of the 123
-frames is u'.
+Not open questions. Recorded because each one looks like a source and is not, and
+somebody will find it again.
 
-**What changes with an answer.** u' predictions become trustworthy. Whether that
-is worth a night depends on whether anyone observes in u' — it is the band where
-a 1 m telescope struggles most, so possibly not.
+**The 2011 prototype's Sloan tables are the Bessell tables shifted one slot.**
+`sdss_g` ≡ `bessell_B`, `sdss_r` ≡ `bessell_V`, `sdss_i` ≡ `bessell_R`,
+`sdss_z` ≡ `bessell_I` — four extinction coefficients and twenty sky brightnesses,
+identical value for value. `sdss_z` also inherits `sdss_g`'s 1409 Å bandwidth
+where Lulin's published curve measures 2780 Å. Asserted in
+`test_lulin_prototype.py` so the claim cannot rot. Its centres and widths for
+g'r'i' *are* sound, within 1% and 6% of measurement; only the Sloan-labelled
+tables are placeholders.
 
----
+**PinPoint's `ZMAG` in the frame headers cannot be used as a zero point.** It is
+tied to USNO-B1.0 and sits 0.73 mag out in g', 0.21 in r' and 0.05 in i'.
 
-## 6. Anything still marked GUESS
+**CASTOR and ESO disagree by 11% on aperture, and it is a convention.** Matched
+apertures agree to under a percent. This is the largest remaining difference
+against ESO and it is not a defect in either.
 
-`validation/provenance.py` records where each of the 60 numbers in
-`presets.json` came from. Twelve of Lulin's have no source at all, and the file
-was written before anything could check it — so these are not "probably fine",
-they are unexamined, and every unexamined value that has since been checked was
-wrong.
-
-The ones that would matter most if they are wrong:
-
-| value | current | why it matters |
-|---|---|---|
-| `SLT.optical_throughput` | 0.804 | LOT measures 0.27–0.48; there is no reason SLT is twice as efficient |
-| `SLT.secondary_mirror_diameter` | 0.12 | not published, and unlike LOT's it is not absorbed by a fitted throughput |
-| `Sophia.dark_current_rate` | 0.01 | no source; ~100x the datasheet's −90 °C figure |
-| `Sloan_u` (all three) | placeholder | the shape the other four had before they were measured |
-
-SLT has no photometry at all — none of the 123 frames is from it. A night of
-SLT frames on a Pan-STARRS field, in any filter, would move it from guesswork to
-measurement the same way LOT's did.
-
----
-
-## Not for the observatory: two we own
-
-These are ours to decide, recorded here so the list is complete.
-
-**Sky and throughput as spectra.** Both are now stored per filter, which works
-and is honest, but it is a table where the physics is a curve. Doing it properly
-— a sky spectrum and a throughput curve, integrated against the real bandpass —
-would also close the four other things waiting on it: the sky's growth with
-airmass, the moon model having no colour, `target.sed` never being read, and the
-blackbody SED being hidden in the GUI.
-
-**FORS2's throughput decomposition.** `g_HIGH+115` over-predicts by 148% because
-`v_HIGH+114` hides an over-optimistic optical throughput inside a filter
-transmission. The same disease Lulin had, and the same fix would work, but it is
-not our telescope and nobody here observes with it.
+**The old spec PDF still shows extinction applied to the sky.** `R_sky` in the
+`ETC Core Formula` slides carries a `10^(-0.4 k X)` factor, because that document
+was written by reading the prototype's code. `docs/ATBD.md` is the current spec
+and no longer does. Four independent sources — LCO, ESO's opposite sign, and both
+prototypes — say the sky does not carry the target's extinction.
