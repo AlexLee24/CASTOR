@@ -78,7 +78,7 @@
             "pixel_pitch": 15.0,
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.01,
-            "readout_noise": 7.0,
+            "readout_noise": 7.9,
             "full_well_capacity": 100000
           }
         },

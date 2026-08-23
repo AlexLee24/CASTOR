@@ -117,7 +117,7 @@ def test_naming_only_the_site_resolves_a_real_configuration(shipped):
     fragment = shipped.resolve("lulin")
 
     assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 1.0  # LOT
-    assert fragment["instrument"]["camera"]["readout_noise"] == 7.0               # Sophia
+    assert fragment["instrument"]["camera"]["readout_noise"] == 7.9               # Sophia
     assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8  # Sloan r'
 
 def test_named_entries_override_the_defaults(shipped):

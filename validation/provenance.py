@@ -49,7 +49,7 @@ PROVENANCE = {
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
     "lulin.cameras.Sophia.quantum_efficiency": (0.85, GUESS, "datasheet curve gives 90/96/87% at g'r'i'; harmless where the band throughput is measured, not elsewhere"),
     "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet gives 0.0001 at -90 C, frames run at -80 C"),
-    "lulin.cameras.Sophia.readout_noise": (7.0, MEASURED, "photon transfer curve gives 7.9; datasheet 1 MHz port 7.0"),
+    "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet 1 MHz port says 7.0"),
     "lulin.cameras.Sophia.full_well_capacity": (100000, DOCUMENT, "datasheet, single pixel typical"),
 
     # ---- Lulin, Andor iKon-M DU934P-BEX2-DD ---------------------------------

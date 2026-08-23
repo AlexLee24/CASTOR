@@ -205,13 +205,20 @@ def test_read_noise_is_the_one_the_frames_show(lot):
 
     var(A-B)/2 against sky level across 89 adjacent pairs: the slope confirms the
     gain and the intercept is the read noise. It lands at 7.9 e-, which is the
-    datasheet's 1 MHz port and not its 100 kHz one, so the preset's 7.0 is a
-    measurement rather than a guess. The measured value runs a little high
-    because any residual pattern noise lands in the intercept too.
+    datasheet's 1 MHz port and not its 100 kHz one.
+
+    The preset carries 7.9 rather than the datasheet's 7.0, and the difference is
+    a choice worth stating. An intercept collects every noise source that does
+    not scale with signal, so it includes whatever residual pattern noise the
+    system delivers and is an upper bound on the sensor alone. But an exposure
+    time calculator predicts what an observer will measure, and that observer
+    gets the pattern noise too. The datasheet number describes the detector; this
+    one describes the instrument.
     """
     assert lulin.MEASURED_GAIN_SLOPE == pytest.approx(1.0, abs=0.05)
-    assert lot["camera"].readout_noise == pytest.approx(7.0, abs=0.1)
-    assert abs(lulin.MEASURED_READ_NOISE - lot["camera"].readout_noise) < 1.5
+    assert lot["camera"].readout_noise == pytest.approx(lulin.MEASURED_READ_NOISE, abs=0.05)
+    # Still close enough to the datasheet port that the identification holds.
+    assert abs(lot["camera"].readout_noise - 7.0) < 1.5
 
 
 def test_the_detector_does_not_explain_the_band_shape():
