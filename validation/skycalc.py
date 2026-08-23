@@ -87,6 +87,84 @@ def effective_width_nm(wavelength_nm, transmission):
     return float(np.trapezoid(transmission, wavelength_nm))
 
 
+#: Lulin's Sloan passbands as measured, for integrating a queried spectrum.
+#: (centre_nm, equivalent_width_nm), matching presets.json.
+SLOAN = {"u'": (353.4, 64.8), "g'": (475.9, 147.0), "r'": (627.8, 131.0), "i'": (767.6, 145.0)}
+
+
+def query(centre_nm, width_nm, **overrides):
+    """One band's sky radiance from ESO's live SkyCalc, integrated.
+
+    Returns photons/s/m2/arcsec2 over the band. Needs `skycalc_cli` and the
+    network; everything the tests assert is captured in SIGHTLINE_STUDY below so
+    the suite stays offline.
+
+    Ask for one band at a time. A single 300-1000 nm request never returned in
+    nine minutes while the same total range split into four band-width windows
+    completes in about six seconds each — the cost is in the range, not the
+    resolution. `wres` turns out not to matter at all for a broadband integral:
+    2000 and 20000 agree to 0.00% over r', because the server bins
+    flux-conservingly rather than sampling.
+    """
+    from skycalc_cli.skycalc import SkyModel      # optional dependency
+    from astropy.io import fits
+    import io
+
+    params = dict(airmass=1.10, observatory="paranal", incl_moon="N", wres=2000,
+                  wmin=round(centre_nm - width_nm / 2, 1),
+                  wmax=round(centre_nm + width_nm / 2, 1),
+                  wdelta=0.5, wgrid_mode="fixed_wavelength_step")
+    params.update(overrides)
+    model = SkyModel()
+    model.callwith(params)
+    with fits.open(io.BytesIO(model.data)) as hdul:
+        table = hdul[1].data
+        return float(np.trapezoid(np.asarray(table["flux"], float),
+                                  np.asarray(table["lam"], float)))
+
+
+#: The sightline our photometry was taken down, in SkyCalc's coordinates.
+#: Ecliptic latitude +15.9 and a solar elongation of 130 degrees, which puts the
+#: target at ecliptic longitude 131.9 relative to the sun.
+OUR_SIGHTLINE = dict(ecl_lat=15.9, ecl_lon=131.9)
+
+#: Captured from the live service on 2026-08-23, moonless, Paranal, X=1.10
+#: unless stated. Four things, each answering an open question:
+#:
+#: `zodiacal_and_starlight_share` — how much of a moonless sky at OUR sightline
+#: is light that did not come from the atmosphere. This is the fraction already
+#: baked into the measured mu_dark, and therefore the amount that would be
+#: double-counted by computing it separately and adding it on.
+#:
+#: `pointing_dmag` — magnitudes the sky darkens moving from the ecliptic plane
+#: to the pole at fixed ecliptic longitude. The full swing, not a share: this is
+#: how wrong a single site-wide mu_dark can be from pointing alone. It saturates
+#: above about 60 degrees.
+#:
+#: `growth_to_airmass_2` — how much brighter the sky gets from X=1.1 to X=2.0.
+#: Strongly band-dependent, and that is the finding: i' grows two and a half
+#: times faster than g' because its sky is mostly upper atmosphere and airglow,
+#: which lengthen with the path, while g' is over half zodiacal light, which is
+#: above the atmosphere and gets extinguished instead. No scalar can do this.
+#:
+#: `site_insensitivity` — the shares move by 0.1 percentage point across La
+#: Silla, Paranal and Armazones, 2400 m to 3060 m. SkyCalc has no Lulin at 2862
+#: m, and on this evidence it does not need one.
+SIGHTLINE_STUDY = {
+    "zodiacal_and_starlight_share": {"u'": 0.249, "g'": 0.532, "r'": 0.349, "i'": 0.160},
+    "pointing_dmag": {                      # ecliptic latitude -> mag, relative to ours
+        0.0:  {"g'": -0.103, "r'": -0.078, "i'": -0.038},
+        15.9: {"g'": +0.000, "r'": +0.000, "i'": +0.000},
+        30.0: {"g'": +0.117, "r'": +0.086, "i'": +0.040},
+        45.0: {"g'": +0.194, "r'": +0.141, "i'": +0.064},
+        60.0: {"g'": +0.246, "r'": +0.177, "i'": +0.080},
+        90.0: {"g'": +0.246, "r'": +0.177, "i'": +0.080},
+    },
+    "growth_to_airmass_2": {"u'": 0.136, "g'": 0.228, "r'": 0.388, "i'": 0.578},
+    "site_insensitivity": {"lasilla": 0.532, "paranal": 0.532, "armazones": 0.533},  # g'
+}
+
+
 def _regenerate():
     wavelength, raw = np.loadtxt(RAW, comments="#")[:, 0], np.loadtxt(RAW, comments="#")[:, 1:7]
     binned = [rebin(wavelength, raw[:, i], 1.0) for i in range(raw.shape[1])]

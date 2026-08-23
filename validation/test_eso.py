@@ -200,9 +200,12 @@ def test_the_sky_no_longer_falls_with_airmass():
     strict=True,
     reason="Flat stops the double-counting but does not model the growth. A "
            "longer line of sight holds more emitting atmosphere, and ESO's sky "
-           "is 17.6% brighter at X=1.5 and 31.8% at X=2.0. Closing this needs a "
-           "van Rhijn term over the emitted components, which belongs with the "
-           "spectral background work rather than as another scalar fudge.",
+           "is 17.6% brighter at X=1.5 and 31.8% at X=2.0. Nor is one number "
+           "enough: queried per band, SkyCalc grows the sky 23% in g' and 58% "
+           "in i' between X=1.1 and X=2.0, because the emitted and the arriving "
+           "components respond oppositely. Closing this needs a van Rhijn term "
+           "over the emitted components only, which belongs with the spectral "
+           "background work rather than as another scalar fudge.",
 )
 def test_the_sky_grows_with_airmass_the_way_esos_does():
     zenith = eso_etc.CAPTURED[("v_HIGH+114", 20, 1.0, 0)]["sky_cpix"]

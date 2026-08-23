@@ -194,10 +194,13 @@ lookup cannot express a spectrum. Doing it properly — a sky spectrum and a
 throughput curve integrated against the real bandpass — closes four other things
 at once:
 
-- **the sky's growth with airmass.** Flat matches LCO exactly and stopped the
-  double-counting that used to make it *fall*, but ESO's sky is 17.6% brighter at
-  X=1.5 and 31.8% at X=2.0 and ours does not move. Closing it needs a van Rhijn
-  term over the emitted components, not another scalar. Strict xfail in
+- **the sky's growth with airmass, which is band-dependent.** Flat matches LCO
+  exactly and stopped the double-counting that used to make it *fall*, but the
+  sky does grow: from X=1.1 to X=2.0 SkyCalc puts it at +23% in g' and +58% in
+  i'. The ratio between those is the whole point — i' is mostly upper atmosphere
+  and airglow, emitted inside the column and lengthening with it, while over half
+  of g' is zodiacal light, which arrives from outside and is extinguished
+  instead. A scalar fitted in one band is wrong in every other. Strict xfail in
   `test_eso.py`.
 - **the moon model has no colour.** Krisciunas & Schaefer is Johnson V and the
   only band dependence CASTOR gives it is the extinction coefficient. Moonlight
@@ -217,9 +220,9 @@ and the rectangular approximation meets current precision needs.
 `mu_sky = -2.5 log10(Flux_dark + Flux_moon)`. Two components, and zodiacal light
 is not one of them — it is sunlight scattered off interplanetary dust, it depends
 on ecliptic latitude and solar elongation, and near the ecliptic it is a
-substantial fraction of a dark sky. Against the six-component SkyCalc export in
-`skycalc.py`, zodiacal light plus scattered starlight is **37% of a moonless g'
-sky**, 21% in r' and 10% in i'.
+substantial fraction of a dark sky. Queried from SkyCalc **at the sightline our
+own photometry looks down**, zodiacal light plus scattered starlight is **53% of
+a moonless g' sky**, 35% of r' and 16% of i'.
 
 ## 10. Galactic background is not modelled — BUILD
 
@@ -291,15 +294,20 @@ supernova. Ecliptic latitude spans 0.1°, galactic latitude 0.1°, solar elongat
 **What it costs.** The measured `mu_dark` values, 21.44 / 20.92 / 20.04, are not
 Lulin's dark sky. They are Lulin's dark sky *towards ecliptic +16 and galactic
 +21*, where zodiacal light and scattered starlight are a large share of the
-total. A user pointing at the ecliptic pole gets a materially darker sky than
-`presets.json` predicts, and the file has no way to say so. This is a known bias
-in a shipped value, which makes it worse than questions 9 and 10 — those are
-merely missing.
+total. SkyCalc puts the full swing from the ecliptic plane to the pole at
+**0.35 mag in g'**, 0.26 in r' and 0.12 in i', saturating above about 60° of
+ecliptic latitude. `presets.json` carries one number per band and has no way to
+say which direction it applies to. This is a known bias in a shipped value,
+which makes it worse than questions 9 and 10 — those are merely missing.
 
 It also means those two questions cannot be *calibrated* here at all, only
-modelled. A model can still be anchored: SkyCalc can be asked for this exact
-sightline, so the measured value stays the absolute reference while the model
-supplies only the variation. That is the safe form, and it is the one to build.
+modelled. A model can still be anchored, and the anchoring turns out to be
+cheap: SkyCalc answers for this exact sightline, so the measured value stays the
+absolute reference while the model supplies only the variation. The obvious
+objection — that SkyCalc has no Lulin, only ESO sites — does not bite. Across La
+Silla, Paranal and Armazones, 2400 m to 3060 m, the component shares move by 0.1
+percentage point. `skycalc.SIGHTLINE_STUDY` holds the queried numbers and
+`skycalc.query()` regenerates them.
 
 **What would settle it.** Fields spread in ecliptic and galactic latitude — which
 the airmass night in question 4 could carry for free if the fields are chosen for
