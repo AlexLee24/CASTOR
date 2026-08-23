@@ -30,6 +30,35 @@ def lulin():
             "--mag", "18", "--exp", "300", "-n", "10", "--time", WELL_PLACED]
 
 @pytest.fixture
+def hardware_only_presets(tmp_path):
+    """A presets file with one profile that has no environment.
+
+    VLT used to be this file's only example of a hardware family — a profile
+    naming instruments but no site — until it gained Paranal's own coordinates.
+    Nothing shipped is hardware-only any more, so the tests that exercise that
+    path need their own minimal fixture rather than depending on VLT staying
+    that way.
+    """
+    path = tmp_path / "hardware_only.json"
+    path.write_text(json.dumps({
+        "profiles": {
+            "bare_scope": {
+                "name": "Bare Telescope",
+                "telescopes": {"T": {"name": "T", "telescope": {
+                    "primary_mirror_diameter": 1.0, "secondary_mirror_diameter": 0.2,
+                    "focal_length": 8.0, "optical_throughput": 0.5}}},
+                "cameras": {"C": {"name": "C", "camera": {
+                    "pixel_pitch": 10.0, "quantum_efficiency": 0.8, "dark_current_rate": 0.01,
+                    "readout_noise": 5.0, "full_well_capacity": 100000}}},
+                "filters": {"F": {"name": "F", "optic_filter": {
+                    "central_wavelength": 550.0, "filter_bandwidth": 100.0, "filter_transmission": 0.9}}},
+            }
+        }
+    }))
+    return path
+
+
+@pytest.fixture
 def saved_form(tmp_path):
     """What the web form's SAVE writes — a superset of a request.
 
@@ -120,10 +149,13 @@ def test_a_stated_value_is_not_an_assumption(run, lulin):
 
     assert "environment.seeing_fwhm" not in result.stderr
 
-def test_a_hardware_only_profile_names_what_it_cannot_supply(run):
-    """VLT lists no site, and the tool would rather fail than place the observer somewhere."""
-    result = run("calc", "--site", "vlt", "--ra", "113.65", "--dec", "31.89",
-                 "--mag", "18", "--exp", "300", "-n", "1")
+def test_a_hardware_only_profile_names_what_it_cannot_supply(run, hardware_only_presets):
+    """A hardware-only profile lists no site, and the tool would rather fail than
+    place the observer somewhere. VLT was this suite's example until it gained
+    Paranal's own coordinates; see hardware_only_presets for why this now needs
+    its own fixture instead of a shipped profile."""
+    result = run("calc", "--presets-file", str(hardware_only_presets), "--site", "bare_scope",
+                 "--ra", "113.65", "--dec", "31.89", "--mag", "18", "--exp", "300", "-n", "1")
 
     assert result.exit_code == 3
     assert "environment.location: Field required" in result.stderr
@@ -249,8 +281,9 @@ def test_presets_lists_sites_and_marks_the_defaults(run):
     assert "lulin" in result.stdout
     assert "LOT*" in result.stdout
 
-def test_presets_warns_that_a_hardware_profile_has_no_place(run):
-    assert "hardware only" in run("presets").stdout
+def test_presets_warns_that_a_hardware_profile_has_no_place(run, hardware_only_presets):
+    result = run("presets", "--presets-file", str(hardware_only_presets))
+    assert "hardware only" in result.stdout
 
 def test_schema_is_the_contract_itself(run):
     contract = json.loads(run("schema").stdout)

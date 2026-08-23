@@ -85,7 +85,15 @@ PROVENANCE = {
     "lulin.filters.Sloan_i.telescope.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
 
     # ---- VLT / FORS2 --------------------------------------------------------
-    # Hardware-only profile, never the default, and nobody here observes with it.
+    # Never the default, and nobody here observes with it. It did lack a site
+    # entirely until a user asked why: unlike the amateur rigs, Paranal's
+    # location is exactly known, so leaving it unset was an oversight rather
+    # than the deliberate choice that omission is for genuinely portable gear.
+    "vlt.environment.location.latitude_deg": (-24.6275, DOCUMENT, "ESO/Wikidata, 24d37'38\"S"),
+    "vlt.environment.location.longitude_deg": (-70.4042, DOCUMENT, "ESO/Wikidata, 70d24'17\"W"),
+    "vlt.environment.location.elevation_m": (2635.0, DOCUMENT, "ESO's published Paranal elevation"),
+    "vlt.environment.mu_dark": (21.61, DOCUMENT, "ESO Paranal astroclimate page, Table 1: zenith-corrected V-band mean, FORS1, 3900 images over 174 nights Apr 2000-Sep 2001, rms 0.20"),
+    "vlt.environment.extinction_coeff": (0.135, DERIVED, "Patat et al. 2011 (A&A 527, A91) spectral extinction curve, integrated against the measured V_HIGH+114 curve in data/fors2_v_high_114.dat; plain 5500A value is 0.131"),
     "vlt.telescopes.VLT.primary_mirror_diameter": (8.0, GUESS, "a VLT unit telescope is 8.2 m"),
     "vlt.telescopes.VLT.secondary_mirror_diameter": (1.088, GUESS, "no source found"),
     "vlt.telescopes.VLT.focal_length": (24.75, GUESS, "no source found"),

@@ -155,7 +155,16 @@
       }
     },
     "vlt": {
-      "name": "VLT / FORS2 (hardware only)",
+      "name": "VLT / FORS2 (Paranal)",
+      "environment": {
+        "location": {
+          "latitude_deg": -24.6275,
+          "longitude_deg": -70.4042,
+          "elevation_m": 2635.0
+        },
+        "mu_dark": 21.61,
+        "extinction_coeff": 0.135
+      },
       "telescopes": {
         "VLT": {
           "name": "VLT 8.0 m",

@@ -14,6 +14,9 @@ stays offline. `query()` re-runs them live when you want to check for drift.
 """
 import json
 import urllib.request
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 ENDPOINT = "https://etc.eso.org/api/Fors/"
 
@@ -103,3 +106,38 @@ def implied_throughput(band, mag, airmass, moon):
 def preset_throughput(band):
     """optical_throughput * quantum_efficiency * filter_transmission, as shipped."""
     return 0.771 * 0.781 * PRESET_FILTERS[band][2]
+
+
+# ==========================================
+# Paranal's atmospheric extinction, and the VLT profile's site
+# ==========================================
+
+def paranal_extinction_curve():
+    """Patat et al. 2011's measured Paranal extinction curve.
+
+    Returns (wavelength_angstrom, k_mag_per_airmass). Source: A&A 527, A91,
+    Table B.1 — spectrophotometry of 8 standard stars with FORS1, the sibling
+    instrument to the FORS2 this preset models, over six months in 2008-2009.
+    data/patat2011_paranal_extinction.csv is the transcription; regenerate by
+    re-parsing arXiv:1011.6156's Table B.1 if it ever needs checking again.
+    """
+    import numpy as np
+    table = np.loadtxt(
+        DATA_DIR / "patat2011_paranal_extinction.csv", delimiter=",", skiprows=5)
+    return table[:, 0], table[:, 1]
+
+
+def paranal_extinction_for_filter(filter_wavelength_nm, filter_transmission):
+    """Patat's curve, weighted by a measured filter's own transmission.
+
+    A single band value (`presets.json`'s extinction_coeff is one number, not a
+    curve) has to be *some* weighted average rather than a value picked off the
+    table by eye — this is that average, done properly: interpolated onto the
+    filter's own grid and weighted by its own transmission.
+    """
+    import numpy as np
+    wl_k, k = paranal_extinction_curve()
+    wl_f_a = filter_wavelength_nm * 10.0  # nm -> Angstrom, Patat's grid
+    k_on_filter = np.interp(wl_f_a, wl_k, k)
+    return float(np.trapezoid(k_on_filter * filter_transmission, wl_f_a)
+                / np.trapezoid(filter_transmission, wl_f_a))

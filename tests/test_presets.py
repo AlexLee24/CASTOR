@@ -141,14 +141,32 @@ def test_a_site_fills_in_its_sky_and_location(shipped):
     assert shipped.profile("lulin").environment.mu_dark == 21.5
     assert environment["mu_dark"] == 20.92                      # r' measured
 
-def test_a_hardware_family_invents_no_location(shipped):
-    """VLT is listed as hardware only. Resolving it must leave the observer where they
-    are rather than quietly moving them to Paranal, which would change airmass and moon
-    geometry with nothing on screen to say so."""
-    fragment = shipped.resolve("vlt")
+def test_a_hardware_family_invents_no_location():
+    """A profile with no environment block is a hardware family, and resolving it
+    must leave the observer where they are rather than inventing coordinates —
+    that would change airmass and moon geometry with nothing on screen to say so.
+
+    Built inline rather than read from the shipped file: VLT was this suite's
+    example of a hardware-only profile until it gained Paranal's own sourced
+    coordinates (ESO's published site data, and Patat et al. 2011's measured
+    extinction curve integrated against FORS2's own V_HIGH+114 filter), so
+    nothing shipped is hardware-only any more. The behaviour this test protects
+    still needs covering on its own.
+    """
+    catalogue = presets.PresetFile(profiles={
+        "bare": presets.Profile(
+            name="Bare Telescope",
+            telescopes={"T": presets.TelescopeEntry(
+                name="T", telescope=schema.TelescopeSchema(
+                    primary_mirror_diameter=1.0, secondary_mirror_diameter=0.2,
+                    focal_length=8.0, optical_throughput=0.5))},
+        )
+    })
+
+    fragment = catalogue.resolve("bare")
 
     assert "environment" not in fragment
-    assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 8.0
+    assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 1.0
 
 def test_site_median_seeing_is_readable_but_never_resolved(shipped):
     """Seeing is a condition of the night being planned, not a property of the site."""

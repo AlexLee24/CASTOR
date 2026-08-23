@@ -144,10 +144,11 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
-  too. `provenance.py` records an origin for all 60 values and a test fails if
+  too. `provenance.py` records an origin for all 65 values and a test fails if
   the file holds one the table does not, or a different number than the one
-  recorded. Lulin is now 33 sourced against 12 guesses; the VLT profile is 3
-  against 12 and is not the default.
+  recorded. Lulin is now 37 sourced against 8 guesses; VLT — not the default,
+  and not what anyone here observes with — is 8 against 12, up from 3 once its
+  site stopped being left unset. See `provenance.summary()`.
 
 ## Open questions
 

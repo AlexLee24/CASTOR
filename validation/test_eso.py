@@ -323,3 +323,48 @@ def test_all_three_agree_on_how_the_target_dims_with_airmass():
         lco = 10 ** (-0.4 * k * (airmass - 1.0))
         assert castor == pytest.approx(lco, rel=1e-12)
         assert castor == pytest.approx(eso, rel=1e-3)
+
+
+# ==========================================
+# Paranal's atmospheric extinction — the VLT profile's site
+# ==========================================
+
+def test_paranal_extinction_falls_toward_the_red():
+    """Sanity check on the transcription: extinction is supposed to do this.
+
+    Rayleigh scattering goes as lambda^-4, so a real atmospheric extinction
+    curve falls steeply from the blue to the red overall. Not point-to-point
+    monotonically, though — real molecular absorption bumps sit on top of it,
+    and the two here (a few 0.001-0.004 mag rises around 5600-5700 and 6450 A)
+    line up with the Chappuis ozone band and are the kind of thing a real
+    measured curve should have. What a transcription error would produce is a
+    jump two orders of magnitude bigger than that, which the 0.01 step bound
+    below would catch.
+    """
+    wl, k = eso_etc.paranal_extinction_curve()
+    assert len(wl) == 77
+    assert k[0] > 0.6                      # near-UV, 3325 A
+    assert k[-1] < 0.05                    # near-IR, 10000 A
+    step = np.diff(k[:-4])                 # last 4 points are LBLRTM interpolations
+    assert step.max() < 0.01               # no rise bigger than a real absorption bump
+    assert k[:-4][0] - k[:-4][-1] > 0.5     # net fall, blue to red, dwarfs the bumps
+
+
+def test_the_vlt_profiles_extinction_is_v_high_114_weighted_by_the_real_curve():
+    """Where presets.json's vlt.environment.extinction_coeff actually comes from.
+
+    Not a value read off Patat's table by eye: V_HIGH+114's own measured
+    transmission curve (data/fors2_v_high_114.dat) weights the integral, so a
+    filter that leans blue of nominal V gets a slightly steeper number than the
+    textbook 0.13-ish quoted for Johnson V. It does — 0.135 against a plain
+    5500 A value of 0.131 — which is the direction V_HIGH+114's centroid
+    (549.2 nm, blue of 550) predicts.
+    """
+    curve = np.loadtxt(eso_etc.DATA_DIR / "fors2_v_high_114.dat")
+    weighted = eso_etc.paranal_extinction_for_filter(curve[:, 0], curve[:, 1])
+
+    assert weighted == pytest.approx(0.135, abs=0.001)
+
+    wl, k = eso_etc.paranal_extinction_curve()
+    plain_v = np.interp(5500.0, wl, k)
+    assert weighted > plain_v
