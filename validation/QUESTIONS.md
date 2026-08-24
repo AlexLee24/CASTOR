@@ -394,6 +394,23 @@ both.
 the airmass night in question 4 could carry for free if the fields are chosen for
 it rather than for convenience.
 
+**A first, inconclusive look, from the SN2024ggi field (ecliptic -34°).** Sky
+brightness measured the same way as everything else in this file (whole-frame
+sigma-clipped median, converted through the same SkyCalc-calibrated zero point
+as questions 4 and 5) correlates strongly with airmass in this dataset — moon-
+free frames past X~3.4 read 1.6-2.4 mag brighter than the two moon-free, near-
+zenith ones (X=1.81), which is horizon light pollution and airglow path length,
+not zodiacal light, and lines up with the "worse towards the horizon" excess
+already named above. The only clean, comparable point — r', X=1.81, moon 40°
+below the horizon — measures **20.50**; the zodiacal model (question 9) predicts
+**21.00** at this pointing. n=2, and both figures carry the SkyMapper-vs-Sloan
+systematic questions 4 and 5 already flag, so this is not a real test of the
+model either way — but a *measured brighter than predicted* result is the same
+direction as the unexplained excess this question already describes, not a new
+contradiction. Settling question 9's shape needs the same thing this question
+already asks for: fields chosen for ecliptic/galactic spread, at low airmass, on
+purpose.
+
 ---
 
 ## Building 9, 10 and 16: the plan, with the numbers already in hand
