@@ -26,7 +26,7 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 |---|---|---|---|
 | 1 | Why is r' 1.81x g' and i'? | ASK | — |
 | 2 | ~~How big is LOT's secondary?~~ | **CLOSED** | answered by Trebur's offer |
-| 3 | Were the prototype's efficiencies measured, and on which camera? | ASK | — |
+| 3 | Were the prototype's efficiencies measured, and on which camera? | ASK | likely unanswerable — 2005, nobody left to ask |
 | 4 | What is the extinction in each band? | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
 | 5 | SLT has no photometry at all | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
 | 6 | SOPHIA's dark current at −80 °C | OBSERVE | **Closed to an upper limit** — see below |
@@ -106,12 +106,17 @@ with per-band QE — PI1300B, SI1100, NCUcam-1 — and none of them is SOPHIA, w
 post-dates it. The 2011 file is also an unfinished draft: `XXX` for most dark
 currents, blank Sloan QE for one camera, a duplicated hash key.
 
-**Not known.** Whether either set of numbers was measured or estimated.
+**Not known, and probably staying that way.** Whether either set of numbers was
+measured or estimated — asked 2026-08-24, the answer is 2005, and there is
+nobody left to ask who would know. Treat this as unlikely to close on any
+useful timescale rather than pending.
 
 **What changes with an answer.** It decides question 1. If they were estimates,
 the 2005 agreement at r' is coincidence and our photometry is the only evidence
 that exists. If they were measured on a camera whose QE was flat, the shape is
-the telescope's and has been for twenty years.
+the telescope's and has been for twenty years. Absent an answer, the honest
+default is the weaker reading: `lulin_prototype.py`'s comparison stays what
+README.md already calls it — "weakly corroborated," not confirmed.
 
 ## 4. What is the extinction in each band? — CLOSED
 
