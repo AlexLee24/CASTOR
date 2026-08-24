@@ -43,12 +43,12 @@ PROVENANCE = {
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
     "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
-    "lulin.telescopes.SLT.optical_throughput": (0.804, GUESS, "no photometry; LOT measures 0.27-0.48; QUESTIONS.md 5"),
+    "lulin.telescopes.SLT.optical_throughput": (0.234, MEASURED, "geometric mean of SkyMapper-calibrated SLT bands below; QUESTIONS.md 5"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
     "lulin.cameras.Sophia.quantum_efficiency": (0.85, GUESS, "datasheet curve gives 90/96/87% at g'r'i'; harmless where the band throughput is measured, wrong 3x in z'; QUESTIONS.md 13"),
-    "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet -152 gives 0.00025 at -90 C, frames run at -80 C; QUESTIONS.md 6"),
+    "lulin.cameras.Sophia.dark_current_rate": (0.001, DERIVED, "datasheet 0.00025 at -90C, halving-interval scaled to -80C (4.5-5.9C/halving, same method used for ASI2600MC); consistent with 20 real -80C dark frames, whose frame-to-frame variance came in below read-noise-squared (upper limit, not a detection) — QUESTIONS.md 6"),
     "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet -152 1 MHz port says 8.5"),
     "lulin.cameras.Sophia.full_well_capacity": (150000, DOCUMENT, "datasheet -152, single pixel typical; 100000 was the 13.5 um -132 column"),
 
@@ -83,9 +83,32 @@ PROVENANCE = {
     "lulin.filters.Sloan_g.environment.zodiacal_share": (0.274, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
     "lulin.filters.Sloan_r.environment.zodiacal_share": (0.267, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
     "lulin.filters.Sloan_i.environment.zodiacal_share": (0.137, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
-    "lulin.filters.Sloan_g.telescope.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
-    "lulin.filters.Sloan_r.telescope.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
-    "lulin.filters.Sloan_i.telescope.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+    "lulin.filters.Sloan_g.telescope.LOT.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+    "lulin.filters.Sloan_r.telescope.LOT.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
+    "lulin.filters.Sloan_i.telescope.LOT.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+
+    # ---- Lulin, SLT throughput and extinction (2024-04-14, SN2024ggi) --------
+    # A single photometric night with a real airmass sweep (1.81-3.72), the
+    # first LOT/SLT data ever to have one — see QUESTIONS.md 4. Calibrated
+    # against SkyMapper DR4 (Pan-STARRS DR2 does not cover this field's
+    # declination, -32.8 deg), so carries an extra, undated systematic on top
+    # of the photometric fit error quoted: SkyMapper's natural u/v/g/r/i/z
+    # system is close to but not identical to Sloan/SDSS, and no colour-term
+    # transform between the two has been applied. iterative sigma-clipped fit
+    # of ZP vs airmass across the night (~1 hour of the night was cloud-
+    # affected and rejected — see the -1.17 mag single-frame outlier this
+    # caught). optical_throughput here is implied_optical_train = T_sys /
+    # (QE * filter_transmission), same convention as LOT's rows above.
+    "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.101, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.086 +/- 0.015"),
+    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.323, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.274 +/- 0.012"),
+    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.474, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.401 +/- 0.019"),
+    "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.373, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.317 +/- 0.021"),
+    "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.122, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.104 +/- 0.006"),
+    "lulin.filters.Sloan_u.environment.extinction_coeff": (0.622, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.094"),
+    "lulin.filters.Sloan_g.environment.extinction_coeff": (0.512, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.023"),
+    "lulin.filters.Sloan_r.environment.extinction_coeff": (0.314, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.024"),
+    "lulin.filters.Sloan_i.environment.extinction_coeff": (0.185, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.033"),
+    "lulin.filters.Sloan_z.environment.extinction_coeff": (0.155, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.028"),
 
     # ---- VLT / FORS2 --------------------------------------------------------
     # Never the default, and nobody here observes with it. It did lack a site
@@ -177,9 +200,14 @@ def walk(profiles):
                     out[f"{profile_id}.{catalogue}.{entry_id}.{key}"] = value
                 if catalogue != "filters":
                     continue
-                for extra in ("environment", "telescope"):
-                    for key, value in (entry.get(extra) or {}).items():
-                        out[f"{profile_id}.{catalogue}.{entry_id}.{extra}.{key}"] = value
+                for key, value in (entry.get("environment") or {}).items():
+                    out[f"{profile_id}.{catalogue}.{entry_id}.environment.{key}"] = value
+                # telescope is keyed by which telescope the override belongs to
+                # (FilterEntry.telescope in castorCLI/presets.py) — one extra
+                # level deeper than environment, which is site-wide and needs no key.
+                for tel_key, tel_value in (entry.get("telescope") or {}).items():
+                    for key, value in tel_value.items():
+                        out[f"{profile_id}.{catalogue}.{entry_id}.telescope.{tel_key}.{key}"] = value
     return out
 
 

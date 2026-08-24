@@ -144,15 +144,41 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
-  too. `provenance.py` records an origin for all 103 values and a test fails if
+  too. `provenance.py` records an origin for all 113 values and a test fails if
   the file holds one the table does not, or a different number than the one
-  recorded. Lulin is now 40 sourced against 8 guesses; VLT — not the default,
+  recorded. Lulin is now 52 sourced against 6 guesses; VLT — not the default,
   and not what anyone here observes with — is 8 against 12, up from 3 once its
   site stopped being left unset. `other` (a personal amateur rig, nominally at
   Hehuan Mountain's Yuanfeng dark-sky viewpoint) is new and starts at 28 sourced
   against 7 — every telescope's collecting geometry and every camera's read
   noise and full well are real, only the optical throughputs and one borrowed
   dark current are placeholders. See `provenance.summary()`.
+
+- **SLT went from a completely unmeasured guess to Lulin's best-calibrated
+  instrument, and every Lulin band now has its own extinction.** A single
+  photometric night with a real airmass sweep (SLT, 2024-04-14, 1.81-3.72,
+  SN2024ggi) — the first LOT/SLT data ever to have one, closing QUESTIONS.md 4
+  — gave every one of u'/g'/r'/i'/z' a real extinction_coeff, falling towards
+  the red the way extinction should, and gave SLT real per-band throughput
+  (0.10-0.47, replacing a guessed 0.804 that had no reason to beat LOT's own
+  measured 0.27-0.48 and didn't). Calibrated against SkyMapper DR4, not
+  Pan-STARRS DR2 — this field's declination (-32.8°) is outside PS1's
+  footprint — so it carries an uncorrected systematic on top of the fit error
+  from the two systems' natural photometric bands not being identical.
+  Discovered along the way: presets.json's per-filter telescope override had
+  no telescope of its own — selecting SLT with a filter LOT had measured
+  silently applied LOT's number. Fixed by keying the override by telescope id;
+  see `castorCLI/presets.py`'s `FilterEntry.telescope`.
+
+- **SOPHIA's dark current at -80°C is now bounded by a real dark frame, not
+  guessed.** 20 real -80°C, 300s frames (QUESTIONS.md 6) — no bias frame to
+  subtract, so measured through the frame-to-frame variance instead of the
+  mean level. The variance came in *below* read-noise-squared: dark current is
+  too small for this method to detect, an upper limit rather than a
+  measurement. The guessed 0.01 e-/s/pix is replaced with 0.001, the
+  datasheet's -90°C figure scaled to -80°C by the same halving-interval method
+  used for the ASI2600MC — consistent with, not contradicted by, the
+  non-detection.
 
 - **`mu_dark` stopped meaning "the whole sky" for Lulin's g'/r'/i'.** Zodiacal
   light and scattered starlight — 27%, 27% and 14% of what those three bands'

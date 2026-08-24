@@ -27,9 +27,9 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 1 | Why is r' 1.81x g' and i'? | ASK | — |
 | 2 | ~~How big is LOT's secondary?~~ | **CLOSED** | answered by Trebur's offer |
 | 3 | Were the prototype's efficiencies measured, and on which camera? | ASK | — |
-| 4 | What is the extinction in each band? | OBSERVE | strict xfail, `test_lulin.py` |
-| 5 | SLT has no photometry at all | OBSERVE | 12 `GUESS` rows |
-| 6 | SOPHIA's dark current at −80 °C | OBSERVE | `GUESS` row |
+| 4 | What is the extinction in each band? | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
+| 5 | SLT has no photometry at all | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
+| 6 | SOPHIA's dark current at −80 °C | OBSERVE | **Closed to an upper limit** — see below |
 | 7 | LOT's own u' filter is still unmeasured | DECIDE | — |
 | 8 | Sky and throughput are tables where the physics is a curve | BUILD | strict xfail, `test_eso.py` |
 | 9 | Zodiacal light is not modelled | BUILD | Partly closed |
@@ -113,61 +113,86 @@ the 2005 agreement at r' is coincidence and our photometry is the only evidence
 that exists. If they were measured on a camera whose QE was flat, the shape is
 the telescope's and has been for twenty years.
 
-## 4. What is the extinction in each band? — OBSERVE
+## 4. What is the extinction in each band? — CLOSED
 
-**Three sources, none good enough to overrule the others.**
+**Settled by SN2024ggi/SLT, 2024-04-14** — a single photometric night, one
+field, airmass 1.81 to 3.72, all five Sloan bands. Exactly what the old "what
+would settle it" note below asked for, three years after it was written.
 
-| source | g' | r' | i' |
-|---|---|---|---|
-| `presets.json` | 0.17 | 0.17 | 0.17 |
-| 2005 prototype, interpolated | 0.161 | 0.092 | 0.074 |
-| our fit | 0.123 ± 0.105 | 0.189 ± 0.027 | 0.108 ± 0.049 |
+| band | k (mag/airmass) | frames kept |
+|---|---|---|
+| u' | 0.622 ± 0.094 | 44/47 |
+| g' | 0.512 ± 0.023 | 37/48 |
+| r' | 0.314 ± 0.024 | 39/49 |
+| i' | 0.185 ± 0.033 | 45/49 |
+| z' | 0.155 ± 0.028 | 40/48 |
 
-The 2005 values fall monotonically towards the red, which is what extinction
-does; ours puts r' highest, which it cannot be, and it is now clear why. The
-range looks adequate — 1.03 to 1.59 — but it is accumulated across 18 separate
-nights. **The largest airmass span any single night manages is 0.19, and the
-median is 0.08**, so what the fit actually measured was night-to-night
-transparency wearing an airmass term's clothes.
-But our r' is 3.6σ from the 2005 value, so the two genuinely disagree rather than
-one refining the other. The 2011 file's Sloan column looks like a fourth source
-and is not — see the trap at the end of this file.
+Falls monotonically towards the red — real Rayleigh-scattering shape, unlike
+the old 18-night fit's r'-highest inversion (still recorded in `lulin.py`'s
+`MEASURED` and still xfailed in `test_lulin.py`, since that fit is a different,
+weaker dataset this did not touch). Fitted with an iterative sigma-clipped
+ZP-vs-airmass regression: an initial fit had residuals of 0.2-0.4 mag, traced to
+~1 hour of the night (14:34-15:32) being cloud-affected — one frame dropped 1.17
+mag in a single exposure. Clipping that stretch brought residuals to 0.05-0.19
+mag. `presets.json`'s per-band `environment.extinction_coeff` now carries these
+values; the site-wide 0.17 remains only as the fallback for bands/profiles with
+no measurement of their own.
 
-`presets.json` therefore keeps its single site-wide 0.17, which is certainly
-wrong in detail and at least is not wrong in a specific direction.
+**Caveat carried forward.** Calibrated against SkyMapper DR4, not Pan-STARRS
+DR2 — this field's declination (-32.8°) is outside PS1's footprint, confirmed
+empirically (2769 catalogue stars at the old field's +38.4°, zero at this one).
+SkyMapper's natural u/v/g/r/i/z system is close to but not identical to
+Sloan/SDSS, and no colour-term transform between the two has been applied, so
+there is an uncorrected systematic on top of the fit errors quoted.
 
-**What would settle it.** One photometric night, one field, frames from as close
-to the zenith as it gets down to airmass ~2, in each filter. A short programme,
-and it would also give the end-to-end SNR check its cleanest test.
+## 5. SLT has no photometry at all — CLOSED
 
-## 5. SLT has no photometry at all — OBSERVE
+**Settled by the same SN2024ggi/SLT night.** SLT's per-band `optical_throughput`
+(the implied optical train, `T_sys / (QE * filter_transmission)`, same
+convention as LOT's rows):
 
-None of the 123 frames is from SLT. Twelve of its preset values have no source,
-and the one that matters is `optical_throughput = 0.804` — LOT measures 0.27 to
-0.48, and there is no reason the 40 cm is twice as efficient as the metre.
-`secondary_mirror_diameter = 0.12` is also unpublished and, unlike LOT's, is not
-absorbed by a fitted throughput.
+| band | optical_throughput |
+|---|---|
+| u' | 0.101 ± 0.018 |
+| g' | 0.323 ± 0.015 |
+| r' | 0.474 ± 0.022 |
+| i' | 0.373 ± 0.025 |
+| z' | 0.122 ± 0.007 |
 
-**What would settle it.** A night of SLT frames on a Pan-STARRS field, in any
-filter, moves it from guesswork to measurement exactly as LOT's did. Cheapest if
-it rides along with question 4 on the same night.
+The guessed 0.804 was wrong in the direction this file already suspected — SLT
+is *not* twice as efficient as LOT; its real numbers (0.10-0.47) sit in the same
+range as LOT's own measured 0.27-0.48. `telescopes.SLT.telescope.optical_throughput`
+now carries the geometric mean of these five (0.234) as its fallback, the same
+role LOT's 0.381 plays. `secondary_mirror_diameter = 0.12` remains unpublished —
+this closes the throughput question, not the geometry one.
 
-## 6. SOPHIA's dark current at −80 °C — OBSERVE
+**A real bug found while wiring this in.** `presets.json`'s per-filter telescope
+override had no telescope of its own: `_overlay()` applied whichever
+telescope's number was on a filter regardless of which telescope was actually
+selected, so `SLT + Sloan_r'` was silently returning *LOT's* measured 0.568.
+Latent until now because only LOT had ever written to these fields. Fixed by
+keying `FilterEntry.telescope` by telescope catalogue id (`castorCLI/presets.py`).
 
-**Known.** The datasheet quotes **0.00025** e-/pix/s at −90 °C for the -152, the
-15 µm variant and so ours. The frames run at −80 (`SET-TEMP` and `CCD-TEMP`
-agree). `presets.json` says 0.01, forty times the −90 °C figure, with no source.
+## 6. SOPHIA's dark current at −80 °C — Closed to an upper limit
 
-**Not known.** The value at −80 °C. The 2011 prototype tabulates two other
-cameras across that range and they fall by 33x and 100x from −50 to −80 — a
-halving every 5.9 °C and every 4.5 °C. Even the sign is not in doubt, but a
-factor of three between two cameras in one document is why a rule of thumb
-cannot replace a measurement, and nothing has been changed.
+**Measured, and the honest answer is "too small to see."** 20 real −80°C, 300s
+dark frames arrived. With no bias frame to subtract the mean level against,
+dark current was measured through the frame-to-frame *variance* instead: it
+should equal `read_noise² + dark_rate × exptime`. The measured variance (48.4
+e-²) came in *below* read-noise-squared (62.4 e-², from the 7.9 e- read noise
+measured elsewhere in this suite) — statistically solid (SE of the median
+0.03 e-²), not just noisy. Dark current at −80°C is too small for 20×300s
+frames to resolve against this camera's own read noise; this is an upper
+limit, not a detection.
 
-**What changes with an answer.** Very little in practice: at 300 s even 0.01
-e-/s contributes 3 e- against a sky of ~750. It is listed because the preset
-states a number with no source. One dark frame at −80 °C settles it, and that is
-faster than asking.
+**What changed anyway.** The guessed 0.01 e-/pix/s — forty times the
+datasheet's −90°C figure of 0.00025 with no source — is replaced with 0.001,
+the datasheet figure scaled to −80°C by the same halving-interval method
+(4.5-5.9°C/halving) already used for the ASI2600MC. This estimate is
+*consistent with* the non-detection above, not contradicted by it, so it
+replaces the guess as DERIVED rather than staying a GUESS. As before: very
+little in practice either way — at 300s even the old 0.01 e-/s contributed only
+3 e- against a sky of ~750.
 
 ## 7. LOT's own u' filter is still unmeasured — DECIDE
 

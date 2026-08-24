@@ -76,7 +76,7 @@ def test_nothing_a_calculation_leans_on_hardest_is_a_guess():
     ] + [f"lulin.filters.Sloan_{b}.{field}"
          for b in "gri"
          for field in ("central_wavelength", "filter_bandwidth", "filter_transmission",
-                       "environment.mu_dark", "telescope.optical_throughput")]
+                       "environment.mu_dark", "telescope.LOT.optical_throughput")]
 
     guesses = [p for p in load_bearing
                if provenance.PROVENANCE[p][1] == provenance.GUESS]

@@ -110,7 +110,7 @@ class BandTelescope(BaseModel):
     corrector, window, and the detector's response where it is not flat. CASTOR's
     request has one number for the telescope and one for the camera, both
     band-independent, so this is where a measurement that varies with wavelength
-    has to land. Measured at Lulin it runs 0.27 to 0.48 across g'r'i'.
+    has to land. Measured at Lulin it runs 0.10 to 0.57 across telescopes and bands.
 
     It goes on the filter rather than into filter_transmission because that field
     now holds the manufacturer's measured curve, and overwriting a number that can
@@ -128,8 +128,17 @@ class FilterEntry(_NamedEntry):
     # Fragments the filter contributes to the rest of the configuration, applied
     # only when this filter is the one selected. Shaped like the sections they
     # merge into, the same way every other fragment in the file is.
+    #
+    # `telescope` is keyed by the telescope catalogue key (e.g. "LOT", "SLT") and
+    # applies only the entry matching whichever telescope is actually selected.
+    # A plain BandTelescope (not telescope-keyed) would apply to any telescope
+    # this filter is used with regardless of which one it was measured on — the
+    # sky is one thing a site owns, but band-dependent optical efficiency is a
+    # property of one specific telescope's optics, not of the filter alone, and
+    # two telescopes at the same site can both carry a measurement for the same
+    # filter without one silently overwriting the other's.
     environment: BandSky | None = None
-    telescope: BandTelescope | None = None
+    telescope: dict[str, BandTelescope] | None = None
 
 class SiteEnvironment(BaseModel):
     """The slice of EnvironmentCondition that belongs to a place rather than a night.
@@ -207,10 +216,15 @@ class PresetFile(BaseModel):
         # The chosen filter has the last word on anything that depends on the band.
         # Applied after the site and the rig so it overrides them, and only for the
         # filter actually selected — the others describe a different bandpass.
+        chosen_telescope_key = selection["telescope"][0]
         chosen = selection["optic_filter"][1]
         if chosen is not None:
             _overlay(fragment.get("environment"), chosen.environment)
-            _overlay(instrument.get("telescope"), chosen.telescope)
+            # Telescope-keyed: a filter's band-dependent efficiency belongs to
+            # whichever telescope it was actually measured on, not to the filter
+            # in the abstract — see FilterEntry.telescope's docstring.
+            telescope_override = (chosen.telescope or {}).get(chosen_telescope_key)
+            _overlay(instrument.get("telescope"), telescope_override)
 
         if instrument:
             fragment["instrument"] = instrument

@@ -77,7 +77,7 @@
             "primary_mirror_diameter": 0.406,
             "secondary_mirror_diameter": 0.12,
             "focal_length": 3.414,
-            "optical_throughput": 0.804
+            "optical_throughput": 0.234
           }
         }
       },
@@ -87,7 +87,7 @@
           "camera": {
             "pixel_pitch": 15.0,
             "quantum_efficiency": 0.85,
-            "dark_current_rate": 0.01,
+            "dark_current_rate": 0.001,
             "readout_noise": 7.9,
             "full_well_capacity": 150000
           }
@@ -113,10 +113,12 @@
           },
           "environment": {
             "mu_dark": 21.26,
-            "zodiacal_share": 0.267
+            "zodiacal_share": 0.267,
+            "extinction_coeff": 0.314
           },
           "telescope": {
-            "optical_throughput": 0.568
+            "LOT": { "optical_throughput": 0.568 },
+            "SLT": { "optical_throughput": 0.474 }
           }
         },
         "Sloan_u": {
@@ -125,6 +127,12 @@
             "central_wavelength": 353.4,
             "filter_bandwidth": 64.8,
             "filter_transmission": 1.0
+          },
+          "environment": {
+            "extinction_coeff": 0.622
+          },
+          "telescope": {
+            "SLT": { "optical_throughput": 0.101 }
           }
         },
         "Sloan_g": {
@@ -136,10 +144,12 @@
           },
           "environment": {
             "mu_dark": 21.79,
-            "zodiacal_share": 0.274
+            "zodiacal_share": 0.274,
+            "extinction_coeff": 0.512
           },
           "telescope": {
-            "optical_throughput": 0.313
+            "LOT": { "optical_throughput": 0.313 },
+            "SLT": { "optical_throughput": 0.323 }
           }
         },
         "Sloan_i": {
@@ -151,10 +161,12 @@
           },
           "environment": {
             "mu_dark": 20.20,
-            "zodiacal_share": 0.137
+            "zodiacal_share": 0.137,
+            "extinction_coeff": 0.185
           },
           "telescope": {
-            "optical_throughput": 0.312
+            "LOT": { "optical_throughput": 0.312 },
+            "SLT": { "optical_throughput": 0.373 }
           }
         },
         "Sloan_z": {
@@ -163,6 +175,12 @@
             "central_wavelength": 962.1,
             "filter_bandwidth": 278.0,
             "filter_transmission": 0.998
+          },
+          "environment": {
+            "extinction_coeff": 0.155
+          },
+          "telescope": {
+            "SLT": { "optical_throughput": 0.122 }
           }
         }
       }
