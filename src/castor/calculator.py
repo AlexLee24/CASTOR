@@ -88,10 +88,16 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             mu_dark=env.mu_dark,
             extinction_coeff=env.extinction_coeff,
             lon=env.location.longitude_deg, lat=env.location.latitude_deg,
-            elevation=env.location.elevation_m
+            elevation=env.location.elevation_m,
+            zodiacal_share=env.zodiacal_share
         )
     else:
-        mu_sky = env.mu_dark
+        # zodiacal_share is independent of the moon: it completes mu_dark into
+        # the actual moonless sky whether or not lunar scattering is being
+        # modelled, so it applies here too — see moon.apply_zodiacal_baseline.
+        mu_sky = moon.apply_zodiacal_baseline(
+            env.mu_dark, tgt.ra, tgt.dec, env.zodiacal_share
+        )
 
     # 1.2 Precompute optical and hardware physical quantities
     eff_area = float(physics.calculate_effective_area(

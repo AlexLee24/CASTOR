@@ -144,15 +144,27 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
-  too. `provenance.py` records an origin for all 100 values and a test fails if
+  too. `provenance.py` records an origin for all 103 values and a test fails if
   the file holds one the table does not, or a different number than the one
-  recorded. Lulin is now 37 sourced against 8 guesses; VLT — not the default,
+  recorded. Lulin is now 40 sourced against 8 guesses; VLT — not the default,
   and not what anyone here observes with — is 8 against 12, up from 3 once its
   site stopped being left unset. `other` (a personal amateur rig, nominally at
   Hehuan Mountain's Yuanfeng dark-sky viewpoint) is new and starts at 28 sourced
   against 7 — every telescope's collecting geometry and every camera's read
   noise and full well are real, only the optical throughputs and one borrowed
   dark current are placeholders. See `provenance.summary()`.
+
+- **`mu_dark` stopped meaning "the whole sky" for Lulin's g'/r'/i'.** Zodiacal
+  light and scattered starlight — 27%, 27% and 14% of what those three bands'
+  photometry actually measured — have been split back out, leaving `mu_dark` as
+  airglow and light pollution only and letting the engine add the zodiacal part
+  back in sized to wherever the target actually points, rather than baking in
+  the one sightline the frames happened to look down. `zodiacal_share` records
+  what was split out; `castor.moon.ZODIACAL_LATITUDE_SHAPE` derives the pointing
+  dependence from ESO SkyCalc, and independently reproduces the plane-to-pole
+  swing `skycalc.AT_LULIN` already published (0.174 / 0.193 / 0.101 mag) to the
+  third decimal. Every other profile is unaffected — this needs a measurement
+  nobody else has. See `QUESTIONS.md` 9 and 10.
 
 ## Open questions
 

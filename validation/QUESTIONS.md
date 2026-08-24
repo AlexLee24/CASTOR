@@ -32,8 +32,8 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 6 | SOPHIA's dark current at −80 °C | OBSERVE | `GUESS` row |
 | 7 | LOT's own u' filter is still unmeasured | DECIDE | — |
 | 8 | Sky and throughput are tables where the physics is a curve | BUILD | strict xfail, `test_eso.py` |
-| 9 | Zodiacal light is not modelled | BUILD | — |
-| 10 | Galactic background is not modelled | BUILD | — |
+| 9 | Zodiacal light is not modelled | BUILD | Partly closed |
+| 10 | Galactic background is not modelled | BUILD | Partly closed |
 | 11 | Readout overhead is not modelled | BUILD | — |
 | 12 | `background_dominance_factor` has no source | DECIDE | docstring only |
 | 13 | SOPHIA's QE is one flat number | BUILD | `GUESS` row |
@@ -217,28 +217,42 @@ and the rectangular approximation meets current precision needs.
 
 ## 9. Zodiacal light is not modelled — BUILD
 
-`mu_sky = -2.5 log10(Flux_dark + Flux_moon)`. Two components, and zodiacal light
-is not one of them — it is sunlight scattered off interplanetary dust, it depends
-on ecliptic latitude and solar elongation, and near the ecliptic it is a
-substantial fraction of a dark sky. Queried from SkyCalc at the sightline our own
-photometry looks down, and rescaled to Lulin's measured brightness, zodiacal
-light plus scattered starlight is **27% of a moonless g' sky**, 27% of r' and
-14% of i'. (The uncorrected Paranal figures are 53 / 35 / 16 — see question 16
-for why Lulin's are smaller.)
+**Partly closed.** `mu_sky = -2.5 log10(Flux_dark + Flux_zodi + Flux_moon)` now
+has the term. `Flux_zodi` is zero unless a profile carries `zodiacal_share`;
+Lulin's g'/r'/i' are the only bands that do — queried from SkyCalc at the
+sightline our own photometry looks down and rescaled to Lulin's measured
+brightness, zodiacal light plus scattered starlight is **27% of a moonless g'
+sky**, 27% of r' and 14% of i' (`skycalc.AT_LULIN`; the uncorrected Paranal
+figures are 53 / 35 / 16 — see question 16 for why Lulin's are smaller).
+`presets.json`'s `mu_dark` for those three bands is now the *local* component
+only (21.79 / 21.26 / 20.20, up from 21.44 / 20.92 / 20.04), and the engine adds
+the zodiacal share back on top, sized to wherever the target actually is —
+`castor.moon.ecliptic_latitude` and `ZODIACAL_LATITUDE_SHAPE` — rather than
+baking in the one sightline the frames happened to look down.
+
+**What is left.** The shape table is one curve averaged across g'/r'/i' (they
+agreed to within 11%, not identically) and holds only near the one solar
+elongation SkyCalc was queried at (130°); neither dependence is modelled beyond
+that. `background_dominance_factor` (question 12) and the moon's own colour are
+untouched by this. See `src/castor/moon.py` for the full derivation.
 
 ## 10. Galactic background is not modelled — BUILD
 
-The same gap and the same fix: integrated starlight plus diffuse galactic light,
-strongly dependent on galactic latitude, absent from `mu_sky`. Both are named a
-core issue in the project's slides, which propose ESO's SkyCalc as the route.
+**Partly closed, less than question 9.** Integrated starlight and diffuse
+galactic light are folded into the same split as the zodiacal term above —
+`zodiacal_share` is named for what it lumps together, "zodiacal *and starlight*"
+— so the double-counting this question warned about (`mu_dark` is a *measured*
+ground-level brightness and already contains both) is now avoided rather than
+committed, and both components leave `mu_dark` together.
 
-**Adding them naively would double-count.** `mu_dark` is a *measured* ground-level
-brightness, so it already contains both, at whatever sightline it was measured
-down. Computing them separately and adding them on top repeats the mistake the
-extinction term made and the slides named — *"Hidden Errors (Two Wrongs Make a
-Right)"*. Doing this properly means redefining `mu_dark` as airglow and
-atmosphere only, and that means knowing how much to take out — which is
-question 16.
+**What is left, and it is the real gap.** Only the zodiacal piece has its own
+correct pointing dependence: `ZODIACAL_LATITUDE_SHAPE` is a function of ecliptic
+latitude, which is right for zodiacal light and not for starlight, whose real
+dependence is on *galactic* latitude. The starlight share currently rides along
+scaled by the zodiacal shape — a documented approximation, not a galactic
+background model. Untangling the two needs their separate shares as a function
+of their own coordinate, which SkyCalc can supply but nothing here has queried
+for yet.
 
 ## 11. Readout overhead is not modelled — BUILD
 
@@ -354,8 +368,16 @@ it rather than for convenience.
 
 ## Building 9, 10 and 16: the plan, with the numbers already in hand
 
-Written out because the measuring is done and only the coding is left. Nothing
-below needs the observatory, a new night, or an answer from anyone.
+**Done for 9, most of 10; 16 is still OBSERVE.** Written out because the
+measuring was done and only the coding was left; the plan below matches what
+shipped, step for step. One thing changed from the plan: `Flux_zodiacal` had to
+be independent of `auto_calc_background` rather than living inside it —
+gating it behind the same flag as the moon would have meant the GUI's default
+(that flag off) silently under-counted the sky for every preset carrying this
+split, the exact failure mode this whole file exists to catch. See
+`moon.apply_zodiacal_baseline`. Question 10's starlight component is split out
+(no more double-counting) but rides on the zodiacal shape rather than its own
+galactic-latitude model — see question 10 above for what that leaves open.
 
 **The target.** `mu_sky` gains a term and `mu_dark` changes meaning:
 

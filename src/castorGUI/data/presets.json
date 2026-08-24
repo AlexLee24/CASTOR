@@ -36,7 +36,17 @@
     "",
     "Only a profile that is a real site may have its sky overridden this way; giving an",
     "'environment' to a filter in a hardware-family profile is refused when the file is",
-    "read, rather than being quietly ignored."
+    "read, rather than being quietly ignored.",
+    "",
+    "Lulin's g'/r'/i' 'mu_dark' is the LOCAL sky only (airglow and light pollution) - the",
+    "zodiacal light and scattered starlight that were in the original photometric measurement",
+    "have been split back out, and 'zodiacal_share' records what fraction of that original",
+    "total the split removed. The engine adds an equivalent term back in, sized to wherever",
+    "the target actually is on the sky, rather than baking in the one sightline these three",
+    "bands happened to be measured down. See validation/QUESTIONS.md 9 and 10, and",
+    "src/castor/moon.py's ZODIACAL_LATITUDE_SHAPE for the derivation. Everything else in this",
+    "file - the site-wide 21.5 fallback, u', VLT, other - has no such split and 'mu_dark'",
+    "there is still the whole moonless sky, exactly as before."
   ],
   "profiles": {
     "lulin": {
@@ -102,7 +112,8 @@
             "filter_transmission": 0.995
           },
           "environment": {
-            "mu_dark": 20.92
+            "mu_dark": 21.26,
+            "zodiacal_share": 0.267
           },
           "telescope": {
             "optical_throughput": 0.568
@@ -124,7 +135,8 @@
             "filter_transmission": 0.996
           },
           "environment": {
-            "mu_dark": 21.44
+            "mu_dark": 21.79,
+            "zodiacal_share": 0.274
           },
           "telescope": {
             "optical_throughput": 0.313
@@ -138,7 +150,8 @@
             "filter_transmission": 1.0
           },
           "environment": {
-            "mu_dark": 20.04
+            "mu_dark": 20.20,
+            "zodiacal_share": 0.137
           },
           "telescope": {
             "optical_throughput": 0.312

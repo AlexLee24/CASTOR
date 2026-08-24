@@ -389,6 +389,12 @@
                                 <span class="etc-unit">mag/arcsec&sup2;</span>
                             </span>
                         </label>
+                        <!-- Not a field anyone fills in - it is a preset-only pass-through. A
+                             handful of Lulin's filters carry it (see presets.json's comment on
+                             the split it depends on) and applyFragment fills it same as any
+                             other; PayloadBuilder skips it whenever it's left empty, which is
+                             every profile that has never had this measured. -->
+                        <input type="number" name="environment.zodiacal_share" step="any" min="0" max="0.999" hidden>
                         <label class="etc-field">
                             <span class="etc-field-label">Extinction Coefficient</span>
                             <span class="etc-input-wrap">

@@ -83,7 +83,8 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         obs_time_utc=time_series_iso, mu_dark=env.mu_dark,
         extinction_coeff=env.extinction_coeff,
         lon=env.location.longitude_deg, lat=env.location.latitude_deg,
-        elevation=env.location.elevation_m
+        elevation=env.location.elevation_m,
+        zodiacal_share=env.zodiacal_share
     )
 
     # Precompute fixed hardware parameters (scalars)

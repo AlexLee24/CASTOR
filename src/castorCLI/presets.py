@@ -88,12 +88,18 @@ class BandSky(BaseModel):
     same reason and may be given here too, though Lulin's is not yet measured well
     enough to state.
 
+    `mu_dark` here is the *local* baseline (airglow and light pollution) with the
+    interplanetary part split back out; `zodiacal_share` is what fraction of the
+    original, undecomposed measurement that split removed, letting the engine add
+    a pointing-dependent term back on top. See QUESTIONS.md 9 and 10.
+
     Only the site's own values are overridden. A profile that is a hardware family
     has no sky to override and giving one here is rejected at load.
     """
     model_config = ConfigDict(extra="forbid")
 
     mu_dark: float | None = None
+    zodiacal_share: float | None = None
     extinction_coeff: float | None = None
 
 

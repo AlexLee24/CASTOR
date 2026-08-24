@@ -131,15 +131,18 @@ def test_a_site_fills_in_its_sky_and_location(shipped):
     """The location is the site's alone; the sky is the site's until a band knows better.
 
     Resolving with no filter named lands on the first listed, which for Lulin is
-    Sloan r' and carries its own measured mu_dark. The site's 21.5 is what any band
-    without a measurement still inherits — see the u' test below.
+    Sloan r' and carries its own measured mu_dark — the local-only baseline, with
+    zodiacal light split back out (validation/QUESTIONS.md 9/10), not the 20.92
+    that was actually measured. The site's 21.5 is what any band without a
+    measurement still inherits — see the u' test below.
     """
     environment = shipped.resolve("lulin")["environment"]
 
     assert environment["location"]["elevation_m"] == 2862.0
     assert environment["extinction_coeff"] == 0.17
     assert shipped.profile("lulin").environment.mu_dark == 21.5
-    assert environment["mu_dark"] == 20.92                      # r' measured
+    assert environment["mu_dark"] == 21.26                       # r', local only
+    assert environment["zodiacal_share"] == 0.267                # r'
 
 def test_a_hardware_family_invents_no_location():
     """A profile with no environment block is a hardware family, and resolving it

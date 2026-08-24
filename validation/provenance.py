@@ -77,9 +77,12 @@ PROVENANCE = {
     "lulin.filters.Sloan_u.filter_transmission": (1.0, DOCUMENT, "peak of the same curve; 0.9 was the placeholder all five once carried"),
 
     # ---- Lulin per-band values, from the photometry -------------------------
-    "lulin.filters.Sloan_g.environment.mu_dark": (21.44, MEASURED, "moonless frames, 7 nights, one sightline at ecliptic +16 / galactic +21"),
-    "lulin.filters.Sloan_r.environment.mu_dark": (20.92, MEASURED, "moonless frames, 12 nights, one sightline at ecliptic +16 / galactic +21"),
-    "lulin.filters.Sloan_i.environment.mu_dark": (20.04, MEASURED, "moonless frames, 7 nights, one sightline at ecliptic +16 / galactic +21"),
+    "lulin.filters.Sloan_g.environment.mu_dark": (21.79, DERIVED, "21.44 measured (7 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_r.environment.mu_dark": (21.26, DERIVED, "20.92 measured (12 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_i.environment.mu_dark": (20.20, DERIVED, "20.04 measured (7 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_g.environment.zodiacal_share": (0.274, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
+    "lulin.filters.Sloan_r.environment.zodiacal_share": (0.267, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
+    "lulin.filters.Sloan_i.environment.zodiacal_share": (0.137, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
     "lulin.filters.Sloan_g.telescope.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
     "lulin.filters.Sloan_r.telescope.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
     "lulin.filters.Sloan_i.telescope.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),

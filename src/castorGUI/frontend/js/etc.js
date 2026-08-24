@@ -138,6 +138,7 @@
                 end_time_utc: batch.end_time_utc,
                 time_step_minutes: batch.time_step_minutes,
                 mu_dark: env.mu_dark,
+                zodiacal_share: env.zodiacal_share,
                 extinction_coeff: env.extinction_coeff,
                 seeing_fwhm: env.seeing_fwhm,
                 diffraction_fwhm: env.diffraction_fwhm,

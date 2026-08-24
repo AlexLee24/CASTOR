@@ -266,14 +266,33 @@ def test_the_measured_throughput_reproduces_the_measured_sky(lot, band):
 
 
 @pytest.mark.parametrize("band", ["g", "r", "i"])
-def test_preset_mu_dark_matches_the_sky_that_was_measured(band):
-    """And each band carries the sky that was measured through it.
+def test_preset_mu_dark_plus_zodiacal_reproduces_the_sky_that_was_measured(band):
+    """And each band carries the sky that was measured through it — split in two.
 
+    `mu_dark` no longer carries the whole measurement (QUESTIONS.md 9/10): the
+    zodiacal and scattered-starlight part our sightline happened to contain was
+    split back out, so this test recombines mu_dark with zodiacal_share at the
+    reference sightline (moon.ZODIACAL_REFERENCE_ECLIPTIC_LATITUDE_DEG, where the
+    zodiacal shape table is 1.0 by construction) rather than reading mu_dark alone.
     The site's single 21.5 suited g' and was 1.46 mag out in i', a factor of 3.8
-    in background flux. It survives as the fallback for bands nobody has measured.
+    in background flux. It survives as the fallback for bands nobody has measured,
+    and carries no zodiacal_share to split.
     """
-    assert _resolved(band)["environment"]["mu_dark"] == pytest.approx(
-        lulin.MEASURED[band]["mu_dark"], abs=0.01)
+    env = _resolved(band)["environment"]
+    b_local = 34.08 * (10.0 ** (0.4 * (22.5 - env["mu_dark"])))
+    share = env["zodiacal_share"]
+    b_zodi_at_reference = b_local * share / (1.0 - share)
+    mu_total = 22.5 - 2.5 * np.log10((b_local + b_zodi_at_reference) / 34.08)
+    assert mu_total == pytest.approx(lulin.MEASURED[band]["mu_dark"], abs=0.01)
+
+
+@pytest.mark.parametrize("band", ["g", "r", "i"])
+def test_preset_mu_dark_is_now_fainter_than_what_was_measured(band):
+    """The local-only baseline must be strictly fainter (larger mag) than the
+    original total: removing a real, positive flux component can only do that.
+    """
+    env = _resolved(band)["environment"]
+    assert env["mu_dark"] > lulin.MEASURED[band]["mu_dark"]
 
 
 def test_the_sky_is_bluer_than_one_number_can_describe():
