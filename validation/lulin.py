@@ -35,7 +35,7 @@ CATALOGUE = FRAMES / "ps1"
 #: amount on this one date, which is what cloud looks like.
 CLOUDY = frozenset({"2025-09-30"})
 
-#: Reduced 2026-08-22 from 123 frames over 15 nights, 2025-09-29 to 2026-02-15.
+#: Reduced 2026-08-22 from 123 frames over 18 nights, 2025-09-29 to 2026-02-15.
 #:
 #:   k          atmospheric extinction, mag/airmass, from the ZP-airmass fit
 #:   zp0        AB magnitude giving 1 e-/s above the atmosphere

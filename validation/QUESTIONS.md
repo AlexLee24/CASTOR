@@ -8,7 +8,7 @@ reasons and a docstring, and the honest answer to "what is still open?" was that
 nobody could say without reading all five.
 
 Everything here concerns Lulin unless it says otherwise. Numbers come from 123
-calibrated LOT/SOPHIA frames over 15 nights (2025-09-29 to 2026-02-15), reduced
+calibrated LOT/SOPHIA frames over 18 nights (2025-09-29 to 2026-02-15), reduced
 against Pan-STARRS DR2; method is in `lulin.py`. Where a prototype is cited it
 is one of the two Perl calculators CASTOR was refactored from, transcribed in
 `lulin_prototype.py`.

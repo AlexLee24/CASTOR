@@ -57,7 +57,7 @@ made of. Neither is the right reference for absolute agreement on a given night.
 
 **Lulin** is the only reference here made of photons rather than models, and the
 only one that can judge the profile the calculator opens on. 123 calibrated
-LOT/SOPHIA frames over 15 nights, reduced against Pan-STARRS DR2. The frames
+LOT/SOPHIA frames over 18 nights, reduced against Pan-STARRS DR2. The frames
 stay out of the repository — it is public — and `lulin.py` carries the reduced
 result so the tests run without them. Its docstring has the method.
 
