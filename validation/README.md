@@ -144,9 +144,9 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
-  too. `provenance.py` records an origin for all 113 values and a test fails if
+  too. `provenance.py` records an origin for all 123 values and a test fails if
   the file holds one the table does not, or a different number than the one
-  recorded. Lulin is now 52 sourced against 6 guesses; VLT — not the default,
+  recorded. Lulin is now 62 sourced against 6 guesses; VLT — not the default,
   and not what anyone here observes with — is 8 against 12, up from 3 once its
   site stopped being left unset. `other` (a personal amateur rig, nominally at
   Hehuan Mountain's Yuanfeng dark-sky viewpoint) is new and starts at 28 sourced
@@ -169,6 +169,17 @@ Each of these is asserted by a test, so it either stays true or announces itself
   no telescope of its own — selecting SLT with a filter LOT had measured
   silently applied LOT's number. Fixed by keying the override by telescope id;
   see `castorCLI/presets.py`'s `FilterEntry.telescope`.
+
+- **SLT has had three cameras, and one of its own header fields lies about
+  which.** The observatory's raw nightly archive (not `2024ggi`'s pre-reduced
+  set) spans Andor DZ936 (2021), Apogee Alta U9000 (2022 on), then the current
+  DU934P-BEX2-DD. Some 2022 headers name the camera "U42" — a real, different
+  Apogee model, 2048x2048 at 13.5um — but the frames themselves are 3056x3056
+  at 12um, U9000's geometry exactly. The name is stale, not the hardware; only
+  the pixel geometry, read straight from the detector, can be trusted. Both
+  retired cameras are now in `presets.json` (`SLT_DZ936`, `SLT_U9000`) so
+  frames from those eras can still be reduced, sourced from Andor's own iKon
+  brochure and a U9000 datasheet Lulin hosts itself.
 
 - **SOPHIA's dark current at -80°C is now bounded by a real dark frame, not
   guessed.** 20 real -80°C, 300s frames (QUESTIONS.md 6) — no bias frame to

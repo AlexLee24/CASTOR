@@ -101,6 +101,26 @@
             "readout_noise": 3.3,
             "full_well_capacity": 130000
           }
+        },
+        "SLT_DZ936": {
+          "name": "SLT camera, 2021-2022 (Andor iKon-L 936)",
+          "camera": {
+            "pixel_pitch": 13.5,
+            "quantum_efficiency": 0.90,
+            "dark_current_rate": 0.00013,
+            "readout_noise": 7.0,
+            "full_well_capacity": 100000
+          }
+        },
+        "SLT_U9000": {
+          "name": "SLT camera, 2022 (Apogee Alta U9000)",
+          "camera": {
+            "pixel_pitch": 12.0,
+            "quantum_efficiency": 0.64,
+            "dark_current_rate": 0.6,
+            "readout_noise": 12.0,
+            "full_well_capacity": 110000
+          }
         }
       },
       "filters": {

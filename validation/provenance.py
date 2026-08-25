@@ -59,6 +59,24 @@ PROVENANCE = {
     "lulin.cameras.SLT_default.readout_noise": (3.3, DOCUMENT, "datasheet BEX2-DD at 0.05 MHz; readout speed assumed"),
     "lulin.cameras.SLT_default.full_well_capacity": (130000, DOCUMENT, "datasheet, BEX2-DD"),
 
+    # ---- Lulin, SLT's two retired cameras (great-nas archive, 2021-2022) ----
+    # SLT's raw nightly archive (Lulin_Observation_data/SLT) spans three
+    # cameras on the same telescope: Andor DZ936 (2021-04 to 2022-03), then
+    # Apogee Alta U9000 (2022-06 onward, labelled "U42" in some headers until
+    # 2022-10 — see below), then the current Andor DU934P-BEX2-DD (SLT_default,
+    # 2023-06 on). Retired, so not selectable for planning new observations,
+    # but recorded so historical frames from those two eras can be reduced.
+    "lulin.cameras.SLT_DZ936.pixel_pitch": (13.5, DOCUMENT, "frame headers (DETECTOR=E2V CCD42-40) match Andor's iKon-L 936 datasheet exactly"),
+    "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the current SLT_default's DU934P-BEX2-DD"),
+    "lulin.cameras.SLT_DZ936.dark_current_rate": (0.00013, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor at -80C, matching frame headers' CCD-TEMP"),
+    "lulin.cameras.SLT_DZ936.readout_noise": (7.0, DOCUMENT, "Andor iKon series brochure, iKon-L 936 High Sensitivity output at 1MHz; readout speed not in the headers, assumed"),
+    "lulin.cameras.SLT_DZ936.full_well_capacity": (100000, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor"),
+    "lulin.cameras.SLT_U9000.pixel_pitch": (12.0, DOCUMENT, "Lulin's own hosted datasheet (lulin.ncu.edu.tw/.../U9000.pdf) and frame headers agree"),
+    "lulin.cameras.SLT_U9000.quantum_efficiency": (0.64, DOCUMENT, "Lulin's own hosted datasheet, peak QE at 550nm"),
+    "lulin.cameras.SLT_U9000.dark_current_rate": (0.6, DOCUMENT, "Lulin's own hosted datasheet, quoted at -25C; frame headers show the camera actually ran warmer (~-15C), so the true value is somewhat higher than this, unquantified"),
+    "lulin.cameras.SLT_U9000.readout_noise": (12.0, DOCUMENT, "Lulin's own hosted datasheet, system noise at 1MHz"),
+    "lulin.cameras.SLT_U9000.full_well_capacity": (110000, DOCUMENT, "Lulin's own hosted datasheet, linear full well typical"),
+
     # ---- Lulin filters: Astrodon Gen2 curves published by the observatory ----
     "lulin.filters.Sloan_g.central_wavelength": (475.9, DOCUMENT, "transmission-weighted centroid of the measured curve"),
     "lulin.filters.Sloan_g.filter_bandwidth": (147.0, DOCUMENT, "FWHM of the measured curve"),
