@@ -1,3 +1,39 @@
+"""Everything in a request that depends on when it is and where it points.
+
+The name understates the module. The moon is one of three sky-brightness
+components here, and the smallest part of what it does:
+
+    mu_sky = -2.5 log10( Flux_dark + Flux_zodiacal + Flux_moon )
+
+`Flux_dark` is the caller's `mu_dark`, a brightness someone measured from the
+ground. `Flux_moon` is Krisciunas & Schaefer 1991, scattered moonlight from the
+lunar phase, the target's separation from the moon, and both altitudes.
+`Flux_zodiacal` is sunlight off interplanetary dust, a function of the target's
+ecliptic latitude, and is zero unless the caller supplies `zodiacal_share`.
+
+Two things about that third term are easy to get wrong, and both have been:
+
+**It is a subtraction before it is an addition.** `mu_dark` is *measured*, so
+whatever zodiacal light was in the sky when it was measured is already inside
+it. Computing zodiacal light separately and adding it counts a quarter of the
+sky twice — the same shape of error as the extinction term that used to be
+applied to the sky, and the one the project's own slides named "Hidden Errors
+(Two Wrongs Make a Right)". The construction that works splits `mu_dark` into a
+local-only baseline first; `zodiacal_share` records how much was taken out, and
+`apply_zodiacal_baseline` puts back an equivalent amount sized to the actual
+pointing. See docs/presets.md and validation/QUESTIONS.md 9 and 10.
+
+**It is not the moon's business.** `apply_zodiacal_baseline` is deliberately
+independent of `auto_calc_background`: that flag decides whether moonlight is
+layered on, while `mu_dark` plus `zodiacal_share` together describe the
+*moonless* sky. Gating the zodiacal term behind it meant every caller leaving
+that flag at its default — the GUI does — silently got a fainter sky than the
+one actually measured.
+
+This is also the only module in the engine that depends on an external astronomy
+library rather than pure local maths, which is why the IERS configuration below
+lives here rather than anywhere else.
+"""
 import numpy as np
 from numpy.typing import NDArray
 from typing import TypeAlias, cast, Any

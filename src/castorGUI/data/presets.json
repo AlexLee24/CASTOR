@@ -3,50 +3,24 @@
     "Hardware and site presets, shared by every host. Kinder serves this file verbatim",
     "from its presets route, so its shape is a contract, not an internal detail.",
     "",
-    "Fragments are shaped like castor.schema itself (telescope, camera, optic_filter,",
-    "environment.location, ...) rather than dotted-path strings, so a preset is a literal",
-    "subset of the request a user would save or send.",
+    "FULL DESIGN NOTES: docs/presets.md — what a profile may claim, how band overrides",
+    "work, and why mu_dark means two different things in this file.",
+    "PROVENANCE: validation/provenance.py records where every number below came from,",
+    "and a test fails on any value it does not account for.",
     "",
-    "A profile owns three catalogues: telescopes, cameras and filters. All three are",
-    "properties of the observatory — it has the instruments it has, and the filter wheel",
-    "holds what it holds — which is why choosing a site is what narrows them, and why the",
-    "site selector sits above the other three. They stay separate lists rather than fixed",
-    "pairings because cameras do get moved between telescopes.",
+    "Three things an editor has to know before touching anything here:",
     "",
-    "ORDER IS SIGNIFICANT: the first entry in each catalogue is the default, applied on",
-    "load so the calculator opens on a real, named configuration instead of anonymous",
-    "numbers. Kinder's presets route serves raw bytes rather than jsonify for exactly this",
-    "reason - Flask would otherwise alphabetise the keys and scramble the intended order.",
+    "1. ORDER IS SIGNIFICANT. The first entry in each catalogue is the default the",
+    "   calculator opens on. Kinder serves raw bytes rather than jsonify for this",
+    "   reason - Flask would alphabetise the keys and scramble the intended order.",
     "",
-    "A profile with an 'environment' block is a real observing site and applying it fills",
-    "in the site's coordinates and sky. A profile without one is a hardware family only",
-    "and touches nothing outside 'instrument' - deliberately, because inventing a location",
-    "for a telescope model would silently produce wrong airmass and moon geometry.",
+    "2. A profile with an 'environment' block is a real site; one without is a hardware",
+    "   family and must not gain a location. Inventing one produces wrong airmass and",
+    "   moon geometry silently, rather than an error.",
     "",
-    "'median_seeing_fwhm' is a reference figure for display only and is never written into",
-    "the form: seeing is a condition of the night being planned, not a property of the site,",
-    "and it is the field an observer is most likely to have set deliberately.",
-    "",
-    "A filter entry may also carry 'environment' and 'telescope' fragments. They are",
-    "applied only when that filter is the one selected, and they override the site and",
-    "the rig. Both sky brightness and optical efficiency depend on the band, and the",
-    "request has exactly one number for each - so this is the only place a measurement",
-    "that varies with wavelength can be recorded without overwriting filter_transmission,",
-    "which holds the manufacturer's published curve and can be checked against it.",
-    "",
-    "Only a profile that is a real site may have its sky overridden this way; giving an",
-    "'environment' to a filter in a hardware-family profile is refused when the file is",
-    "read, rather than being quietly ignored.",
-    "",
-    "Lulin's g'/r'/i' 'mu_dark' is the LOCAL sky only (airglow and light pollution) - the",
-    "zodiacal light and scattered starlight that were in the original photometric measurement",
-    "have been split back out, and 'zodiacal_share' records what fraction of that original",
-    "total the split removed. The engine adds an equivalent term back in, sized to wherever",
-    "the target actually is on the sky, rather than baking in the one sightline these three",
-    "bands happened to be measured down. See validation/QUESTIONS.md 9 and 10, and",
-    "src/castor/moon.py's ZODIACAL_LATITUDE_SHAPE for the derivation. Everything else in this",
-    "file - the site-wide 21.5 fallback, u', VLT, other - has no such split and 'mu_dark'",
-    "there is still the whole moonless sky, exactly as before."
+    "3. A filter's 'telescope' override is keyed by telescope id, and the key matters.",
+    "   Unkeyed, a filter measured on one telescope silently applied its number to",
+    "   every other. 'castor check' catches a key naming a telescope that does not exist."
   ],
   "profiles": {
     "lulin": {
@@ -106,7 +80,7 @@
           "name": "SLT camera, 2021-2022 (Andor iKon-L 936)",
           "camera": {
             "pixel_pitch": 13.5,
-            "quantum_efficiency": 0.90,
+            "quantum_efficiency": 0.9,
             "dark_current_rate": 0.00013,
             "readout_noise": 7.0,
             "full_well_capacity": 100000
@@ -137,8 +111,12 @@
             "extinction_coeff": 0.314
           },
           "telescope": {
-            "LOT": { "optical_throughput": 0.568 },
-            "SLT": { "optical_throughput": 0.474 }
+            "LOT": {
+              "optical_throughput": 0.568
+            },
+            "SLT": {
+              "optical_throughput": 0.474
+            }
           }
         },
         "Sloan_u": {
@@ -152,7 +130,9 @@
             "extinction_coeff": 0.622
           },
           "telescope": {
-            "SLT": { "optical_throughput": 0.101 }
+            "SLT": {
+              "optical_throughput": 0.101
+            }
           }
         },
         "Sloan_g": {
@@ -168,8 +148,12 @@
             "extinction_coeff": 0.512
           },
           "telescope": {
-            "LOT": { "optical_throughput": 0.313 },
-            "SLT": { "optical_throughput": 0.323 }
+            "LOT": {
+              "optical_throughput": 0.313
+            },
+            "SLT": {
+              "optical_throughput": 0.323
+            }
           }
         },
         "Sloan_i": {
@@ -180,13 +164,17 @@
             "filter_transmission": 1.0
           },
           "environment": {
-            "mu_dark": 20.20,
+            "mu_dark": 20.2,
             "zodiacal_share": 0.137,
             "extinction_coeff": 0.185
           },
           "telescope": {
-            "LOT": { "optical_throughput": 0.312 },
-            "SLT": { "optical_throughput": 0.373 }
+            "LOT": {
+              "optical_throughput": 0.312
+            },
+            "SLT": {
+              "optical_throughput": 0.373
+            }
           }
         },
         "Sloan_z": {
@@ -200,7 +188,9 @@
             "extinction_coeff": 0.155
           },
           "telescope": {
-            "SLT": { "optical_throughput": 0.122 }
+            "SLT": {
+              "optical_throughput": 0.122
+            }
           }
         }
       }
@@ -264,7 +254,7 @@
       "environment": {
         "location": {
           "latitude_deg": 24.1144,
-          "longitude_deg": 121.2220,
+          "longitude_deg": 121.222,
           "elevation_m": 2756.0
         },
         "mu_dark": 21.1,
@@ -276,7 +266,7 @@
           "telescope": {
             "primary_mirror_diameter": 0.051,
             "secondary_mirror_diameter": 0.0,
-            "focal_length": 0.250,
+            "focal_length": 0.25,
             "optical_throughput": 0.9
           }
         },
@@ -285,7 +275,7 @@
           "telescope": {
             "primary_mirror_diameter": 0.071,
             "secondary_mirror_diameter": 0.0,
-            "focal_length": 0.350,
+            "focal_length": 0.35,
             "optical_throughput": 0.9
           }
         },
@@ -294,7 +284,7 @@
           "telescope": {
             "primary_mirror_diameter": 0.091,
             "secondary_mirror_diameter": 0.0,
-            "focal_length": 0.540,
+            "focal_length": 0.54,
             "optical_throughput": 0.9
           }
         },
@@ -303,7 +293,7 @@
           "telescope": {
             "primary_mirror_diameter": 0.073,
             "secondary_mirror_diameter": 0.0,
-            "focal_length": 0.430,
+            "focal_length": 0.43,
             "optical_throughput": 0.9
           }
         },
@@ -312,7 +302,7 @@
           "telescope": {
             "primary_mirror_diameter": 0.106,
             "secondary_mirror_diameter": 0.0,
-            "focal_length": 0.530,
+            "focal_length": 0.53,
             "optical_throughput": 0.9
           }
         }
@@ -322,7 +312,7 @@
           "name": "ZWO ASI2600MC Pro",
           "camera": {
             "pixel_pitch": 3.76,
-            "quantum_efficiency": 0.80,
+            "quantum_efficiency": 0.8,
             "dark_current_rate": 0.000514,
             "readout_noise": 1.51,
             "full_well_capacity": 16760
@@ -332,7 +322,7 @@
           "name": "ZWO ASI533MC Pro",
           "camera": {
             "pixel_pitch": 3.76,
-            "quantum_efficiency": 0.80,
+            "quantum_efficiency": 0.8,
             "dark_current_rate": 0.000514,
             "readout_noise": 1.5,
             "full_well_capacity": 16650

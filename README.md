@@ -88,6 +88,8 @@ uv run pytest validation   # the comparisons, on purpose — see validation/READ
 
 - **[System Architecture](docs/architecture.md):** Core engine components, modular design, and data flow pipeline.
 - **[CASTOR GUI Architecture](docs/gui_architecture.md):** The reference UI product built on top of the engine (`src/castorGUI/`), and its planned integration into Kinder.
+- **[Command Line](docs/cli.md):** The four commands, why nothing is filled in silently, and what `castor check` verifies.
+- **[Presets](docs/presets.md):** How `presets.json` is shaped, what a profile may and may not claim, and why `mu_dark` means two different things in it.
 - **[Algorithm Theoretical Basis Document (ATBD)](docs/ATBD.md):** Mathematical formulations for photon count rates, SNR, and ephemeris.
 - **API Specifications:** CASTOR uses strict Pydantic schemas for data validation. For detailed request and response contracts, please refer directly to [`src/castor/schema.py`](src/castor/schema.py).
 - **[Validation](validation/README.md):** What CASTOR's answers are worth, measured against outside references and real frames — and [what it still does not know](validation/QUESTIONS.md), each item labelled with who can close it.
