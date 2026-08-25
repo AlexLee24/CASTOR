@@ -53,21 +53,21 @@ PROVENANCE = {
     "lulin.cameras.Sophia.full_well_capacity": (150000, DOCUMENT, "datasheet -152, single pixel typical; 100000 was the 13.5 um -132 column"),
 
     # ---- Lulin, Andor iKon-M DU934P-BEX2-DD ---------------------------------
-    "lulin.cameras.SLT_default.pixel_pitch": (13.0, DOCUMENT, "datasheet and the SLT page, 13 x 13 um"),
-    "lulin.cameras.SLT_default.quantum_efficiency": (0.85, GUESS, "no curve read for this sensor"),
-    "lulin.cameras.SLT_default.dark_current_rate": (0.017, DOCUMENT, "datasheet BEX2-DD at -80 C; operating temperature assumed"),
-    "lulin.cameras.SLT_default.readout_noise": (3.3, DOCUMENT, "datasheet BEX2-DD at 0.05 MHz; readout speed assumed"),
-    "lulin.cameras.SLT_default.full_well_capacity": (130000, DOCUMENT, "datasheet, BEX2-DD"),
+    "lulin.cameras.SLT_DU934P.pixel_pitch": (13.0, DOCUMENT, "datasheet and the SLT page, 13 x 13 um"),
+    "lulin.cameras.SLT_DU934P.quantum_efficiency": (0.85, GUESS, "no curve read for this sensor"),
+    "lulin.cameras.SLT_DU934P.dark_current_rate": (0.017, DOCUMENT, "datasheet BEX2-DD at -80 C; operating temperature assumed"),
+    "lulin.cameras.SLT_DU934P.readout_noise": (3.3, DOCUMENT, "datasheet BEX2-DD at 0.05 MHz; readout speed assumed"),
+    "lulin.cameras.SLT_DU934P.full_well_capacity": (130000, DOCUMENT, "datasheet, BEX2-DD"),
 
     # ---- Lulin, SLT's two retired cameras (great-nas archive, 2021-2022) ----
     # SLT's raw nightly archive (Lulin_Observation_data/SLT) spans three
     # cameras on the same telescope: Andor DZ936 (2021-04 to 2022-03), then
     # Apogee Alta U9000 (2022-06 onward, labelled "U42" in some headers until
-    # 2022-10 — see below), then the current Andor DU934P-BEX2-DD (SLT_default,
+    # 2022-10 — see below), then the current Andor DU934P-BEX2-DD (SLT_DU934P,
     # 2023-06 on). Retired, so not selectable for planning new observations,
     # but recorded so historical frames from those two eras can be reduced.
     "lulin.cameras.SLT_DZ936.pixel_pitch": (13.5, DOCUMENT, "frame headers (DETECTOR=E2V CCD42-40) match Andor's iKon-L 936 datasheet exactly"),
-    "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the current SLT_default's DU934P-BEX2-DD"),
+    "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the current SLT_DU934P's DU934P-BEX2-DD"),
     "lulin.cameras.SLT_DZ936.dark_current_rate": (0.00013, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor at -80C, matching frame headers' CCD-TEMP"),
     "lulin.cameras.SLT_DZ936.readout_noise": (7.0, DOCUMENT, "Andor iKon series brochure, iKon-L 936 High Sensitivity output at 1MHz; readout speed not in the headers, assumed"),
     "lulin.cameras.SLT_DZ936.full_well_capacity": (100000, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor"),

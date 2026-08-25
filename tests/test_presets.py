@@ -121,7 +121,7 @@ def test_naming_only_the_site_resolves_a_real_configuration(shipped):
     assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8  # Sloan r'
 
 def test_named_entries_override_the_defaults(shipped):
-    fragment = shipped.resolve("lulin", telescope="SLT", camera="SLT_default", optic_filter="Sloan_u")
+    fragment = shipped.resolve("lulin", telescope="SLT", camera="SLT_DU934P", optic_filter="Sloan_u")
 
     assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 0.406
     assert fragment["instrument"]["camera"]["pixel_pitch"] == 13.0
@@ -190,7 +190,7 @@ def test_unknown_profile_lists_what_there_is(shipped):
 
 @pytest.mark.parametrize("kwargs, expected", [
     ({"telescope": "LOT-1m"}, "LOT, SLT"),
-    ({"camera": "sophia"}, "Sophia, SLT_default"),
+    ({"camera": "sophia"}, "Sophia, SLT_DU934P"),
     ({"optic_filter": "r"}, "Sloan_r, Sloan_u"),
 ])
 def test_unknown_catalogue_entry_lists_what_there_is(shipped, kwargs, expected):

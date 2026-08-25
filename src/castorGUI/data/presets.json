@@ -92,8 +92,8 @@
             "full_well_capacity": 150000
           }
         },
-        "SLT_default": {
-          "name": "SLT default camera",
+        "SLT_DU934P": {
+          "name": "SLT camera, 2023-present (Andor DU934P-BEX2-DD)",
           "camera": {
             "pixel_pitch": 13.0,
             "quantum_efficiency": 0.85,
