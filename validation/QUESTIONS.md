@@ -398,18 +398,27 @@ it rather than for convenience.
 brightness measured the same way as everything else in this file (whole-frame
 sigma-clipped median, converted through the same SkyCalc-calibrated zero point
 as questions 4 and 5) correlates strongly with airmass in this dataset — moon-
-free frames past X~3.4 read 1.6-2.4 mag brighter than the two moon-free, near-
+free frames past X~3.4 read 1.4-2.9 mag brighter than the two moon-free, near-
 zenith ones (X=1.81), which is horizon light pollution and airglow path length,
 not zodiacal light, and lines up with the "worse towards the horizon" excess
 already named above. The only clean, comparable point — r', X=1.81, moon 40°
-below the horizon — measures **20.50**; the zodiacal model (question 9) predicts
+below the horizon — measures **20.68**; the zodiacal model (question 9) predicts
 **21.00** at this pointing. n=2, and both figures carry the SkyMapper-vs-Sloan
 systematic questions 4 and 5 already flag, so this is not a real test of the
 model either way — but a *measured brighter than predicted* result is the same
 direction as the unexplained excess this question already describes, not a new
-contradiction. Settling question 9's shape needs the same thing this question
-already asks for: fields chosen for ecliptic/galactic spread, at low airmass, on
-purpose.
+contradiction. (An earlier pass at this got 20.50: the sky-to-surface-brightness
+conversion multiplied by the frame's `GAIN` keyword, which is wrong — the zero
+point is already calibrated in raw ADU counts, so re-scaling only the sky side
+by gain mixed two unit systems — and used a fixed 0.76"/pix, which is LOT/DU934P's
+plate scale, not this specific frame's; this archive turns out to span three
+camera bodies on the same telescope over the years, with different chips and
+pixel scales. Both are fixed by reading everything from the frame's own WCS and
+never introducing gain into a ratio zp already accounts for — see
+`castor.moon`-adjacent scratch scripts, not committed here since they are
+analysis, not the engine.) Settling question 9's shape needs the same thing this
+question already asks for: fields chosen for ecliptic/galactic spread, at low
+airmass, on purpose.
 
 ---
 
