@@ -28,7 +28,7 @@ Method, so the numbers can be argued with:
 import json
 import pathlib
 
-FRAMES = pathlib.Path(__file__).resolve().parent / "data" / "raw"
+FRAMES = pathlib.Path(__file__).resolve().parent / "data" / "raw" / "lot_sn2025wny"
 CATALOGUE = FRAMES / "ps1"
 
 #: Nights that are not photometric. Every band is faint by roughly the same
