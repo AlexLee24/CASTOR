@@ -21,6 +21,7 @@ pytest validation   # this suite, on purpose
 | `lco_etc.py` | Las Cumbres Observatory's published calculator, transcribed |
 | `eso_etc.py` | ESO's FORS2 ETC — captured reference results, plus a live client |
 | `lulin.py` | LOT/SOPHIA measured against real frames and Lulin's own documents |
+| `slt.py` | SLT measured against the one night that swept airmass, 2024-04-14 |
 | `lulin_prototype.py` | The two Perl calculators CASTOR was refactored from, 2005 and 2011 |
 | `provenance.py` | Where every number in presets.json came from, or that it came from nowhere |
 | `skycalc.py` | Loading and rebinning ESO SkyCalc radiance exports |
@@ -28,6 +29,7 @@ pytest validation   # this suite, on purpose
 | `test_eso.py` | The top-hat bandpass against a full spectral integration |
 | `test_sky_model.py` | How the Krisciunas & Schaefer moon term behaves per band |
 | `test_lulin.py` | Throughput, sky and detector against 123 calibrated frames |
+| `test_slt.py` | SLT's extinction and throughput against that night's own fit |
 | `test_lulin_prototype.py` | Which of the ancestors' numbers survive, and which are placeholders |
 | `test_provenance.py` | Fails on any preset value the provenance table does not account for |
 
@@ -56,10 +58,24 @@ R=20000, and is the right reference for bandpass shape and for what the sky is
 made of. Neither is the right reference for absolute agreement on a given night.
 
 **Lulin** is the only reference here made of photons rather than models, and the
-only one that can judge the profile the calculator opens on. 123 calibrated
-LOT/SOPHIA frames over 18 nights, reduced against Pan-STARRS DR2. The frames
-stay out of the repository — it is public — and `lulin.py` carries the reduced
-result so the tests run without them. Its docstring has the method.
+only one that can judge the profile the calculator opens on. Two separate
+reductions, and the split between them is not administrative — they answer
+different questions because they cover different things:
+
+`lulin.py` is 123 calibrated LOT/SOPHIA frames over 18 nights against
+Pan-STARRS DR2. Deep, but no single night in it spans more than 0.19 in
+airmass, so it can measure throughput and sky and *cannot* measure extinction.
+
+`slt.py` is 241 SLT frames from one night, 2024-04-14, sweeping airmass 1.81 to
+3.72 in five bands — the observation `lulin.py`'s own open question asked for.
+It closes extinction and gives SLT its first photometry ever. Its reference
+catalogue is SkyMapper DR4 rather than Pan-STARRS, because the field is at
+declination -32.8 and PS1 does not reach it; no colour-term transform between
+the two systems has been applied, which is that reduction's largest caveat.
+
+Neither set of frames is in the repository — it is public — and both modules
+carry the reduced result so the tests run without them. Their docstrings have
+the methods.
 
 ## Data
 

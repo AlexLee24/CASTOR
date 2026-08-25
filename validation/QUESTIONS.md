@@ -150,6 +150,10 @@ SkyMapper's natural u/v/g/r/i/z system is close to but not identical to
 Sloan/SDSS, and no colour-term transform between the two has been applied, so
 there is an uncorrected systematic on top of the fit errors quoted.
 
+**Where the reduction lives.** `slt.py`, the SLT counterpart to `lulin.py`:
+per-band fit, errors, the cloudy window the sigma clip removed, and what the
+night does and does not cover. `test_slt.py` asserts presets.json against it.
+
 ## 5. SLT has no photometry at all — CLOSED
 
 **Settled by the same SN2024ggi/SLT night.** SLT's per-band `optical_throughput`

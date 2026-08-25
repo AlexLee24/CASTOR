@@ -43,7 +43,7 @@ PROVENANCE = {
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
     "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
-    "lulin.telescopes.SLT.optical_throughput": (0.234, MEASURED, "geometric mean of SkyMapper-calibrated SLT bands below; QUESTIONS.md 5"),
+    "lulin.telescopes.SLT.optical_throughput": (0.234, MEASURED, "geometric mean of the SLT bands below; method and fit in slt.py, QUESTIONS.md 5"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
@@ -117,16 +117,16 @@ PROVENANCE = {
     # affected and rejected — see the -1.17 mag single-frame outlier this
     # caught). optical_throughput here is implied_optical_train = T_sys /
     # (QE * filter_transmission), same convention as LOT's rows above.
-    "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.101, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.086 +/- 0.015"),
-    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.323, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.274 +/- 0.012"),
-    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.474, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.401 +/- 0.019"),
-    "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.373, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.317 +/- 0.021"),
-    "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.122, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, T_sys 0.104 +/- 0.006"),
-    "lulin.filters.Sloan_u.environment.extinction_coeff": (0.622, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.094"),
-    "lulin.filters.Sloan_g.environment.extinction_coeff": (0.512, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.023"),
-    "lulin.filters.Sloan_r.environment.extinction_coeff": (0.314, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.024"),
-    "lulin.filters.Sloan_i.environment.extinction_coeff": (0.185, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.033"),
-    "lulin.filters.Sloan_z.environment.extinction_coeff": (0.155, MEASURED, "SkyMapper-calibrated, SLT 2024-04-14, ZP-vs-airmass fit, +/- 0.028"),
+    "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.101, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.086 +/- 0.015"),
+    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.323, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.274 +/- 0.012"),
+    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.474, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.401 +/- 0.019"),
+    "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.373, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.317 +/- 0.021"),
+    "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.122, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.104 +/- 0.006"),
+    "lulin.filters.Sloan_u.environment.extinction_coeff": (0.622, MEASURED, "slt.py MEASURED, 2024-04-14, ZP-vs-airmass fit, +/- 0.094"),
+    "lulin.filters.Sloan_g.environment.extinction_coeff": (0.512, MEASURED, "slt.py MEASURED, 2024-04-14, ZP-vs-airmass fit, +/- 0.023"),
+    "lulin.filters.Sloan_r.environment.extinction_coeff": (0.314, MEASURED, "slt.py MEASURED, 2024-04-14, ZP-vs-airmass fit, +/- 0.024"),
+    "lulin.filters.Sloan_i.environment.extinction_coeff": (0.185, MEASURED, "slt.py MEASURED, 2024-04-14, ZP-vs-airmass fit, +/- 0.033"),
+    "lulin.filters.Sloan_z.environment.extinction_coeff": (0.155, MEASURED, "slt.py MEASURED, 2024-04-14, ZP-vs-airmass fit, +/- 0.028"),
 
     # ---- VLT / FORS2 --------------------------------------------------------
     # Never the default, and nobody here observes with it. It did lack a site
