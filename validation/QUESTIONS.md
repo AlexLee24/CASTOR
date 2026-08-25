@@ -394,6 +394,40 @@ both.
 the airmass night in question 4 could carry for free if the fields are chosen for
 it rather than for convenience.
 
+**A second attempt, from the observatory's own nightly archive.** Unlike
+SN2024ggi, this archive isn't locked to one target — each night's `janet/`
+folder holds whatever the night's targets were, spread across the whole sky.
+Four nights (2023-06 to 2024-02, the Andor DU934P camera era, to stay on the
+plate scale and QE this suite already has) gave 8 targets from ecliptic -43° to
++74° and galactic -82° to +69° — real spread, reduced from raw frames (bias,
+dark, flat, all from each night's own calibration set) rather than pre-reduced
+ones. Building this surfaced the same two conversion bugs the correction above
+describes, independently, before they could contaminate anything new.
+
+**Still only one clean point, and this one disagrees with itself.** Of 8
+targets, 7 were taken with the moon well above the horizon (moon_alt up to
++85°) — the same wall question 4's "what would settle it" already ran into.
+The one exception, AT2023jac (ecliptic +74°, galactic +38°, moon 38° below the
+horizon, X=1.14, against Pan-STARRS — no cross-catalogue systematic this time):
+
+| band | measured | model predicts | difference |
+|---|---|---|---|
+| g' | 21.07 | 21.58 | **+0.51** (brighter) |
+| r' | 20.78 | 21.05 | **+0.27** (brighter) |
+| i' | 20.44 | 20.10 | **-0.34** (fainter) |
+
+g' and r' brighter than predicted is the same direction as every excess this
+file has found; i' going the other way is not, and n=1 target with no repeat
+measurement can't settle whether that is real or a bad frame. Recorded as
+found, not smoothed over.
+
+**The pattern holding across three attempts is the finding.** Real archival
+data, mined for whatever nights happen to be moonless, keeps landing on one or
+two usable points per pass — not because the archive is small, but because
+nobody was observing *for this question*. Settling it needs time allocated on
+purpose: moonless, low airmass, fields chosen for ecliptic/galactic spread.
+Everything else here is a byproduct of other people's supernovae.
+
 **A first, inconclusive look, from the SN2024ggi field (ecliptic -34°).** Sky
 brightness measured the same way as everything else in this file (whole-frame
 sigma-clipped median, converted through the same SkyCalc-calibrated zero point
