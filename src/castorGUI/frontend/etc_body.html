@@ -62,6 +62,12 @@
                             <span class="etc-field-label">Site</span>
                             <select id="select-profile"><option value="">Loading&hellip;</option></select>
                         </label>
+                        <!-- Filled from the chosen profile's `caveat`, and hidden when it
+                             has none. A profile whose numbers cannot carry a real
+                             observation has to say so next to the control that picked it;
+                             provenance.py is the full record, but it is in the repository
+                             and this is where the choice is actually made. -->
+                        <p class="etc-alert etc-alert-warning" id="profile-caveat" hidden></p>
 
                         <label class="etc-field">
                             <span class="etc-field-label">Telescope</span>

@@ -206,7 +206,8 @@
       }
     },
     "vlt": {
-      "name": "VLT / FORS2 (Paranal)",
+      "name": "VLT / FORS2 (Paranal) [DEMO]",
+      "caveat": "Demonstration only - do not plan real observations with this. The site is fully sourced from ESO, but 12 of the 15 instrument values are unsourced guesses, and the g_HIGH+115 filter over-predicts ESO's own ETC by 148%. See validation/QUESTIONS.md 14 and 15.",
       "environment": {
         "location": {
           "latitude_deg": -24.6275,

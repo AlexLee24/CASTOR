@@ -304,12 +304,17 @@ def test_the_sky_is_bluer_than_one_number_can_describe():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="extinction_coeff is one number per site, 0.17. The fit gives 0.189 "
-           "(r', +/-0.027) but only 0.123 +/- 0.105 (g') and 0.108 +/- 0.049 "
-           "(i'), and g'/i' have too little airmass range over too few nights "
-           "to be worth adopting. Wavelength ordering is wrong too: extinction "
-           "should fall towards the red and r' comes out highest. Needs frames "
-           "spanning airmass on a single photometric night.",
+    reason="Superseded, and kept as the record of why. This is the LOT 18-night "
+           "fit, which puts r' highest (0.189 +/- 0.027 against 0.123 +/- 0.105 "
+           "in g' and 0.108 +/- 0.049 in i') — impossible for real extinction, "
+           "which falls towards the red. The cause is in SIGHTLINE: no single "
+           "night spans more than 0.19 in airmass, so the fit measured "
+           "night-to-night transparency, not an airmass term. QUESTIONS.md 4 is "
+           "now CLOSED by a different dataset — SLT/SN2024ggi 2024-04-14, one "
+           "night sweeping X=1.81 to 3.72, which does fall towards the red and "
+           "is what presets.json carries (see validation/slt.py). This stays "
+           "xfail because lulin.MEASURED is still the honest record of what "
+           "these 123 frames alone can say, and they cannot say this.",
 )
 def test_extinction_falls_towards_the_red():
     k = [lulin.MEASURED[b]["k"] for b in ("g", "r", "i")]

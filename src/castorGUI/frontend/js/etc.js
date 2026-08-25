@@ -995,8 +995,17 @@
         }
     }
 
+    function showCaveat(profile) {
+        var box = el('profile-caveat');
+        if (!box) { return; }
+        var caveat = profile && profile.caveat;
+        box.textContent = caveat || '';
+        box.hidden = !caveat;
+    }
+
     function applyProfile(profileId) {
         var profile = profiles()[profileId];
+        showCaveat(profile);
 
         if (!profile) {
             // Nothing to choose from and nothing chosen: every catalogue empties to

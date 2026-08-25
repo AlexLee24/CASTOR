@@ -161,6 +161,13 @@ class Profile(BaseModel):
     name: str | None = None
     environment: SiteEnvironment | None = None
 
+    #: Free text, shown by every host beside the profile's name and never written
+    #: into a request. A profile whose numbers are not good enough to plan real
+    #: observations with says so here, in the one place a user picking it will
+    #: actually look. `provenance.py` records where each value came from, but that
+    #: file is in the repository, not in front of someone choosing from a dropdown.
+    caveat: str | None = None
+
     # Read by callers that want to show it, never written into a resolved request:
     # seeing is a condition of the night being planned, not a property of the site.
     median_seeing_fwhm: float | None = None
