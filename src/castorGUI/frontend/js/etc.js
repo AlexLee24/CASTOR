@@ -1210,10 +1210,13 @@
                 hint: 'Copy this and keep it wherever you like — a file, a script, a message. LOAD takes it back.',
                 text: JSON.stringify(buildSaveObject(), null, 2),
                 readOnly: true,
+                // Dismiss on the left, the action that commits on the right, the way
+                // this platform puts them. The row is right-aligned, so the last
+                // entry here is the one nearest the corner and under the cursor.
                 actions: [
-                    { label: 'Copy', variant: 'primary', onClick: copyDialogText },
+                    { label: 'Close', variant: 'ghost', onClick: function () { dialog.close(); } },
                     { label: 'Download', onClick: downloadDialogText },
-                    { label: 'Close', variant: 'ghost', onClick: function () { dialog.close(); } }
+                    { label: 'Copy', variant: 'primary', onClick: copyDialogText }
                 ]
             });
         });
@@ -1224,9 +1227,9 @@
                 hint: 'Paste a saved request below, or pick a file to read one in — either way you see it before it is applied.',
                 text: '',
                 actions: [
-                    { label: 'Import', variant: 'primary', onClick: importFromDialog },
+                    { label: 'Cancel', variant: 'ghost', onClick: function () { dialog.close(); } },
                     { label: 'Choose file…', onClick: function () { el('load-file-input').click(); } },
-                    { label: 'Cancel', variant: 'ghost', onClick: function () { dialog.close(); } }
+                    { label: 'Import', variant: 'primary', onClick: importFromDialog }
                 ]
             });
         });
