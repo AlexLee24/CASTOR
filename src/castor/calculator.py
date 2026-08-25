@@ -7,10 +7,6 @@ from castor import moon
 
 __all__ = ["run_calculation"]
 
-# ==========================================
-# Helper: Flux Unification
-# ==========================================
-
 BrightnessType = (
     schema.VegaMagnitude | 
     schema.ABMagnitude | 
@@ -46,25 +42,16 @@ def _unify_flux(
         case _:
             raise ValueError(f"Unknown brightness type: {type(brightness)}")
 
-# ==========================================
-# Main Orchestrator
-# ==========================================
-
 def run_calculation(request: schema.ObservationRequest) -> schema.ObservationResponse:
     """
     CASTOR core calculation pipeline.
     Follows the pure-function principle f(input) = output: stateless and safe under high concurrency.
     """
-    # Extract domain-pillar aliases to keep the code concise
     inst = request.instrument
     tgt = request.target
     env = request.environment
     opt = request.options
 
-    # ---------------------------------------------------------
-    # Phase 1: Context Enrichment (environmental enrichment and astronomical geometry)
-    # ---------------------------------------------------------
-    # 1.1 Dynamic target coordinates and moonlight contribution
     alpha, rho, z_moon, z_target = moon.get_moon_and_target_geometry(
         target_ra=tgt.ra,
         target_dec=tgt.dec,
@@ -99,7 +86,6 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             env.mu_dark, tgt.ra, tgt.dec, env.zodiacal_share
         )
 
-    # 1.2 Precompute optical and hardware physical quantities
     eff_area = float(physics.calculate_effective_area(
         inst.telescope.primary_mirror_diameter, 
         inst.telescope.secondary_mirror_diameter
@@ -118,17 +104,11 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         env.seeing_fwhm, env.diffraction_fwhm, env.optical_fwhm, env.tracking_fwhm
     ))
     
-    # 1.3 Photometric geometry and aperture coverage
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)
 
-    # ---------------------------------------------------------
-    # Phase 2: Flux Unification & Count Rates (flux normalization and photoelectron counts)
-    # ---------------------------------------------------------
-    # Unify the target flux
     f_lambda_target = _unify_flux(tgt.brightness, inst.optic_filter.central_wavelength)
     
-    # Sky flux conversion (mu_sky is assumed to be in the AB magnitude system)
     f_lambda_sky = float(physics.convert_ab_to_wavelength_flux(mu_sky, inst.optic_filter.central_wavelength))
 
     # Compute the sky background count rate. No extinction term: mu_sky was
@@ -163,9 +143,6 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         case _:
             raise ValueError("Unknown target morphology")
 
-    # ---------------------------------------------------------
-    # Phase 3 & 4: Strategy Execution & Assembly (strategy solving and response assembly)
-    # ---------------------------------------------------------
     single_snr = float(physics.calculate_single_snr(
         source_count_rate=source_rate,
         sky_count_rate=sky_rate,
@@ -175,7 +152,6 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         single_exp_time=opt.single_exp_time
     ))
 
-    # Solve forward or backward depending on the user's mode (Options)
     match opt:
         case schema.SolveForSNR(num_exposures=n_exp):
             total_exp_time = opt.single_exp_time * n_exp
@@ -198,7 +174,6 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         case _:
             raise ValueError("Unknown calculation option")
 
-    # Compute the saturation limit and danger flags
     t_sat = float(physics.calculate_saturation_time(
         inst.camera.full_well_capacity, peak_rate, sky_rate, inst.camera.dark_current_rate
     ))
@@ -213,7 +188,6 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     if airmass > 2.0:
         warnings.append("Airmass > 2.0: Extinction model accuracy may degrade.")
 
-    # Assemble the Pydantic Response contract
     return schema.ObservationResponse(
         core=schema.CoreResult(
             total_snr=total_snr,

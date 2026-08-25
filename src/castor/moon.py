@@ -66,12 +66,11 @@ __all__ = [
     "apply_zodiacal_baseline",
 ]
 
-# Photometric unit conversion constant
-# Reference: Krisciunas and Schaefer (1991), conversion from foot-candles/sr to nanoLamberts
+# Krisciunas & Schaefer (1991), foot-candles/sr to nanoLamberts.
 KS91_FC_TO_NL_CONVERSION = 1e5
 
 # ==========================================
-# Phase 1: Astronomical & Ephemeris Engine
+# Ephemeris — where things are
 # ==========================================
 
 def get_moon_and_target_geometry(
@@ -159,7 +158,7 @@ def ecliptic_latitude(target_ra: float, target_dec: float) -> float:
 
 
 # ==========================================
-# Phase 2: Sky Brightness Modeling
+# Sky brightness — what that makes the sky do
 # ==========================================
 
 def krisciunas_schaefer_1991(
