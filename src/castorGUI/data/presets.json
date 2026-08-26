@@ -107,8 +107,7 @@
           },
           "environment": {
             "mu_dark": 21.26,
-            "zodiacal_share": 0.267,
-            "extinction_coeff": 0.314
+            "zodiacal_share": 0.267
           },
           "telescope": {
             "LOT": {
@@ -126,9 +125,6 @@
             "filter_bandwidth": 64.8,
             "filter_transmission": 1.0
           },
-          "environment": {
-            "extinction_coeff": 0.622
-          },
           "telescope": {
             "SLT": {
               "optical_throughput": 0.101
@@ -144,8 +140,7 @@
           },
           "environment": {
             "mu_dark": 21.79,
-            "zodiacal_share": 0.274,
-            "extinction_coeff": 0.512
+            "zodiacal_share": 0.274
           },
           "telescope": {
             "LOT": {
@@ -165,8 +160,7 @@
           },
           "environment": {
             "mu_dark": 20.2,
-            "zodiacal_share": 0.137,
-            "extinction_coeff": 0.185
+            "zodiacal_share": 0.137
           },
           "telescope": {
             "LOT": {
@@ -183,9 +177,6 @@
             "central_wavelength": 962.1,
             "filter_bandwidth": 278.0,
             "filter_transmission": 0.998
-          },
-          "environment": {
-            "extinction_coeff": 0.155
           },
           "telescope": {
             "SLT": {

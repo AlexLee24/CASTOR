@@ -133,15 +133,13 @@ def test_a_site_fills_in_its_sky_and_location(shipped):
     Resolving with no filter named lands on the first listed, which for Lulin is
     Sloan r' and carries its own measured mu_dark — the local-only baseline, with
     zodiacal light split back out (validation/QUESTIONS.md 9/10), not the 20.92
-    that was actually measured — and its own measured extinction_coeff, not the
-    site's flat 0.17 (QUESTIONS.md 4). The site's 21.5/0.17 are what a band
-    without a measurement still inherits — see the u' test below.
+    that was actually measured. Extinction is the other way round: no band has a
+    trustworthy one, so all of them still inherit the site's 0.17.
     """
     environment = shipped.resolve("lulin")["environment"]
 
     assert environment["location"]["elevation_m"] == 2862.0
-    assert shipped.profile("lulin").environment.extinction_coeff == 0.17
-    assert environment["extinction_coeff"] == 0.314               # r', measured
+    assert environment["extinction_coeff"] == 0.17               # site fallback
     assert shipped.profile("lulin").environment.mu_dark == 21.5
     assert environment["mu_dark"] == 21.26                       # r', local only
     assert environment["zodiacal_share"] == 0.267                # r'
@@ -255,35 +253,35 @@ def test_choosing_a_filter_changes_the_throughput_in_front_of_it(shipped):
 
 
 def test_a_filter_without_a_measurement_leaves_the_site_values_alone(shipped):
-    """Lulin u' has extinction and SLT throughput now, but still no mu_dark or LOT
-    throughput measurement, so those two still inherit.
+    """Lulin u' has an SLT throughput now, but no mu_dark and no LOT throughput,
+    so those still inherit.
 
-    The point of overriding per field rather than per section: a band can correct
-    its extinction without also having to claim a sky brightness nobody measured
-    for it, and a telescope-scoped throughput without claiming one for a telescope
-    it was never measured on.
+    The point of overriding per field rather than per section: a band can carry a
+    telescope-scoped throughput without also claiming a sky brightness nobody
+    measured for it, or a throughput for a telescope it was never measured on.
     """
     site = shipped.profile("lulin").environment
 
     fragment = shipped.resolve("lulin", optic_filter="Sloan_u")  # LOT is the default
     assert fragment["environment"]["mu_dark"] == site.mu_dark
-    assert fragment["environment"]["extinction_coeff"] != site.extinction_coeff
+    assert fragment["environment"]["extinction_coeff"] == site.extinction_coeff
     assert fragment["instrument"]["telescope"]["optical_throughput"] == (
         shipped.profile("lulin").telescopes["LOT"].telescope.optical_throughput)
 
 
-def test_every_lulin_band_now_has_its_own_extinction(shipped):
-    """Extinction is band-dependent too, and now it is measured (QUESTIONS.md 4).
+def test_every_lulin_band_still_inherits_the_site_extinction(shipped):
+    """Extinction is band-dependent, and Lulin's is still not measured well enough.
 
-    A single photometric night with a real airmass sweep (SLT, 2024-04-14) gave
-    every one of Lulin's five bands its own extinction_coeff, so none of them
-    fall back to the site's single 0.17 any more — falling towards the red the
-    way real extinction should, unlike the flat number it replaced.
+    The 2024-04-14 SLT night swept airmass 1.81-3.72 and still could not deliver
+    it: the sky faded 0.1-0.4 mag between the halves of the night at matched
+    airmass, degenerate with the airmass term because the target was setting.
+    See validation/slt.py WHY_NO_EXTINCTION. The field exists on BandSky and is
+    deliberately unset, so the site value stands.
     """
     site = shipped.profile("lulin").environment
     for band in shipped.profile("lulin").filters:
         fragment = shipped.resolve("lulin", optic_filter=band)
-        assert fragment["environment"]["extinction_coeff"] != site.extinction_coeff
+        assert fragment["environment"]["extinction_coeff"] == site.extinction_coeff
 
 
 def test_a_hardware_family_cannot_be_given_a_sky(tmp_path):

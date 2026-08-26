@@ -1,8 +1,13 @@
-"""The `lulin` profile's SLT half, against the night that measured it.
+"""The `lulin` profile's SLT half, against the night behind it.
 
 Companion to test_lulin.py, which does the same job for LOT. Where these
 disagree with presets.json, presets.json is what is wrong — every number
 asserted here came out of real frames, and `slt.py` records how.
+
+Note what is asserted about extinction: that it is *absent* from presets.json.
+The night produced a k per band and the k is not trustworthy; slt.py's
+WHY_NO_EXTINCTION has the evidence. These tests pin both halves of that — the
+ordering, which survives, and the absence of the values, which must.
 """
 import pytest
 
@@ -46,13 +51,13 @@ def test_every_band_has_a_believable_throughput(band):
 
 
 def test_extinction_falls_towards_the_red():
-    """The thing lulin.py could not do, and the reason this night was worth reducing.
+    """The one thing about extinction this night does establish.
 
     Rayleigh scattering goes as lambda^-4, so extinction must fall monotonically
-    from u' to z'. The LOT 18-night fit puts r' highest instead — a real result
-    of too little airmass range per night, still recorded as a strict xfail in
-    test_lulin.py. This dataset gets the ordering right, which is the evidence
-    that the airmass sweep is what mattered.
+    from u' to z'. The LOT 18-night fit puts r' highest instead — still a strict
+    xfail in test_lulin.py. This dataset gets the ordering right, and gets it
+    right on every cut of the data (whole night, ascending branch alone), which
+    is why the ordering survives the transparency problem that sank the values.
     """
     k = [slt.MEASURED[b]["k"] for b in BANDS]
     assert k == sorted(k, reverse=True)
@@ -76,11 +81,37 @@ def test_the_extinction_ordering_is_not_within_the_errors():
 # ==========================================
 
 @pytest.mark.parametrize("band", BANDS)
-def test_preset_extinction_matches_the_fit(shipped, band):
-    """Each band carries its own measured extinction, not the site's fallback."""
+def test_this_nights_extinction_did_not_reach_presets_json(shipped, band):
+    """The one number this night could not deliver, asserted as absent.
+
+    The fit produces a k per band and it is not usable: the sky faded 0.1-0.4
+    mag between the two halves of the night at matched airmass, and because the
+    target was setting, that fade is degenerate with the airmass term. See
+    slt.WHY_NO_EXTINCTION. Every band therefore still inherits the site's
+    fallback, and this test exists so that reinstating the values silently is
+    not possible.
+    """
     environment = _resolved(shipped, band)["environment"]
-    assert environment["extinction_coeff"] == pytest.approx(slt.MEASURED[band]["k"], abs=0.001)
-    assert environment["extinction_coeff"] != shipped.profile(PROFILE).environment.extinction_coeff
+    site = shipped.profile(PROFILE).environment.extinction_coeff
+    assert environment["extinction_coeff"] == site
+    assert environment["extinction_coeff"] != pytest.approx(slt.MEASURED[band]["k"], abs=0.001)
+
+
+def test_the_fade_is_what_disqualified_the_extinction():
+    """The evidence, kept as an assertion so the reasoning cannot rot.
+
+    Bands that faded more between the halves of the night come out with more
+    excess extinction over literature. That correlation is why the excess reads
+    as weather rather than as a genuinely dusty site.
+    """
+    w = slt.WHY_NO_EXTINCTION
+    fade = w["fade_at_matched_airmass_mag"]
+    excess = {b: w["ascending_branch_only_k"][b] - w["literature_good_site_k"][b]
+              for b in BANDS}
+    # g' faded the most and is the most inflated; z' faded least among gri and is not inflated
+    assert fade["g"] == max(fade.values())
+    assert excess["g"] == max(excess.values())
+    assert excess["z"] < 0.05
 
 
 @pytest.mark.parametrize("band", BANDS)
@@ -143,7 +174,7 @@ def test_slt_is_not_more_efficient_than_lot(shipped):
 
 
 def test_the_night_actually_swept_airmass():
-    """The one property that makes this dataset able to measure extinction at all,
-    asserted so a future reduction cannot quietly lose it."""
+    """Necessary for measuring extinction, and — as this night showed — not
+    sufficient: the sweep was real and the transparency still ruined it."""
     low, high = slt.NIGHT["airmass"]
     assert high - low > 1.5

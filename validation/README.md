@@ -21,7 +21,7 @@ pytest validation   # this suite, on purpose
 | `lco_etc.py` | Las Cumbres Observatory's published calculator, transcribed |
 | `eso_etc.py` | ESO's FORS2 ETC — captured reference results, plus a live client |
 | `lulin.py` | LOT/SOPHIA measured against real frames and Lulin's own documents |
-| `slt.py` | SLT measured against the one night that swept airmass, 2024-04-14 |
+| `slt.py` | SLT measured against the 2024-04-14 airmass sweep, and why its extinction is unusable |
 | `lulin_prototype.py` | The two Perl calculators CASTOR was refactored from, 2005 and 2011 |
 | `provenance.py` | Where every number in presets.json came from, or that it came from nowhere |
 | `skycalc.py` | Loading and rebinning ESO SkyCalc radiance exports |
@@ -29,7 +29,7 @@ pytest validation   # this suite, on purpose
 | `test_eso.py` | The top-hat bandpass against a full spectral integration |
 | `test_sky_model.py` | How the Krisciunas & Schaefer moon term behaves per band |
 | `test_lulin.py` | Throughput, sky and detector against 123 calibrated frames |
-| `test_slt.py` | SLT's extinction and throughput against that night's own fit |
+| `test_slt.py` | SLT's throughput against that night's fit, and that its extinction stayed out |
 | `test_lulin_prototype.py` | Which of the ancestors' numbers survive, and which are placeholders |
 | `test_provenance.py` | Fails on any preset value the provenance table does not account for |
 
@@ -68,10 +68,13 @@ airmass, so it can measure throughput and sky and *cannot* measure extinction.
 
 `slt.py` is 241 SLT frames from one night, 2024-04-14, sweeping airmass 1.81 to
 3.72 in five bands — the observation `lulin.py`'s own open question asked for.
-It closes extinction and gives SLT its first photometry ever. Its reference
-catalogue is SkyMapper DR4 rather than Pan-STARRS, because the field is at
-declination -32.8 and PS1 does not reach it; no colour-term transform between
-the two systems has been applied, which is that reduction's largest caveat.
+It gives SLT its first photometry ever, and it does **not** close extinction:
+the sweep was real but the night was not photometric through it, and `slt.py`'s
+`WHY_NO_EXTINCTION` shows how that was established from matched-airmass pairs
+alone. Its reference catalogue is SkyMapper DR4 rather than Pan-STARRS, because
+the field is at declination -32.8 and PS1 does not reach it; no colour-term
+transform between the two systems has been applied, which is that reduction's
+other large caveat.
 
 Neither set of frames is in the repository — it is public — and both modules
 carry the reduced result so the tests run without them. Their docstrings have
@@ -160,9 +163,9 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
-  too. `provenance.py` records an origin for all 123 values and a test fails if
+  too. `provenance.py` records an origin for all 118 values and a test fails if
   the file holds one the table does not, or a different number than the one
-  recorded. Lulin is now 62 sourced against 6 guesses; VLT — not the default,
+  recorded. Lulin is now 57 sourced against 6 guesses; VLT — not the default,
   and not what anyone here observes with — is 8 against 12, up from 3 once its
   site stopped being left unset. `other` (a personal amateur rig, nominally at
   Hehuan Mountain's Yuanfeng dark-sky viewpoint) is new and starts at 28 sourced
@@ -170,14 +173,19 @@ Each of these is asserted by a test, so it either stays true or announces itself
   noise and full well are real, only the optical throughputs and one borrowed
   dark current are placeholders. See `provenance.summary()`.
 
-- **SLT went from a completely unmeasured guess to Lulin's best-calibrated
-  instrument, and every Lulin band now has its own extinction.** A single
-  photometric night with a real airmass sweep (SLT, 2024-04-14, 1.81-3.72,
-  SN2024ggi) — the first LOT/SLT data ever to have one, closing QUESTIONS.md 4
-  — gave every one of u'/g'/r'/i'/z' a real extinction_coeff, falling towards
-  the red the way extinction should, and gave SLT real per-band throughput
-  (0.10-0.47, replacing a guessed 0.804 that had no reason to beat LOT's own
-  measured 0.27-0.48 and didn't). Calibrated against SkyMapper DR4, not
+- **SLT went from a completely unmeasured guess to real photometry — and the
+  same night failed to measure extinction, for a reason worth keeping.** SLT,
+  2024-04-14, SN2024ggi: 241 frames sweeping airmass 1.81-3.72, the first
+  LOT/SLT data ever to have a real single-night sweep. It closed QUESTIONS.md 5,
+  giving SLT per-band throughput of 0.10-0.47 and replacing a guessed 0.804 that
+  had no reason to beat LOT's own measured 0.27-0.48 and didn't. It did **not**
+  close question 4: matched-airmass pairs show the sky faded 0.1-0.4 mag between
+  the halves of the night, and since the target was setting, that fade is
+  degenerate with the airmass term and inflates every k. The band that faded
+  most is the band inflated most, which is what identifies it as weather. The
+  *ordering* survives — extinction falls towards the red on every cut — and no
+  absolute value does, so presets.json keeps the site-wide 0.17 and `test_slt.py`
+  asserts the per-band values stay out. Calibrated against SkyMapper DR4, not
   Pan-STARRS DR2 — this field's declination (-32.8°) is outside PS1's
   footprint — so it carries an uncorrected systematic on top of the fit error
   from the two systems' natural photometric bands not being identical.

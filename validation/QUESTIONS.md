@@ -27,7 +27,7 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 1 | Why is r' 1.81x g' and i'? | ASK | — |
 | 2 | ~~How big is LOT's secondary?~~ | **CLOSED** | answered by Trebur's offer |
 | 3 | Were the prototype's efficiencies measured, and on which camera? | ASK | likely unanswerable — 2005, nobody left to ask |
-| 4 | What is the extinction in each band? | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
+| 4 | What is the extinction in each band? | OBSERVE | still open — 2024-04-14 was not photometric |
 | 5 | SLT has no photometry at all | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
 | 6 | SOPHIA's dark current at −80 °C | OBSERVE | **Closed to an upper limit** — see below |
 | 7 | LOT's own u' filter is still unmeasured | DECIDE | — |
@@ -118,41 +118,55 @@ the telescope's and has been for twenty years. Absent an answer, the honest
 default is the weaker reading: `lulin_prototype.py`'s comparison stays what
 README.md already calls it — "weakly corroborated," not confirmed.
 
-## 4. What is the extinction in each band? — CLOSED
+## 4. What is the extinction in each band? — OBSERVE
 
-**Settled by SN2024ggi/SLT, 2024-04-14** — a single photometric night, one
-field, airmass 1.81 to 3.72, all five Sloan bands. Exactly what the old "what
-would settle it" note below asked for, three years after it was written.
+**Attempted and failed, on a night that had everything except photometric
+conditions.** SLT/SN2024ggi, 2024-04-14: 241 frames, five bands, airmass 1.81
+to 3.72 in one continuous run. That is precisely the observation this question
+had been asking for since it was written, and it still did not deliver.
 
-| band | k (mag/airmass) | frames kept |
-|---|---|---|
-| u' | 0.622 ± 0.094 | 44/47 |
-| g' | 0.512 ± 0.023 | 37/48 |
-| r' | 0.314 ± 0.024 | 39/49 |
-| i' | 0.185 ± 0.033 | 45/49 |
-| z' | 0.155 ± 0.028 | 40/48 |
+**Why not, established without any model.** Take frames at the *same* airmass
+from early and late in the night. The extinction term between them is identical
+by definition, so any difference in zero point is transparency alone. Pairing
+the 12:0x-14:2x frames against the 14:50-15:35 ones at matched airmass:
 
-Falls monotonically towards the red — real Rayleigh-scattering shape, unlike
-the old 18-night fit's r'-highest inversion (still recorded in `lulin.py`'s
-`MEASURED` and still xfailed in `test_lulin.py`, since that fit is a different,
-weaker dataset this did not touch). Fitted with an iterative sigma-clipped
-ZP-vs-airmass regression: an initial fit had residuals of 0.2-0.4 mag, traced to
-~1 hour of the night (14:34-15:32) being cloud-affected — one frame dropped 1.17
-mag in a single exposure. Clipping that stretch brought residuals to 0.05-0.19
-mag. `presets.json`'s per-band `environment.extinction_coeff` now carries these
-values; the site-wide 0.17 remains only as the fallback for bands/profiles with
-no measurement of their own.
+| band | fainter, late vs early, at equal airmass |
+|---|---|
+| u' | 0.35 mag |
+| g' | 0.40 |
+| r' | 0.17 |
+| i' | 0.11 |
+| z' | 0.14 |
 
-**Caveat carried forward.** Calibrated against SkyMapper DR4, not Pan-STARRS
-DR2 — this field's declination (-32.8°) is outside PS1's footprint, confirmed
-empirically (2769 catalogue stars at the old field's +38.4°, zero at this one).
-SkyMapper's natural u/v/g/r/i/z system is close to but not identical to
-Sloan/SDSS, and no colour-term transform between the two has been applied, so
-there is an uncorrected systematic on top of the fit errors quoted.
+An hour of cloud crossed at 14:34 and the sky never fully came back. Because
+the target was setting, the second half of the night is also the high-airmass
+half — so a transparency decline and an airmass rise move together, and
+`zp = zp0 - k*X` cannot tell them apart. It attributes the fade to airmass.
 
-**Where the reduction lives.** `slt.py`, the SLT counterpart to `lulin.py`:
-per-band fit, errors, the cloudy window the sigma clip removed, and what the
-night does and does not cover. `test_slt.py` asserts presets.json against it.
+**The inflation matches the fade, band by band**, which is what identifies it as
+weather rather than a genuinely dusty site. Against literature for a good site,
+the excess is +0.06 (u') / +0.29 (g') / +0.15 (r') / +0.13 (i') / -0.01 (z'):
+g' faded most and is inflated most.
+
+Re-fitting the post-cloud ascending branch alone lowers everything without
+rescuing it — u' 0.605, g' 0.485, r' 0.258, i' 0.197, z' 0.049, still 2-3x
+literature in g'r'i' while u' and z' land near it, which is not a physical
+extinction curve since real extinction is smooth in wavelength.
+
+**What the night did establish.** Extinction falls monotonically towards the
+red, on every cut of the data. That is more than the LOT 18-night fit could do —
+it gets the ordering backwards (see the strict xfail in `test_lulin.py`) — and
+it is the one extinction result this project can currently defend.
+
+`presets.json` therefore still carries the single site-wide 0.17, and
+`test_slt.py` asserts the per-band values are *absent* so they cannot be
+reinstated quietly. Evidence and numbers in `slt.py`'s `WHY_NO_EXTINCTION`.
+
+**What would settle it.** The same request as before, with one condition added
+that turned out to matter more than the airmass range: a night that is
+photometric *throughout*, verified by returning to the same airmass at the end
+and finding the same zero point. Ideally both rising and setting, so the airmass
+term and any residual time drift are not degenerate.
 
 ## 5. SLT has no photometry at all — CLOSED
 
@@ -170,7 +184,11 @@ convention as LOT's rows):
 
 The guessed 0.804 was wrong in the direction this file already suspected — SLT
 is *not* twice as efficient as LOT; its real numbers (0.10-0.47) sit in the same
-range as LOT's own measured 0.27-0.48. `telescopes.SLT.telescope.optical_throughput`
+range as LOT's own measured 0.27-0.48. That conclusion is robust to the
+transparency problem in question 4: it is a factor of two, and the drift moves
+these values by about 15%. The individual per-band numbers are softer than their
+quoted errors suggest, because `zp0` and `k` trade off in the same fit and
+question 4's contamination therefore reaches them too. `telescopes.SLT.telescope.optical_throughput`
 now carries the geometric mean of these five (0.234) as its fallback, the same
 role LOT's 0.381 plays. `secondary_mirror_diameter = 0.12` remains unpublished —
 this closes the throughput question, not the geometry one.
