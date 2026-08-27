@@ -52,7 +52,11 @@ def test_the_default_profile_is_mostly_sourced_now():
     sourced = sum(counts.get(s, 0) for s in
                   (provenance.MEASURED, provenance.DOCUMENT, provenance.DERIVED))
     assert sourced / sum(counts.values()) > 0.7
-    assert counts.get(provenance.MEASURED, 0) >= 8
+    # The three per-band mu_dark entries moved from MEASURED to DERIVED when the
+    # zodiacal split landed (QUESTIONS.md 9/10): they are still the photometry,
+    # just with a model-supplied correction on top, so DERIVED absorbed them.
+    assert counts.get(provenance.MEASURED, 0) >= 5
+    assert counts.get(provenance.DERIVED, 0) >= 8
 
 
 def test_nothing_a_calculation_leans_on_hardest_is_a_guess():
@@ -72,7 +76,7 @@ def test_nothing_a_calculation_leans_on_hardest_is_a_guess():
     ] + [f"lulin.filters.Sloan_{b}.{field}"
          for b in "gri"
          for field in ("central_wavelength", "filter_bandwidth", "filter_transmission",
-                       "environment.mu_dark", "telescope.optical_throughput")]
+                       "environment.mu_dark", "telescope.LOT.optical_throughput")]
 
     guesses = [p for p in load_bearing
                if provenance.PROVENANCE[p][1] == provenance.GUESS]

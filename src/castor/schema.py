@@ -183,6 +183,20 @@ class EnvironmentCondition(StrictModel):
         ...,
         description="Moonless-night baseline surface brightness of the sky in mag/arcsec², used as-is or as the base for auto_calc_background. (ATBD: mu_dark)"
     )
+    zodiacal_share: float | None = Field(
+        default=None,
+        ge=0,
+        lt=1,
+        description=(
+            "Fraction of the moonless sky that was zodiacal light and scattered starlight, "
+            "not airglow or light pollution, in the original measurement `mu_dark` was split "
+            "from — at this site's own reference sightline. Used only when auto_calc_background "
+            "is True, to add a pointing-dependent term on top of mu_dark (now the local-only "
+            "baseline that split left behind). None means not modelled: mu_dark is treated as "
+            "the whole moonless sky with no pointing correction, the behaviour before this field "
+            "existed. Site-specific and rarely known; see validation/QUESTIONS.md 9 and 10."
+        )
+    )
     extinction_coeff: float = Field(
         ..., 
         description="Atmospheric attenuation per unit airmass in mag/airmass. (ATBD: k_ext)"
@@ -367,14 +381,24 @@ class TimeSeriesEnvironment(StrictModel):
     )
     
     mu_dark: float = Field(
-        ..., 
+        ...,
         description="Intrinsic surface brightness of the moonless night sky in mag/arcsec²."
     )
+    zodiacal_share: float | None = Field(
+        default=None,
+        ge=0,
+        lt=1,
+        description=(
+            "Fraction of the moonless sky that was zodiacal light and scattered starlight in "
+            "the original measurement mu_dark was split from, at this site's own reference "
+            "sightline. None means not modelled — see EnvironmentCondition.zodiacal_share."
+        )
+    )
     extinction_coeff: float = Field(
-        ..., 
+        ...,
         description="Atmospheric attenuation per unit airmass in mag/airmass."
     )
-    
+
     seeing_fwhm: PositiveFloat = Field(..., description="Atmospheric seeing FWHM in arcseconds.")
     diffraction_fwhm: PositiveFloat = Field(..., description="Diffraction limit FWHM in arcseconds.")
     optical_fwhm: PositiveFloat = Field(..., description="Optical aberrations FWHM in arcseconds.")

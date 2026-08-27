@@ -266,14 +266,33 @@ def test_the_measured_throughput_reproduces_the_measured_sky(lot, band):
 
 
 @pytest.mark.parametrize("band", ["g", "r", "i"])
-def test_preset_mu_dark_matches_the_sky_that_was_measured(band):
-    """And each band carries the sky that was measured through it.
+def test_preset_mu_dark_plus_zodiacal_reproduces_the_sky_that_was_measured(band):
+    """And each band carries the sky that was measured through it — split in two.
 
+    `mu_dark` no longer carries the whole measurement (QUESTIONS.md 9/10): the
+    zodiacal and scattered-starlight part our sightline happened to contain was
+    split back out, so this test recombines mu_dark with zodiacal_share at the
+    reference sightline (moon.ZODIACAL_REFERENCE_ECLIPTIC_LATITUDE_DEG, where the
+    zodiacal shape table is 1.0 by construction) rather than reading mu_dark alone.
     The site's single 21.5 suited g' and was 1.46 mag out in i', a factor of 3.8
-    in background flux. It survives as the fallback for bands nobody has measured.
+    in background flux. It survives as the fallback for bands nobody has measured,
+    and carries no zodiacal_share to split.
     """
-    assert _resolved(band)["environment"]["mu_dark"] == pytest.approx(
-        lulin.MEASURED[band]["mu_dark"], abs=0.01)
+    env = _resolved(band)["environment"]
+    b_local = 34.08 * (10.0 ** (0.4 * (22.5 - env["mu_dark"])))
+    share = env["zodiacal_share"]
+    b_zodi_at_reference = b_local * share / (1.0 - share)
+    mu_total = 22.5 - 2.5 * np.log10((b_local + b_zodi_at_reference) / 34.08)
+    assert mu_total == pytest.approx(lulin.MEASURED[band]["mu_dark"], abs=0.01)
+
+
+@pytest.mark.parametrize("band", ["g", "r", "i"])
+def test_preset_mu_dark_is_now_fainter_than_what_was_measured(band):
+    """The local-only baseline must be strictly fainter (larger mag) than the
+    original total: removing a real, positive flux component can only do that.
+    """
+    env = _resolved(band)["environment"]
+    assert env["mu_dark"] > lulin.MEASURED[band]["mu_dark"]
 
 
 def test_the_sky_is_bluer_than_one_number_can_describe():
@@ -285,12 +304,17 @@ def test_the_sky_is_bluer_than_one_number_can_describe():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="extinction_coeff is one number per site, 0.17. The fit gives 0.189 "
-           "(r', +/-0.027) but only 0.123 +/- 0.105 (g') and 0.108 +/- 0.049 "
-           "(i'), and g'/i' have too little airmass range over too few nights "
-           "to be worth adopting. Wavelength ordering is wrong too: extinction "
-           "should fall towards the red and r' comes out highest. Needs frames "
-           "spanning airmass on a single photometric night.",
+    reason="Superseded, and kept as the record of why. This is the LOT 18-night "
+           "fit, which puts r' highest (0.189 +/- 0.027 against 0.123 +/- 0.105 "
+           "in g' and 0.108 +/- 0.049 in i') — impossible for real extinction, "
+           "which falls towards the red. The cause is in SIGHTLINE: no single "
+           "night spans more than 0.19 in airmass, so the fit measured "
+           "night-to-night transparency, not an airmass term. QUESTIONS.md 4 is "
+           "now CLOSED by a different dataset — SLT/SN2024ggi 2024-04-14, one "
+           "night sweeping X=1.81 to 3.72, which does fall towards the red and "
+           "is what presets.json carries (see validation/slt.py). This stays "
+           "xfail because lulin.MEASURED is still the honest record of what "
+           "these 123 frames alone can say, and they cannot say this.",
 )
 def test_extinction_falls_towards_the_red():
     k = [lulin.MEASURED[b]["k"] for b in ("g", "r", "i")]

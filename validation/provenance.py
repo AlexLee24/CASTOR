@@ -43,21 +43,39 @@ PROVENANCE = {
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
     "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
-    "lulin.telescopes.SLT.optical_throughput": (0.804, GUESS, "no photometry; LOT measures 0.27-0.48; QUESTIONS.md 5"),
+    "lulin.telescopes.SLT.optical_throughput": (0.234, MEASURED, "geometric mean of the SLT bands below; method and fit in slt.py, QUESTIONS.md 5"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
     "lulin.cameras.Sophia.quantum_efficiency": (0.85, GUESS, "datasheet curve gives 90/96/87% at g'r'i'; harmless where the band throughput is measured, wrong 3x in z'; QUESTIONS.md 13"),
-    "lulin.cameras.Sophia.dark_current_rate": (0.01, GUESS, "datasheet -152 gives 0.00025 at -90 C, frames run at -80 C; QUESTIONS.md 6"),
+    "lulin.cameras.Sophia.dark_current_rate": (0.001, DERIVED, "datasheet 0.00025 at -90C, halving-interval scaled to -80C (4.5-5.9C/halving, same method used for ASI2600MC); consistent with 20 real -80C dark frames, whose frame-to-frame variance came in below read-noise-squared (upper limit, not a detection) — QUESTIONS.md 6"),
     "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet -152 1 MHz port says 8.5"),
     "lulin.cameras.Sophia.full_well_capacity": (150000, DOCUMENT, "datasheet -152, single pixel typical; 100000 was the 13.5 um -132 column"),
 
     # ---- Lulin, Andor iKon-M DU934P-BEX2-DD ---------------------------------
-    "lulin.cameras.SLT_default.pixel_pitch": (13.0, DOCUMENT, "datasheet and the SLT page, 13 x 13 um"),
-    "lulin.cameras.SLT_default.quantum_efficiency": (0.85, GUESS, "no curve read for this sensor"),
-    "lulin.cameras.SLT_default.dark_current_rate": (0.017, DOCUMENT, "datasheet BEX2-DD at -80 C; operating temperature assumed"),
-    "lulin.cameras.SLT_default.readout_noise": (3.3, DOCUMENT, "datasheet BEX2-DD at 0.05 MHz; readout speed assumed"),
-    "lulin.cameras.SLT_default.full_well_capacity": (130000, DOCUMENT, "datasheet, BEX2-DD"),
+    "lulin.cameras.SLT_DU934P.pixel_pitch": (13.0, DOCUMENT, "datasheet and the SLT page, 13 x 13 um"),
+    "lulin.cameras.SLT_DU934P.quantum_efficiency": (0.85, GUESS, "no curve read for this sensor"),
+    "lulin.cameras.SLT_DU934P.dark_current_rate": (0.017, DOCUMENT, "datasheet BEX2-DD at -80 C; operating temperature assumed"),
+    "lulin.cameras.SLT_DU934P.readout_noise": (3.3, DOCUMENT, "datasheet BEX2-DD at 0.05 MHz; readout speed assumed"),
+    "lulin.cameras.SLT_DU934P.full_well_capacity": (130000, DOCUMENT, "datasheet, BEX2-DD"),
+
+    # ---- Lulin, SLT's two retired cameras (great-nas archive, 2021-2022) ----
+    # SLT's raw nightly archive (Lulin_Observation_data/SLT) spans three
+    # cameras on the same telescope: Andor DZ936 (2021-04 to 2022-03), then
+    # Apogee Alta U9000 (2022-06 onward, labelled "U42" in some headers until
+    # 2022-10 — see below), then the current Andor DU934P-BEX2-DD (SLT_DU934P,
+    # 2023-06 on). Retired, so not selectable for planning new observations,
+    # but recorded so historical frames from those two eras can be reduced.
+    "lulin.cameras.SLT_DZ936.pixel_pitch": (13.5, DOCUMENT, "frame headers (DETECTOR=E2V CCD42-40) match Andor's iKon-L 936 datasheet exactly"),
+    "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the current SLT_DU934P's DU934P-BEX2-DD"),
+    "lulin.cameras.SLT_DZ936.dark_current_rate": (0.00013, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor at -80C, matching frame headers' CCD-TEMP"),
+    "lulin.cameras.SLT_DZ936.readout_noise": (7.0, DOCUMENT, "Andor iKon series brochure, iKon-L 936 High Sensitivity output at 1MHz; readout speed not in the headers, assumed"),
+    "lulin.cameras.SLT_DZ936.full_well_capacity": (100000, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor"),
+    "lulin.cameras.SLT_U9000.pixel_pitch": (12.0, DOCUMENT, "Lulin's own hosted datasheet (lulin.ncu.edu.tw/.../U9000.pdf) and frame headers agree"),
+    "lulin.cameras.SLT_U9000.quantum_efficiency": (0.64, DOCUMENT, "Lulin's own hosted datasheet, peak QE at 550nm"),
+    "lulin.cameras.SLT_U9000.dark_current_rate": (0.6, DOCUMENT, "Lulin's own hosted datasheet, quoted at -25C; frame headers show the camera actually ran warmer (~-15C), so the true value is somewhat higher than this, unquantified"),
+    "lulin.cameras.SLT_U9000.readout_noise": (12.0, DOCUMENT, "Lulin's own hosted datasheet, system noise at 1MHz"),
+    "lulin.cameras.SLT_U9000.full_well_capacity": (110000, DOCUMENT, "Lulin's own hosted datasheet, linear full well typical"),
 
     # ---- Lulin filters: Astrodon Gen2 curves published by the observatory ----
     "lulin.filters.Sloan_g.central_wavelength": (475.9, DOCUMENT, "transmission-weighted centroid of the measured curve"),
@@ -77,12 +95,33 @@ PROVENANCE = {
     "lulin.filters.Sloan_u.filter_transmission": (1.0, DOCUMENT, "peak of the same curve; 0.9 was the placeholder all five once carried"),
 
     # ---- Lulin per-band values, from the photometry -------------------------
-    "lulin.filters.Sloan_g.environment.mu_dark": (21.44, MEASURED, "moonless frames, 7 nights, one sightline at ecliptic +16 / galactic +21"),
-    "lulin.filters.Sloan_r.environment.mu_dark": (20.92, MEASURED, "moonless frames, 12 nights, one sightline at ecliptic +16 / galactic +21"),
-    "lulin.filters.Sloan_i.environment.mu_dark": (20.04, MEASURED, "moonless frames, 7 nights, one sightline at ecliptic +16 / galactic +21"),
-    "lulin.filters.Sloan_g.telescope.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
-    "lulin.filters.Sloan_r.telescope.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
-    "lulin.filters.Sloan_i.telescope.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+    "lulin.filters.Sloan_g.environment.mu_dark": (21.79, DERIVED, "21.44 measured (7 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_r.environment.mu_dark": (21.26, DERIVED, "20.92 measured (12 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_i.environment.mu_dark": (20.20, DERIVED, "20.04 measured (7 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_g.environment.zodiacal_share": (0.274, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
+    "lulin.filters.Sloan_r.environment.zodiacal_share": (0.267, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
+    "lulin.filters.Sloan_i.environment.zodiacal_share": (0.137, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
+    "lulin.filters.Sloan_g.telescope.LOT.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+    "lulin.filters.Sloan_r.telescope.LOT.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
+    "lulin.filters.Sloan_i.telescope.LOT.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+
+    # ---- Lulin, SLT throughput and extinction (2024-04-14, SN2024ggi) --------
+    # A single photometric night with a real airmass sweep (1.81-3.72), the
+    # first LOT/SLT data ever to have one — see QUESTIONS.md 4. Calibrated
+    # against SkyMapper DR4 (Pan-STARRS DR2 does not cover this field's
+    # declination, -32.8 deg), so carries an extra, undated systematic on top
+    # of the photometric fit error quoted: SkyMapper's natural u/v/g/r/i/z
+    # system is close to but not identical to Sloan/SDSS, and no colour-term
+    # transform between the two has been applied. iterative sigma-clipped fit
+    # of ZP vs airmass across the night (~1 hour of the night was cloud-
+    # affected and rejected — see the -1.17 mag single-frame outlier this
+    # caught). optical_throughput here is implied_optical_train = T_sys /
+    # (QE * filter_transmission), same convention as LOT's rows above.
+    "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.101, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.086; +/- 0.015 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
+    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.323, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.274; +/- 0.012 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
+    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.474, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.401; +/- 0.019 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
+    "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.373, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.317; +/- 0.021 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
+    "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.122, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.104; +/- 0.006 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
 
     # ---- VLT / FORS2 --------------------------------------------------------
     # Never the default, and nobody here observes with it. It did lack a site
@@ -174,9 +213,14 @@ def walk(profiles):
                     out[f"{profile_id}.{catalogue}.{entry_id}.{key}"] = value
                 if catalogue != "filters":
                     continue
-                for extra in ("environment", "telescope"):
-                    for key, value in (entry.get(extra) or {}).items():
-                        out[f"{profile_id}.{catalogue}.{entry_id}.{extra}.{key}"] = value
+                for key, value in (entry.get("environment") or {}).items():
+                    out[f"{profile_id}.{catalogue}.{entry_id}.environment.{key}"] = value
+                # telescope is keyed by which telescope the override belongs to
+                # (FilterEntry.telescope in castorCLI/presets.py) — one extra
+                # level deeper than environment, which is site-wide and needs no key.
+                for tel_key, tel_value in (entry.get("telescope") or {}).items():
+                    for key, value in tel_value.items():
+                        out[f"{profile_id}.{catalogue}.{entry_id}.telescope.{tel_key}.{key}"] = value
     return out
 
 

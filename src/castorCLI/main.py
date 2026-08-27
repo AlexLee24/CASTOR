@@ -159,8 +159,15 @@ def _results(request: schema.ObservationRequest, response: schema.ObservationRes
     return [f"  {label:<22}{value}" for label, value in rows]
 
 def _emit_notes(assumed: list[tuple[str, Any, str]], ignored: list[str],
-                response: schema.ObservationResponse, request: schema.ObservationRequest) -> None:
+                response: schema.ObservationResponse, request: schema.ObservationRequest,
+                caveat: str | None = None) -> None:
     """Everything the caller did not ask for goes to stderr, so stdout stays the answer."""
+    # First, because it qualifies every number printed above it. A profile that
+    # cannot be trusted for real planning has to say so where the person running
+    # the calculation will see it, not only in the repository.
+    if caveat:
+        click.echo(f"\nCAVEAT: {caveat}", err=True)
+
     if ignored:
         click.echo("ignored (a saved form holds more than a request does): "
                    + ", ".join(ignored), err=True)
@@ -277,16 +284,19 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
 
     response = run_calculation(request)
 
+    caveat = catalogue.profile(site).caveat if (catalogue and site) else None
+
     if as_json:
         click.echo(json.dumps({
             "assumed": [{"path": path, "value": value, "why": why} for path, value, why in assumed],
             "ignored": ignored,
+            "caveat": caveat,
             "request": json.loads(request.model_dump_json()),
             "response": json.loads(response.model_dump_json()),
         }, indent=2))
     else:
         click.echo("\n".join(_header(labels, request) + [""] + _results(request, response)))
-        _emit_notes(assumed, ignored, response, request)
+        _emit_notes(assumed, ignored, response, request, caveat)
 
     if response.flags.is_saturated:
         raise SystemExit(EXIT_SATURATED)
@@ -294,7 +304,10 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
 @cli.command(name="presets")
 @click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the preset file itself.")
-def list_presets(presets_file, as_json) -> None:
+@click.option("--bands", is_flag=True,
+              help="Also show what each filter overrides. Lulin's most important "
+                   "numbers live here, not on the site or the telescope.")
+def list_presets(presets_file, as_json, bands) -> None:
     """List the sites and hardware --site can name. A * marks each catalogue's default."""
     catalogue = _load_presets(presets_file)
 
@@ -304,6 +317,9 @@ def list_presets(presets_file, as_json) -> None:
 
     for profile_id, profile in catalogue.profiles.items():
         click.echo(f"{profile_id}  —  {profile.name or profile_id}")
+
+        if profile.caveat:
+            click.echo(f"    CAVEAT: {profile.caveat}")
 
         if profile.environment is None:
             click.echo("    hardware only: supply the location yourself, it will not be invented")
@@ -327,7 +343,83 @@ def list_presets(presets_file, as_json) -> None:
                     for index, (key, entry) in enumerate(entries.items())
                 )
                 click.echo(f"    {kind:<11} {shown}")
+
+        if bands:
+            for filter_id, entry in profile.filters.items():
+                overrides = []
+                if entry.environment is not None:
+                    for field, value in entry.environment.model_dump().items():
+                        if value is not None:
+                            overrides.append(f"{field} {value:g}")
+                for telescope_id, fragment in (entry.telescope or {}).items():
+                    for field, value in fragment.model_dump().items():
+                        if value is not None:
+                            overrides.append(f"{telescope_id}.{field} {value:g}")
+                if overrides:
+                    click.echo(f"      {filter_id:<12} overrides  " + " · ".join(overrides))
         click.echo("")
+
+@cli.command(name="check")
+@click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
+def check_presets(presets_file) -> None:
+    """Verify a preset file beyond what loading it proves.
+
+    Loading only proves the shapes are right. This runs every combination the file
+    offers through the engine and reports what a user would actually get — which is
+    where the interesting failures live. A filter that overrides a telescope the
+    profile does not list, for instance, loads perfectly and then silently applies
+    nothing; the only way to see it is to resolve the combination and look.
+    """
+    catalogue = _load_presets(presets_file)
+    problems: list[str] = []
+    checked = 0
+
+    for profile_id, profile in catalogue.profiles.items():
+        telescope_ids = set(profile.telescopes)
+
+        # An override keyed by a telescope this profile does not have applies to
+        # nothing, and nothing in the file's own shape says so.
+        for filter_id, entry in profile.filters.items():
+            for telescope_id in (entry.telescope or {}):
+                if telescope_id not in telescope_ids:
+                    problems.append(
+                        f"{profile_id}: filter {filter_id!r} overrides telescope "
+                        f"{telescope_id!r}, which this profile does not list — it applies to nothing"
+                    )
+
+        for telescope_id in (profile.telescopes or {None}):
+            for camera_id in (profile.cameras or {None}):
+                for filter_id in (profile.filters or {None}):
+                    fragment = catalogue.resolve(profile_id, telescope_id, camera_id, filter_id)
+                    instrument = fragment.get("instrument", {})
+                    if not {"telescope", "camera", "optic_filter"} <= set(instrument):
+                        continue                      # incomplete rig; nothing to run
+                    checked += 1
+
+                    where = f"{profile_id}/{telescope_id}/{camera_id}/{filter_id}"
+                    telescope = instrument["telescope"]
+                    if telescope["secondary_mirror_diameter"] >= telescope["primary_mirror_diameter"]:
+                        problems.append(f"{where}: secondary is not smaller than the primary")
+
+                    environment = fragment.get("environment")
+                    if environment is None:
+                        continue
+                    if not 15.0 < environment["mu_dark"] < 25.0:
+                        problems.append(
+                            f"{where}: mu_dark {environment['mu_dark']:g} is outside any real night sky")
+                    if not 0.0 <= environment["extinction_coeff"] < 2.0:
+                        problems.append(
+                            f"{where}: extinction_coeff {environment['extinction_coeff']:g} is not physical")
+
+    click.echo(f"{checked} resolvable configurations checked across {len(catalogue.profiles)} profiles")
+    for profile_id, profile in catalogue.profiles.items():
+        if profile.caveat:
+            click.echo(f"  {profile_id}: carries a caveat — {profile.caveat}")
+    if problems:
+        for problem in problems:
+            click.echo(f"  PROBLEM  {problem}", err=True)
+        raise SystemExit(EXIT_INPUT)
+    click.echo("no problems found")
 
 @cli.command(name="schema")
 @click.option("--batch", is_flag=True, help="The time-series contract instead of the single-point one.")

@@ -3,7 +3,7 @@
 Real photometry from the telescope this calculator is actually for.
 
 **What is here now:** 123 calibrated LOT/SOPHIA science frames sit in
-`../raw/`, not in this directory — 2 GB of them, over 15 nights from 2025-09-29
+`../raw/`, not in this directory — 2 GB of them, over 18 nights from 2025-09-29
 to 2026-02-15, in g'r'i' on the AT/SN2025wny and ZTF25abnjznp fields. Alongside
 them `../raw/ps1/` holds the Pan-STARRS DR2 reference photometry queried for
 each field, and `../raw/lulin_web/` the filter curves and datasheets downloaded

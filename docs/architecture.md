@@ -6,7 +6,9 @@
 
 CASTOR is a lightweight, stateless exposure time calculator (ETC) core engine designed specifically for optical astronomical observations. The project completely excludes graphical user interfaces (GUI) and data persistence layers, focusing entirely on implementing underlying physical algorithms—such as optical geometry, atmospheric physics, energy conversion, and signal-to-noise ratio (SNR) calculations—in pure Python. It is engineered to provide precise, high-concurrency computational support for upper-level astronomical web applications.
 
-> This document covers the core engine (`src/castor/`) only. **CASTOR GUI** (`src/castorGUI/`) is a separate product built on top of this engine — see [CASTOR GUI Architecture](gui_architecture.md).
+> This document covers the core engine (`src/castor/`) only. Three things are built on top of it and documented separately: **CASTOR GUI** (`src/castorGUI/`, [architecture](gui_architecture.md)), the **command line** (`src/castorCLI/`, [reference](cli.md)), and the **preset catalogue** both of them read ([presets](presets.md)).
+>
+> How good the engine's answers actually are is a different question from how it is built, and has its own home: [`validation/`](../validation/README.md) measures CASTOR against other observatories' calculators and real photometry, and [`validation/QUESTIONS.md`](../validation/QUESTIONS.md) lists what it still does not know.
 
 ### 1.2 Core Value
 
@@ -107,17 +109,26 @@ To maintain its identity as a lightweight, high-performance computational kernel
 
 ## 2. Component Architecture
 
-The CASTOR package is divided into the following core modules:
+The repository holds the engine and the three things built on it. Only the first
+is this document's subject; the boundary between them is the point.
 
 ```text
-src/castor/
-├── __init__.py           # Package Entry Point
-├── calculator.py         # Single-Request Orchestrator
-├── batch_calculator.py   # Time-Series Batch Orchestrator
-├── schema.py              # Data Contracts & Mutex Validation
-├── moon.py                 # Astropy-Based Ephemeris & Lunar Sky Brightness
-└── physics.py               # Pure Mathematical & Optical Physics Engine
+src/
+├── castor/             # the engine — this document
+│   ├── __init__.py         # Package Entry Point
+│   ├── calculator.py       # Single-Request Orchestrator
+│   ├── batch_calculator.py # Time-Series Batch Orchestrator
+│   ├── schema.py           # Data Contracts & Mutex Validation
+│   ├── moon.py             # Astropy-Based Ephemeris, Lunar & Zodiacal Sky Brightness
+│   └── physics.py          # Pure Mathematical & Optical Physics Engine
+├── castorCLI/          # command line + the preset reader  -> cli.md, presets.md
+└── castorGUI/          # browser and desktop UI            -> gui_architecture.md
 ```
+
+`castorCLI/presets.py` deserves a note on why it sits outside the engine: hardware
+presets are deliberately out of scope for `castor/` (§1.3), and a host with its own
+hardware database — Kinder is one — has no use for a reader of this repository's
+JSON file. Putting it in the engine would make it dead weight there.
 
 ### Module Responsibilities
 
@@ -127,7 +138,7 @@ src/castor/
 
 * **`schema.py`:** Defines Pydantic models to block invalid data at the door. It enforces physical boundaries (e.g., transmission rates strictly between $0.0$ and $1.0$) and logical mutual exclusivity (e.g., requiring either exposure time or target SNR, but not both).
 
-* **`moon.py`:** Handles dynamic variables related to time and space using Astropy (target/moon ephemeris, airmass, and the Krisciunas & Schaefer 1991 lunar sky-brightness model). Unlike the rest of the engine, this module depends on an external astronomy library rather than pure local math.
+* **`moon.py`:** Handles dynamic variables related to time and space using Astropy (target/moon ephemeris, airmass, the Krisciunas & Schaefer 1991 lunar sky-brightness model, and a pointing-dependent zodiacal term). Unlike the rest of the engine, this module depends on an external astronomy library rather than pure local math. Its name understates it — the module owns the whole sky-brightness model, of which the moon is one of three components.
 
 * **`physics.py`:** The computational core. Combines the optical/hardware conversions (effective area, total throughput, pixel scale, aperture geometry) with the count-rate and SNR formulas. It contains no web schemas or API logic — only pure numerical functions operating on scalars or NumPy arrays.
 
@@ -137,7 +148,7 @@ Error handling currently relies on Pydantic's `ValidationError` at the schema bo
 
 ### 3.1 Separation of Concerns
 
-CASTOR strictly isolates physical phenomena from software execution logic. The architecture is built around four distinct domain pillars: Instrument, Target, Environment, and Strategy. By decoupling static hardware definitions from dynamic atmospheric conditions and human-driven observation strategies, the core engine remains purely mathematical. Furthermore, internal modules are strictly segregated: `schema.py` handles I/O and validation, domain modules (`optics.py`, `ephemeris.py`) handle context enrichment, and `physics.py` is dedicated exclusively to mathematical solving.
+CASTOR strictly isolates physical phenomena from software execution logic. The architecture is built around four distinct domain pillars: Instrument, Target, Environment, and Strategy. By decoupling static hardware definitions from dynamic atmospheric conditions and human-driven observation strategies, the core engine remains purely mathematical. Internally the same separation holds by module: `schema.py` handles I/O and validation, `moon.py` enriches a request with everything that depends on when and where it is pointed, `physics.py` is dedicated exclusively to mathematical solving, and the two orchestrators own sequencing and nothing else.
 
 ### 3.2 Contract-Driven & Fail-Fast
 
@@ -246,7 +257,7 @@ sequenceDiagram
 
 ## 5. Data Contracts & Schema
 
-The CASTOR project utilizes Pydantic models for strict data validation. For the exhaustive list of parameters, data types, physical units, and validation boundaries, please refer to the [API Documentation](docs/api_spec.md). You can see the complete code definition at [`src/castor/schema.py`](src/castor/schema.py).
+The CASTOR project utilizes Pydantic models for strict data validation. The exhaustive list of parameters, data types, physical units, and validation boundaries is the schema itself — [`src/castor/schema.py`](../src/castor/schema.py), where every field carries its unit and its ATBD symbol in the `Field` description — and `castor schema` prints it as JSON Schema. The mathematics behind each symbol is in the [ATBD](ATBD.md).
 
 ### 5.1 Request Schema
 

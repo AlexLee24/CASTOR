@@ -5,7 +5,7 @@ from typing import TypeAlias
 Numeric: TypeAlias = float | NDArray[np.float64]
 
 # ==========================================
-# Public API Definition (Stage 2 Exports)
+# Public API
 # ==========================================
 __all__ = [
     "calculate_airmass",

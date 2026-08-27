@@ -121,7 +121,7 @@ def test_naming_only_the_site_resolves_a_real_configuration(shipped):
     assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8  # Sloan r'
 
 def test_named_entries_override_the_defaults(shipped):
-    fragment = shipped.resolve("lulin", telescope="SLT", camera="SLT_default", optic_filter="Sloan_u")
+    fragment = shipped.resolve("lulin", telescope="SLT", camera="SLT_DU934P", optic_filter="Sloan_u")
 
     assert fragment["instrument"]["telescope"]["primary_mirror_diameter"] == 0.406
     assert fragment["instrument"]["camera"]["pixel_pitch"] == 13.0
@@ -131,15 +131,18 @@ def test_a_site_fills_in_its_sky_and_location(shipped):
     """The location is the site's alone; the sky is the site's until a band knows better.
 
     Resolving with no filter named lands on the first listed, which for Lulin is
-    Sloan r' and carries its own measured mu_dark. The site's 21.5 is what any band
-    without a measurement still inherits — see the u' test below.
+    Sloan r' and carries its own measured mu_dark — the local-only baseline, with
+    zodiacal light split back out (validation/QUESTIONS.md 9/10), not the 20.92
+    that was actually measured. Extinction is the other way round: no band has a
+    trustworthy one, so all of them still inherit the site's 0.17.
     """
     environment = shipped.resolve("lulin")["environment"]
 
     assert environment["location"]["elevation_m"] == 2862.0
-    assert environment["extinction_coeff"] == 0.17
+    assert environment["extinction_coeff"] == 0.17               # site fallback
     assert shipped.profile("lulin").environment.mu_dark == 21.5
-    assert environment["mu_dark"] == 20.92                      # r' measured
+    assert environment["mu_dark"] == 21.26                       # r', local only
+    assert environment["zodiacal_share"] == 0.267                # r'
 
 def test_a_hardware_family_invents_no_location():
     """A profile with no environment block is a hardware family, and resolving it
@@ -185,7 +188,7 @@ def test_unknown_profile_lists_what_there_is(shipped):
 
 @pytest.mark.parametrize("kwargs, expected", [
     ({"telescope": "LOT-1m"}, "LOT, SLT"),
-    ({"camera": "sophia"}, "Sophia, SLT_default"),
+    ({"camera": "sophia"}, "Sophia, SLT_DU934P"),
     ({"optic_filter": "r"}, "Sloan_r, Sloan_u"),
 ])
 def test_unknown_catalogue_entry_lists_what_there_is(shipped, kwargs, expected):
@@ -250,24 +253,30 @@ def test_choosing_a_filter_changes_the_throughput_in_front_of_it(shipped):
 
 
 def test_a_filter_without_a_measurement_leaves_the_site_values_alone(shipped):
-    """Lulin u' has no published curve and no photometry, so it inherits.
+    """Lulin u' has an SLT throughput now, but no mu_dark and no LOT throughput,
+    so those still inherit.
 
-    The point of overriding per field rather than per section: a band can correct
-    its sky without also having to claim an extinction coefficient nobody measured.
+    The point of overriding per field rather than per section: a band can carry a
+    telescope-scoped throughput without also claiming a sky brightness nobody
+    measured for it, or a throughput for a telescope it was never measured on.
     """
     site = shipped.profile("lulin").environment
 
-    fragment = shipped.resolve("lulin", optic_filter="Sloan_u")
+    fragment = shipped.resolve("lulin", optic_filter="Sloan_u")  # LOT is the default
     assert fragment["environment"]["mu_dark"] == site.mu_dark
+    assert fragment["environment"]["extinction_coeff"] == site.extinction_coeff
     assert fragment["instrument"]["telescope"]["optical_throughput"] == (
         shipped.profile("lulin").telescopes["LOT"].telescope.optical_throughput)
 
 
-def test_every_band_keeps_the_site_extinction(shipped):
-    """Extinction is band-dependent too, but Lulin's is not yet measured well enough.
+def test_every_lulin_band_still_inherits_the_site_extinction(shipped):
+    """Extinction is band-dependent, and Lulin's is still not measured well enough.
 
-    The field exists on BandSky and is deliberately unset, so the site value stands
-    until frames spanning airmass on one photometric night can pin it down.
+    The 2024-04-14 SLT night swept airmass 1.81-3.72 and still could not deliver
+    it: the sky faded 0.1-0.4 mag between the halves of the night at matched
+    airmass, degenerate with the airmass term because the target was setting.
+    See validation/slt.py WHY_NO_EXTINCTION. The field exists on BandSky and is
+    deliberately unset, so the site value stands.
     """
     site = shipped.profile("lulin").environment
     for band in shipped.profile("lulin").filters:

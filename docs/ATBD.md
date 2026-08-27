@@ -200,7 +200,8 @@ This profile defines the physical environment, geometric constraints, and atmosp
 | `location` | $Lat, Lon, Elev$ | deg, m | Strict geographic bounds for observer (Latitude: $\pm 90^\circ$, Longitude: $\pm 180^\circ$). |
 | `observing_time_utc` | $t_{\text{obs}}$ | ISO 8601 | Timezone-aware observation timestamp. |
 | `auto_calc_background` | - | boolean | Selects the source of $\mu_{\text{sky}}$ (§4.1.1): `true` layers the real-time lunar contribution on top of `mu_dark`; `false` uses `mu_dark` as-is. `mu_dark` is required either way — this flag never derives it. |
-| `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky. Used directly, or as the baseline for `auto_calc_background`. |
+| `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky. Used directly, or as the baseline for `auto_calc_background`. Where `zodiacal_share` accompanies it, this is the *local* component only — airglow and light pollution — with zodiacal light and scattered starlight split back out; where it does not, this is the whole moonless sky, undecomposed. |
+| `zodiacal_share` | - | dimensionless, optional | Fraction of the *original, undecomposed* moonless-sky measurement `mu_dark` was split from that was zodiacal light and scattered starlight, at this site's own reference sightline. `None` (the default, and the value for every site without this measurement) means not modelled: `mu_dark` is the whole sky and §4.1.1's $Flux_{\text{zodi}}$ term is zero. |
 | `extinction_coeff` | $k_{\text{ext}}$ | mag/airmass | Atmospheric attenuation per unit airmass. |
 | `fwhm_components` | $FWHM_{\text{comps}}$ | arcsec | Spatial spreading errors (Seeing, Diffraction, Optical, Tracking). |
 
@@ -229,13 +230,15 @@ The airmass ($X$) is approximated using the secant of the zenith angle ($z$), de
 
 $$X \approx \sec(z) = \frac{1}{\cos(z)}$$
 
-The total sky surface brightness ($\mu_{\text{sky}}$) depends on `auto_calc_background`. When enabled, it accounts for both the intrinsic dark sky flux and the real-time contribution from the moon:
+The total sky surface brightness ($\mu_{\text{sky}}$) depends on `auto_calc_background`. When enabled, it accounts for the local dark-sky flux, the real-time contribution from the moon, and — where `zodiacal_share` is supplied — a pointing-dependent zodiacal-light term:
 
-$$\mu_{\text{sky}} = -2.5 \log_{10}(Flux_{\text{dark}} + Flux_{\text{moon}})$$
+$$\mu_{\text{sky}} = -2.5 \log_{10}(Flux_{\text{dark}} + Flux_{\text{zodi}} + Flux_{\text{moon}})$$
 
 (Note: $Flux_{\text{moon}}$ calculation is deferred to the Krisciunas and Schaefer model.)
 
-When disabled, no lunar geometry is evaluated and $\mu_{\text{sky}} = \mu_{\text{dark}}$ directly. $\mu_{\text{dark}}$ is a required input in both cases — moonless-sky brightness (light pollution, airglow, etc.) cannot be derived from time and location alone, so this flag only ever adds the lunar term on top of it, never substitutes for it.
+$Flux_{\text{zodi}}$ is zero unless `zodiacal_share` is set. Where it is, `zodiacal_share` gives the fraction of the original, undecomposed measurement that was zodiacal light at the site's reference sightline; inverting it against $Flux_{\text{dark}}$ (now the local-only baseline) recovers the zodiacal flux there, and a latitude-dependent shape table (`castor.moon.ZODIACAL_LATITUDE_SHAPE`, derived from ESO SkyCalc — see `validation/QUESTIONS.md` 9 and 10) scales it to the target's actual ecliptic latitude, computed from `ra`/`dec` alone. This is a single averaged shape across bands and one solar elongation only; both are documented simplifications, not zero dependences.
+
+When `auto_calc_background` is disabled, no lunar or zodiacal geometry is evaluated and $\mu_{\text{sky}} = \mu_{\text{dark}}$ directly. $\mu_{\text{dark}}$ is a required input in both cases — moonless-sky brightness (light pollution, airglow, etc.) cannot be derived from time and location alone, so this flag only ever adds terms on top of it, never substitutes for it.
 
 **4.1.2 Spatial Resolution**
 The total spatial spreading, represented by the Full Width at Half Maximum ($FWHM_{\text{tot}}$), combines contributions from atmospheric seeing, diffraction, optical aberrations, and tracking errors:

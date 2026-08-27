@@ -21,6 +21,7 @@ pytest validation   # this suite, on purpose
 | `lco_etc.py` | Las Cumbres Observatory's published calculator, transcribed |
 | `eso_etc.py` | ESO's FORS2 ETC — captured reference results, plus a live client |
 | `lulin.py` | LOT/SOPHIA measured against real frames and Lulin's own documents |
+| `slt.py` | SLT measured against the 2024-04-14 airmass sweep, and why its extinction is unusable |
 | `lulin_prototype.py` | The two Perl calculators CASTOR was refactored from, 2005 and 2011 |
 | `provenance.py` | Where every number in presets.json came from, or that it came from nowhere |
 | `skycalc.py` | Loading and rebinning ESO SkyCalc radiance exports |
@@ -28,6 +29,7 @@ pytest validation   # this suite, on purpose
 | `test_eso.py` | The top-hat bandpass against a full spectral integration |
 | `test_sky_model.py` | How the Krisciunas & Schaefer moon term behaves per band |
 | `test_lulin.py` | Throughput, sky and detector against 123 calibrated frames |
+| `test_slt.py` | SLT's throughput against that night's fit, and that its extinction stayed out |
 | `test_lulin_prototype.py` | Which of the ancestors' numbers survive, and which are placeholders |
 | `test_provenance.py` | Fails on any preset value the provenance table does not account for |
 
@@ -56,10 +58,27 @@ R=20000, and is the right reference for bandpass shape and for what the sky is
 made of. Neither is the right reference for absolute agreement on a given night.
 
 **Lulin** is the only reference here made of photons rather than models, and the
-only one that can judge the profile the calculator opens on. 123 calibrated
-LOT/SOPHIA frames over 15 nights, reduced against Pan-STARRS DR2. The frames
-stay out of the repository — it is public — and `lulin.py` carries the reduced
-result so the tests run without them. Its docstring has the method.
+only one that can judge the profile the calculator opens on. Two separate
+reductions, and the split between them is not administrative — they answer
+different questions because they cover different things:
+
+`lulin.py` is 123 calibrated LOT/SOPHIA frames over 18 nights against
+Pan-STARRS DR2. Deep, but no single night in it spans more than 0.19 in
+airmass, so it can measure throughput and sky and *cannot* measure extinction.
+
+`slt.py` is 241 SLT frames from one night, 2024-04-14, sweeping airmass 1.81 to
+3.72 in five bands — the observation `lulin.py`'s own open question asked for.
+It gives SLT its first photometry ever, and it does **not** close extinction:
+the sweep was real but the night was not photometric through it, and `slt.py`'s
+`WHY_NO_EXTINCTION` shows how that was established from matched-airmass pairs
+alone. Its reference catalogue is SkyMapper DR4 rather than Pan-STARRS, because
+the field is at declination -32.8 and PS1 does not reach it; no colour-term
+transform between the two systems has been applied, which is that reduction's
+other large caveat.
+
+Neither set of frames is in the repository — it is public — and both modules
+carry the reduced result so the tests run without them. Their docstrings have
+the methods.
 
 ## Data
 
@@ -144,15 +163,69 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **presets.json was invented, and now says which parts still are.** Nothing in
   it had a source when it was written, and every value a check reached turned
   out wrong — so the prior for anything unaccounted for is that it was made up
-  too. `provenance.py` records an origin for all 100 values and a test fails if
+  too. `provenance.py` records an origin for all 118 values and a test fails if
   the file holds one the table does not, or a different number than the one
-  recorded. Lulin is now 37 sourced against 8 guesses; VLT — not the default,
+  recorded. Lulin is now 57 sourced against 6 guesses; VLT — not the default,
   and not what anyone here observes with — is 8 against 12, up from 3 once its
   site stopped being left unset. `other` (a personal amateur rig, nominally at
   Hehuan Mountain's Yuanfeng dark-sky viewpoint) is new and starts at 28 sourced
   against 7 — every telescope's collecting geometry and every camera's read
   noise and full well are real, only the optical throughputs and one borrowed
   dark current are placeholders. See `provenance.summary()`.
+
+- **SLT went from a completely unmeasured guess to real photometry — and the
+  same night failed to measure extinction, for a reason worth keeping.** SLT,
+  2024-04-14, SN2024ggi: 241 frames sweeping airmass 1.81-3.72, the first
+  LOT/SLT data ever to have a real single-night sweep. It closed QUESTIONS.md 5,
+  giving SLT per-band throughput of 0.10-0.47 and replacing a guessed 0.804 that
+  had no reason to beat LOT's own measured 0.27-0.48 and didn't. It did **not**
+  close question 4: matched-airmass pairs show the sky faded 0.1-0.4 mag between
+  the halves of the night, and since the target was setting, that fade is
+  degenerate with the airmass term and inflates every k. The band that faded
+  most is the band inflated most, which is what identifies it as weather. The
+  *ordering* survives — extinction falls towards the red on every cut — and no
+  absolute value does, so presets.json keeps the site-wide 0.17 and `test_slt.py`
+  asserts the per-band values stay out. Calibrated against SkyMapper DR4, not
+  Pan-STARRS DR2 — this field's declination (-32.8°) is outside PS1's
+  footprint — so it carries an uncorrected systematic on top of the fit error
+  from the two systems' natural photometric bands not being identical.
+  Discovered along the way: presets.json's per-filter telescope override had
+  no telescope of its own — selecting SLT with a filter LOT had measured
+  silently applied LOT's number. Fixed by keying the override by telescope id;
+  see `castorCLI/presets.py`'s `FilterEntry.telescope`.
+
+- **SLT has had three cameras, and one of its own header fields lies about
+  which.** The observatory's raw nightly archive (not `2024ggi`'s pre-reduced
+  set) spans Andor DZ936 (2021), Apogee Alta U9000 (2022 on), then the current
+  DU934P-BEX2-DD. Some 2022 headers name the camera "U42" — a real, different
+  Apogee model, 2048x2048 at 13.5um — but the frames themselves are 3056x3056
+  at 12um, U9000's geometry exactly. The name is stale, not the hardware; only
+  the pixel geometry, read straight from the detector, can be trusted. Both
+  retired cameras are now in `presets.json` (`SLT_DZ936`, `SLT_U9000`) so
+  frames from those eras can still be reduced, sourced from Andor's own iKon
+  brochure and a U9000 datasheet Lulin hosts itself.
+
+- **SOPHIA's dark current at -80°C is now bounded by a real dark frame, not
+  guessed.** 20 real -80°C, 300s frames (QUESTIONS.md 6) — no bias frame to
+  subtract, so measured through the frame-to-frame variance instead of the
+  mean level. The variance came in *below* read-noise-squared: dark current is
+  too small for this method to detect, an upper limit rather than a
+  measurement. The guessed 0.01 e-/s/pix is replaced with 0.001, the
+  datasheet's -90°C figure scaled to -80°C by the same halving-interval method
+  used for the ASI2600MC — consistent with, not contradicted by, the
+  non-detection.
+
+- **`mu_dark` stopped meaning "the whole sky" for Lulin's g'/r'/i'.** Zodiacal
+  light and scattered starlight — 27%, 27% and 14% of what those three bands'
+  photometry actually measured — have been split back out, leaving `mu_dark` as
+  airglow and light pollution only and letting the engine add the zodiacal part
+  back in sized to wherever the target actually points, rather than baking in
+  the one sightline the frames happened to look down. `zodiacal_share` records
+  what was split out; `castor.moon.ZODIACAL_LATITUDE_SHAPE` derives the pointing
+  dependence from ESO SkyCalc, and independently reproduces the plane-to-pole
+  swing `skycalc.AT_LULIN` already published (0.174 / 0.193 / 0.101 mag) to the
+  third decimal. Every other profile is unaffected — this needs a measurement
+  nobody else has. See `QUESTIONS.md` 9 and 10.
 
 ## Open questions
 
