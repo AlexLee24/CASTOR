@@ -141,7 +141,7 @@ sequenceDiagram
     participant Engine as castor (calculator.py /<br/>batch_calculator.py)
 
     User->>UI: Edits a field
-    UI->>UI: Debounce; cancel the in-flight request
+    UI->>UI: Debounce, cancel the in-flight request
     UI->>UI: Walk the form into a request payload
     UI->>Host: POST /api/exposure_time_calculator
     Host->>Host: ObservationRequest.model_validate()
