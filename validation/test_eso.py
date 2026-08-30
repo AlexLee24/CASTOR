@@ -28,6 +28,12 @@ EFFECTIVE_AREA_M2 = np.pi / 4.0 * (8.0 ** 2 - 1.088 ** 2)
 OPTICS_AND_DETECTOR = 0.771 * 0.781          # optical_throughput * quantum_efficiency
 PIXEL_SCALE = 206264.80624709636 * 15e-6 / 24.75
 
+#: The FWHM CASTOR is given for these cases, in arcsec: 0.8" seeing (ESO's
+#: turbulence category 50) in quadrature with the preset's 0.2" diffraction,
+#: 0.1" optical and 0.1" tracking terms. ESO does not take a FWHM, it derives
+#: one — see `_eso_image_quality`.
+PRESET_FWHM = np.sqrt(0.8 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2)
+
 
 @pytest.fixture(scope="module")
 def sky():
@@ -247,6 +253,15 @@ def _eso_image_quality(case):
     return 2 * np.sqrt(2 * np.log(2)) * np.sqrt(sigma_squared)
 
 
+def _eso_aperture_factor(case):
+    """ESO's aperture radius in units of its own image quality — their k_ap.
+
+    Not a number they publish, but the one their aperture and enclosed energy
+    imply, which is what CASTOR's `aperture_factor` has to be compared against.
+    """
+    return np.sqrt(case["omega"] / np.pi) / _eso_image_quality(case)
+
+
 def _snr(source_total, sky_per_pixel, npix, enclosed, time=eso_etc.EXPOSURE_TIME):
     signal = source_total * enclosed * time
     return signal / np.sqrt(
@@ -267,26 +282,121 @@ def test_the_two_engines_are_the_same_algebra():
     assert ours == pytest.approx(case["snr"], rel=1e-3)
 
 
-def test_the_aperture_convention_is_the_largest_disagreement():
-    """CASTOR's default aperture is far wider than ESO's, and pays for it in sky.
+def test_the_aperture_convention_alone_is_worth_a_few_percent():
+    """CASTOR's aperture rule against ESO's, with the image quality held equal.
 
-    `aperture_factor` 1.5 means a radius of 1.5 FWHM, enclosing 99.8%. ESO's
-    aperture sits at about 1.03 FWHM for 94.7%, close to where a background-
-    limited measurement actually peaks. Collecting the last few percent of the
-    star costs three times the sky, and neither choice is wrong — but the
-    difference dwarfs every other one in this file, so any comparison that does
-    not match apertures first is measuring this and nothing else.
+    ESO derives image quality from seeing, wavelength and airmass; CASTOR takes
+    a FWHM as given, and for this preset the two are not the same number. Run
+    CASTOR's aperture over its own assumed FWHM and the result measures both
+    differences at once — so this test runs it over ESO's implied FWHM instead,
+    and moves nothing but `aperture_factor`. The PSF difference has its own test
+    below.
+
+    What is left is the convention alone, and it is small: 2.5% of the SNR at
+    the shipped 0.85, 4.6% at the superseded 1.5. The direction is the part
+    worth having on the record. At 0.85 CASTOR's aperture is *narrower* than
+    ESO's — 0.85 against 1.03 FWHM, holding 86.5% of the star against 94.7% —
+    where 1.5 was twice ESO's area, and three times the area 0.85 uses. Both
+    fall short of ESO's SNR by comparable amounts, but for opposite reasons:
+    0.85 by leaving starlight outside the aperture, 1.5 by letting sky into it.
     """
     case = eso_etc.CAPTURED[("v_HIGH+114", 20, 1.0, 0)]
-    fwhm = np.sqrt(0.8 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2)
+    fwhm = _eso_image_quality(case)
+    source = case["target"] / eso_etc.EXPOSURE_TIME / case["encircled"]
+    sky = case["sky_cpix"] / eso_etc.EXPOSURE_TIME
+
+    npix, enclosed = physics.calculate_aperture_geometry(0.85, fwhm, PIXEL_SCALE)
+    assert npix < case["npix"]                                  # narrower, not wider
+    assert enclosed == pytest.approx(0.865, abs=0.002)          # against ESO's 94.7%
+    ours = _snr(source, sky, npix, enclosed)
+    assert ours / case["snr"] - 1 == pytest.approx(-0.025, abs=0.005)
+
     npix, enclosed = physics.calculate_aperture_geometry(1.5, fwhm, PIXEL_SCALE)
+    assert npix / case["npix"] > 2.0                            # wider, and
+    assert enclosed > 0.99                                      # nearly all of it
+    was = _snr(source, sky, npix, enclosed)
+    assert was / case["snr"] - 1 == pytest.approx(-0.046, abs=0.005)
 
-    assert npix / case["npix"] > 3.0
-    assert enclosed > 0.99
 
-    ours = _snr(case["target"] / eso_etc.EXPOSURE_TIME / case["encircled"],
-                case["sky_cpix"] / eso_etc.EXPOSURE_TIME, npix, enclosed)
-    assert -0.15 < ours / case["snr"] - 1 < -0.08
+def test_not_matching_image_quality_first_measures_the_psf_as_well():
+    """Why the test above recovers ESO's FWHM, kept as an assertion.
+
+    Compare from CASTOR's assumed 0.8367" against the 0.6677" ESO's own numbers
+    imply and the gap more than doubles, to 5.7%. The extra is the PSF: hold the
+    aperture at ESO's 1.03 and moving only the FWHM costs 4.2% by itself, which
+    is more than the aperture convention is worth at the shipped default. Two
+    differences of similar size, and reading either off an unmatched comparison
+    gets both.
+    """
+    case = eso_etc.CAPTURED[("v_HIGH+114", 20, 1.0, 0)]
+    source = case["target"] / eso_etc.EXPOSURE_TIME / case["encircled"]
+    sky = case["sky_cpix"] / eso_etc.EXPOSURE_TIME
+
+    def shortfall(aperture_factor, fwhm):
+        return _snr(source, sky, *physics.calculate_aperture_geometry(
+            aperture_factor, fwhm, PIXEL_SCALE)) / case["snr"] - 1
+
+    matched = _eso_image_quality(case)
+    assert PRESET_FWHM == pytest.approx(0.8367, abs=0.001)
+    assert matched == pytest.approx(0.6677, abs=0.001)
+
+    assert shortfall(0.85, PRESET_FWHM) == pytest.approx(-0.057, abs=0.005)   # both
+    assert shortfall(0.85, matched) == pytest.approx(-0.025, abs=0.005)       # aperture
+    assert shortfall(_eso_aperture_factor(case), PRESET_FWHM) == pytest.approx(
+        -0.042, abs=0.005)                                                    # PSF
+
+
+def test_our_aperture_and_esos_are_two_points_on_one_curve():
+    """0.85 and 1.03 are two choices on one trade-off, not two conventions.
+
+    For a Gaussian PSF the SNR-optimal radius is not a constant: it sits near
+    0.673 FWHM when the sky dominates and moves outward as the source does
+    (ATBD 5.2). ESO's captures span both ends without changing their own rule —
+    1.03 FWHM in the dark and under a full moon alike — so the pair says where
+    each choice falls on the curve rather than which curve each is on.
+
+    Dark, the star outweighs the sky in the aperture 5:1, the optimum is
+    1.07 FWHM, and ESO's 1.03 is essentially on it while 0.85 gives up 2.5%.
+    Under the moon the sky outweighs the star 13:1, the optimum falls to 0.70,
+    and the ordering reverses: 0.85 now beats 1.03 by 9%. Neither is the wrong
+    convention, and ESO's is the better one for the case they happened to
+    publish. 0.85 is the choice that stays within 3% of the best available in
+    both, which is what a default has to do when it does not know which case it
+    will be asked about. 1.5 does not: it gives up a third of a moonlit
+    measurement.
+    """
+    dark = eso_etc.CAPTURED[("v_HIGH+114", 20, 1.0, 0)]
+    moonlit = eso_etc.CAPTURED[("v_HIGH+114", 20, 1.0, 1)]
+
+    # One aperture rule across both, so the two cases differ only in regime.
+    k_eso = _eso_aperture_factor(dark)
+    assert k_eso == pytest.approx(_eso_aperture_factor(moonlit), rel=1e-6)
+    assert k_eso == pytest.approx(1.03, abs=0.01)
+
+    factors = np.linspace(0.3, 3.0, 271)
+
+    def curve(case):
+        """(k_ap at the optimum, SNR at a given k_ap as a fraction of it)."""
+        fwhm = _eso_image_quality(case)
+        source = case["target"] / eso_etc.EXPOSURE_TIME / case["encircled"]
+        sky = case["sky_cpix"] / eso_etc.EXPOSURE_TIME
+        def at(k):
+            return _snr(source, sky, *physics.calculate_aperture_geometry(
+                k, fwhm, PIXEL_SCALE))
+
+        sampled = np.array([at(k) for k in factors])
+        return factors[sampled.argmax()], lambda k: at(k) / sampled.max()
+
+    optimum, fraction = curve(dark)
+    assert optimum > 1.0                                    # source-dominated: wide
+    assert fraction(k_eso) > 0.99                           # and ESO sits on it
+    assert fraction(0.85) == pytest.approx(0.975, abs=0.005)
+
+    optimum, fraction = curve(moonlit)
+    assert optimum < 0.75                                   # sky-dominated: collapses
+    assert fraction(0.85) == pytest.approx(0.971, abs=0.005)
+    assert fraction(k_eso) == pytest.approx(0.888, abs=0.005)   # now the wide one pays
+    assert fraction(1.5) < 0.70                                 # and 1.5 pays a third
 
 
 def test_our_image_quality_ignores_wavelength_and_airmass():
@@ -300,8 +410,7 @@ def test_our_image_quality_ignores_wavelength_and_airmass():
     low = _eso_image_quality(eso_etc.CAPTURED[("v_HIGH+114", 20, 2.0, 0)])
     assert low > zenith * 1.3
 
-    ours = np.sqrt(0.8 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2)
-    assert ours > zenith * 1.2      # and we start wider than they end up at zenith
+    assert PRESET_FWHM > zenith * 1.2   # and we start wider than they end up at zenith
 
 
 def test_all_three_agree_on_how_the_target_dims_with_airmass():

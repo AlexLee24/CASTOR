@@ -117,8 +117,17 @@ Each of these is asserted by a test, so it either stays true or announces itself
 - **LCO's magnitudes are referred to the zenith,** ours to above the atmosphere.
   The two conventions differ by a constant, so relative to the zenith all three
   calculators agree on airmass dependence to 0.02%.
-- **The aperture convention is the largest remaining difference against ESO.**
-  Matched apertures agree to under a percent; unmatched they differ by 11%.
+- **CASTOR's aperture and ESO's are two points on one trade-off curve.** Give
+  CASTOR ESO's aperture and the two agree to under a percent, so nothing here is
+  formula. Hold image quality equal and the convention alone is worth 2.5% at the
+  shipped `aperture_factor` of 0.85, where CASTOR's aperture is *narrower* than
+  ESO's 1.03 FWHM, not wider. Which is better depends on the target: ESO's 1.03 is
+  all but optimal on their dark-sky case and 0.85 gives up 2.5%, while under a full
+  moon the optimum falls to 0.70 FWHM and 0.85 beats 1.03 by 9%. 0.85 is the point
+  that stays within 3% of the best available at both ends; the superseded 1.5 gives
+  up a third of a moonlit measurement. The old 11% figure quoted here measured this
+  *and* the image-quality difference together — matched on image quality, the PSF is
+  worth 4.2% by itself, more than the aperture is.
 - **The VLT/FORS2 preset's throughput is a fudge that works in one band.**
   `v_HIGH+114` is right to 8% only because a 0.51 'transmission' absorbs an
   optical throughput twice too optimistic; `g_HIGH+115` over-predicts by 148%.
