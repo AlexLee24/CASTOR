@@ -203,7 +203,9 @@ def calculate_aperture_geometry(
     Parameters
     ----------
     aperture_factor : Numeric
-        Photometric aperture multiplier factor (k_ap, default 1.5) [dimensionless].
+        Photometric aperture multiplier factor (k_ap) [dimensionless]. The schema
+        gives it no default; both shipped clients send 0.85, for the reason in
+        ATBD 5.2.
     total_fwhm : Numeric
         Total combined FWHM (FWHM_tot) [arcsec].
     pixel_scale : Numeric

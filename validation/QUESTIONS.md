@@ -570,9 +570,14 @@ tables are placeholders.
 **PinPoint's `ZMAG` in the frame headers cannot be used as a zero point.** It is
 tied to USNO-B1.0 and sits 0.73 mag out in g', 0.21 in r' and 0.05 in i'.
 
-**CASTOR and ESO disagree by 11% on aperture, and it is a convention.** Matched
-apertures agree to under a percent. This is the largest remaining difference
-against ESO and it is not a defect in either.
+**CASTOR and ESO pick different points on one aperture trade-off curve, worth
+2.5%.** Matched apertures agree to under a percent, so the difference is the
+choice of `aperture_factor` and nothing else. The 11% this entry used to claim
+was measured without matching image quality first and so counted the PSF
+difference as well; matched, the aperture is worth 2.5% and the PSF 4.2%.
+Neither aperture is a defect: ESO's 1.03 FWHM is near-optimal for the
+source-dominated case they publish, 0.85 wins by 9% under a full moon, and 0.85
+is the one that stays within 3% of the best available at both ends.
 
 **SOPHIA's datasheet has two columns and only one of them is ours.** The -132 is
 the 13.5 µm sensor; the -152, ours, is the 15 µm one. An earlier pass through
