@@ -324,25 +324,48 @@ Note that A and B both describe light originating outside the atmosphere — a g
 The final stage yields the definitive observational metrics required for telescope planning and scheduling.
 
 **4.3.1 Signal-to-Noise Ratio (SNR)**
+
+Both SNR expressions below use a single background pixel count,
+
+$$N_{\text{bkg}} = N_{\text{pix}} + N_{\text{est}}$$
+
+where $N_{\text{est}}$ is the cost of *estimating* the sky, defined in 4.3.2. Setting $N_{\text{est}} = 0$ recovers the textbook CCD equation, which is what CASTOR computed until this term was added, and what it still computes when `options.sky_annulus` is omitted.
+
 The Single Exposure SNR ($\text{SNR}_{\text{single}}$) evaluates the signal quality within a single integration timeframe ($t_{\text{single}}$):
 
-$$\text{SNR}_{\text{single}} = \frac{Rate_{\text{src}} \cdot t_{\text{single}}}{\sqrt{Rate_{\text{src}} \cdot t_{\text{single}} + N_{\text{pix}} \cdot (Rate_{\text{sky}} \cdot t_{\text{single}} + R_{\text{dark}} \cdot t_{\text{single}} + \text{RON}^2)}}$$
+$$\text{SNR}_{\text{single}} = \frac{Rate_{\text{src}} \cdot t_{\text{single}}}{\sqrt{Rate_{\text{src}} \cdot t_{\text{single}} + N_{\text{bkg}} \cdot (Rate_{\text{sky}} \cdot t_{\text{single}} + R_{\text{dark}} \cdot t_{\text{single}} + \text{RON}^2)}}$$
 
 The Total SNR ($\text{SNR}_{\text{total}}$) aggregates the signal across the total integration time ($t_{\text{total}}$) and accounts for the accumulation of read noise across multiple exposures ($N_{\text{exp}}$):
 
-$$\text{SNR}_{\text{total}} = \frac{Rate_{\text{src}} \cdot t_{\text{total}}}{\sqrt{Rate_{\text{src}} \cdot t_{\text{total}} + N_{\text{pix}} \cdot Rate_{\text{sky}} \cdot t_{\text{total}} + N_{\text{exp}} \cdot N_{\text{pix}} \cdot (R_{\text{dark}} \cdot t_{\text{single}} + \text{RON}^2)}}$$
+$$\text{SNR}_{\text{total}} = \frac{Rate_{\text{src}} \cdot t_{\text{total}}}{\sqrt{Rate_{\text{src}} \cdot t_{\text{total}} + N_{\text{bkg}} \cdot Rate_{\text{sky}} \cdot t_{\text{total}} + N_{\text{exp}} \cdot N_{\text{bkg}} \cdot (R_{\text{dark}} \cdot t_{\text{single}} + \text{RON}^2)}}$$
 
-**4.3.2 Required Exposures**
+$N_{\text{est}}$ appears in both places because each frame is sky-subtracted with its own estimate: stacking averages those estimates down at exactly the rate it averages down everything else.
+
+**4.3.2 Cost of the Sky Estimate ($N_{\text{est}}$)**
+
+The sky removed from the aperture is not the true sky but an estimate of it, formed in an annulus of inner and outer radii $k_{\text{in}} \cdot \text{FWHM}_{\text{tot}}$ and $k_{\text{out}} \cdot \text{FWHM}_{\text{tot}}$:
+
+$$N_{\text{ann}} = \frac{\pi \cdot \left( (k_{\text{out}} \cdot \text{FWHM}_{\text{tot}})^2 - (k_{\text{in}} \cdot \text{FWHM}_{\text{tot}})^2 \right)}{S_{\text{pixel}}^2}$$
+
+$$N_{\text{est}} = c \cdot \frac{N_{\text{pix}}^2}{N_{\text{ann}}}, \qquad c = \begin{cases} \pi/2 & \text{median} \\ 1 & \text{mean} \end{cases}$$
+
+The square arises because the estimate's error is not independent from pixel to pixel: one number is subtracted from all $N_{\text{pix}}$ pixels at once, so it enters the aperture sum $N_{\text{pix}}$ times, and its own variance is already $1/N_{\text{ann}}$ of a single pixel's. The constant $c$ is the large-$n$ Gaussian variance of a median relative to that of a mean; pipelines reduce the annulus with a median (usually sigma-clipped) to reject faint neighbours, and pay $\pi/2$ for it.
+
+$N_{\text{est}}$ carries the same per-pixel variance as the aperture, because the annulus measures that same background — which is why it can be added to $N_{\text{pix}}$ rather than entering as a separate term.
+
+Because $N_{\text{est}} \propto N_{\text{pix}}^2$, it is negligible for tight apertures and dominant for wide ones. At $k_{\text{ap}} = 0.85$ with a $3$–$5 \cdot \text{FWHM}$ annulus it adds about 7% to the variance; at $k_{\text{ap}} = 3$ with a $5$–$8 \cdot \text{FWHM}$ annulus it adds about 36%. That second figure is measured, not assumed: see §5.3.
+
+**4.3.3 Required Exposures**
 If the calculation mode demands solving for time based on a desired signal quality, the required number of exposures is derived as:
 
 $$N_{\text{exp}} = \left( \frac{\text{SNR}_{\text{target}}}{\text{SNR}_{\text{single}}} \right)^2$$
 
-**4.3.3 Saturation Limit**
+**4.3.4 Saturation Limit**
 To ensure the detector operates within its linear regime, the saturation time limit ($t_{\text{sat}}$) evaluates how long it takes for a single pixel to reach its Full Well Capacity (FWC) under the combined flux of the target peak, sky, and dark current:
 
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
-**4.3.4 Background-Limited (Optimal) Exposure Time**
+**4.3.5 Background-Limited (Optimal) Exposure Time**
 $t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
@@ -372,6 +395,10 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 * **Linear Regime Operation:** The saturation time limit ($t_{\text{sat}}$) assumes a linear response up to the Full Well Capacity ($\text{FWC}$). Non-linear behaviors or charge transfer inefficiencies near saturation limits are not dynamically modeled.
 
 * **Constant Dark and Readout Noise:** Sensor parameters such as dark current rate ($R_{\text{dark}}$) and readout noise ($\text{RON}$) are treated as constant detector specifications across the entire array, omitting potential spatial variations or thermal fluctuations during long-term observations.
+
+* **Photon Noise Only:** Every noise term modeled here scales with photon or electron counts. Flat-field residual, scintillation and PSF instability do not, and they set a floor the model cannot reach. Measured against 314 stars on fifteen LOT/SOPHIA $r'$ frames (2025-11-06), predictions track the observed scatter to within 3% across four flux bins spanning $2$ to $60\ \text{ke}^-$; above that the observed SNR falls short, reaching a factor of 4.6 for the brightest 20 stars, where a systematic of order 1% dominates. Treat a predicted SNR above roughly 100 as an upper bound.
+
+* **Cost of the Sky Estimate:** That same measurement is where $N_{\text{est}}$ (§4.3.2) comes from. Without it the engine ran 13% optimistic at $k_{\text{ap}} = 3$ (observed/predicted 0.868); with it, 1.011. The correction was not fitted — its size follows from the aperture and annulus geometry alone, and the two agree to better than a percent.
 
 ### 5.4 Design Rationale and Model Simplification
 

@@ -226,6 +226,11 @@
 }
 .castor-etc .etc-input-wrap:focus-within { border-color: var(--etc-accent); }
 
+/* Two numbers reading as one range: an en dash between them, and equal halves so
+   the pair does not look like one field that happens to have grown a neighbour. */
+.castor-etc .etc-input-pair input { flex: 1 1 0; text-align: center; }
+.castor-etc .etc-input-pair input + input { border-left: var(--etc-border-width) solid var(--etc-border-color); padding-left: 10px; }
+
 .castor-etc .etc-input-wrap input {
     flex: 1 1 auto;
     min-width: 0;

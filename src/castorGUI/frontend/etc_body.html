@@ -459,6 +459,27 @@
                                 <span class="etc-unit">s</span>
                             </span>
                         </label>
+                        <!-- The sky taken out of the aperture is measured in this annulus, and
+                             one number is subtracted from every aperture pixel at once, so the
+                             measurement's own error is spread over all of them. Leaving these
+                             blank tells the engine the sky is known exactly; nothing is, and on
+                             a wide aperture the difference reaches 13%. See ATBD 4.3.2. -->
+                        <label class="etc-field">
+                            <span class="etc-field-label">Sky Annulus (k_in – k_out)</span>
+                            <span class="etc-input-wrap etc-input-pair">
+                                <input type="number" name="options.sky_annulus.inner_factor" value="3" step="any" min="0.001" required
+                                       title="Inner radius of the sky annulus, as a multiple of the total FWHM. Keep it clear of the PSF wings.">
+                                <input type="number" name="options.sky_annulus.outer_factor" value="5" step="any" min="0.001" required
+                                       title="Outer radius of the sky annulus, as a multiple of the total FWHM. A wider annulus measures the sky better and costs less SNR.">
+                            </span>
+                        </label>
+                        <label class="etc-field">
+                            <span class="etc-field-label">Sky Estimator</span>
+                            <select name="options.sky_annulus.estimator">
+                                <option value="median">Median (rejects neighbours, costs π/2)</option>
+                                <option value="mean">Mean</option>
+                            </select>
+                        </label>
 
                         <hr class="etc-divider">
 
@@ -612,6 +633,10 @@
                     <div class="etc-metric">
                         <div class="etc-metric-label">Aperture Pixels</div>
                         <div class="etc-metric-value"><span id="res-num-pixels">&mdash;</span><span class="etc-unit">px</span></div>
+                    </div>
+                    <div class="etc-metric">
+                        <div class="etc-metric-label" title="Pixel-equivalent noise cost of estimating the sky in the annulus. Read it against Aperture Pixels: that ratio is how much the sky estimate adds to the background variance.">Sky Estimate Cost</div>
+                        <div class="etc-metric-value"><span id="res-num-pixels-sky">&mdash;</span><span class="etc-unit">px</span></div>
                     </div>
                 </div>
 

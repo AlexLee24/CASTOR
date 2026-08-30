@@ -78,6 +78,17 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)
 
+    # The sky subtracted from the aperture is an estimate made in the annulus, and
+    # its error lands on every aperture pixel at once. Without an annulus there is
+    # nothing to estimate from, so the cost is zero and the sky is taken as exact.
+    n_est = 0.0
+    if opt.sky_annulus is not None:
+        n_est = float(physics.calculate_sky_estimate_pixels(
+            n_pix,
+            opt.sky_annulus.inner_factor, opt.sky_annulus.outer_factor,
+            total_fwhm, pixel_scale, opt.sky_annulus.estimator
+        ))
+
     f_lambda_target = _unify_flux(tgt.brightness, inst.optic_filter.central_wavelength)
     
     f_lambda_sky_arr = physics.convert_ab_to_wavelength_flux(mu_sky_arr, inst.optic_filter.central_wavelength)
@@ -109,7 +120,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
 
     single_snr_arr = physics.calculate_single_snr(
         source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
-        n_pix, opt.single_exp_time
+        n_pix, opt.single_exp_time, n_est
     )
 
     # Stays None for solve_snr, where "how many exposures" is an input rather than
@@ -121,7 +132,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             total_exp_time = opt.single_exp_time * n_exp
             total_snr_arr = physics.calculate_total_snr(
                 source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
-                n_pix, opt.single_exp_time, total_exp_time, n_exp
+                n_pix, opt.single_exp_time, total_exp_time, n_exp, n_est
             )
 
         case schema.BatchSolveForTime(target_snr=t_snr):
@@ -132,7 +143,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             
             total_snr_arr = physics.calculate_total_snr(
                 source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
-                n_pix, opt.single_exp_time, total_exp_time_arr, req_exp_int_arr
+                n_pix, opt.single_exp_time, total_exp_time_arr, req_exp_int_arr, n_est
             )
             
         case _:

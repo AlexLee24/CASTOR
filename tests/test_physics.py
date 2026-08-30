@@ -10,6 +10,7 @@ from castor.physics import (
     calculate_point_source_rate,
     calculate_extended_source_rate,
     calculate_sky_background_rate,
+    calculate_sky_estimate_pixels,
     calculate_single_snr,
     calculate_total_snr,
     solve_required_exposures,
@@ -186,6 +187,75 @@ def dummy_stage4_params():
         "readout_noise": 5.0,
         "num_pixels_aperture": 4.0
     }
+
+# ------------------------------------------
+# Cost of the sky estimate (ATBD 4.3.2)
+# ------------------------------------------
+
+def test_sky_estimate_grows_with_the_square_of_the_aperture():
+    """N_est goes as N_pix^2: one sky number is subtracted from every aperture
+    pixel at once, so widening the aperture costs twice over."""
+    small = calculate_sky_estimate_pixels(10.0, 3.0, 5.0, 2.0, 0.5)
+    large = calculate_sky_estimate_pixels(20.0, 3.0, 5.0, 2.0, 0.5)
+    npt.assert_allclose(large / small, 4.0)
+
+def test_a_wider_annulus_costs_less():
+    """More annulus pixels means a better-determined sky, so a smaller penalty."""
+    narrow = calculate_sky_estimate_pixels(10.0, 3.0, 4.0, 2.0, 0.5)
+    wide = calculate_sky_estimate_pixels(10.0, 3.0, 8.0, 2.0, 0.5)
+    assert wide < narrow
+
+def test_a_median_annulus_costs_pi_over_two_more_than_a_mean():
+    """The only difference between the two estimators, and it is not a free choice:
+    the median is what rejects the faint neighbours a mean would swallow."""
+    mean = calculate_sky_estimate_pixels(10.0, 3.0, 5.0, 2.0, 0.5, "mean")
+    median = calculate_sky_estimate_pixels(10.0, 3.0, 5.0, 2.0, 0.5, "median")
+    npt.assert_allclose(median / mean, np.pi / 2.0)
+
+def test_an_unknown_estimator_is_refused():
+    """Silently falling back to one estimator or the other would misstate the noise
+    by pi/2 with nothing in the output to show for it."""
+    with pytest.raises(ValueError):
+        calculate_sky_estimate_pixels(10.0, 3.0, 5.0, 2.0, 0.5, "sigma_clipped_mode")
+
+def test_sky_estimate_matches_the_measured_geometry():
+    """The 2026-08-30 LOT/SOPHIA check: a 3xFWHM aperture with a 5-8xFWHM median
+    annulus adds 36% to the background variance. That number was arrived at twice,
+    from this geometry and from the observed scatter of 314 stars, and they agree.
+    See validation/data/raw/_endtoend_2026-08-30/RESULT.md."""
+    fwhm, scale = 2.44945, 1.0
+    n_pix = np.pi * (3.0 * fwhm) ** 2 / scale ** 2
+    n_est = calculate_sky_estimate_pixels(n_pix, 5.0, 8.0, fwhm, scale)
+    npt.assert_allclose(n_est / n_pix, 0.3625, rtol=1e-3)
+
+def test_the_sky_estimate_is_the_only_thing_that_changed(dummy_stage4_params):
+    """Omitting the annulus must reproduce the textbook CCD equation exactly, so
+    that every result computed before this term existed still holds."""
+    without = calculate_single_snr(**dummy_stage4_params, single_exp_time=60.0)
+    explicit_zero = calculate_single_snr(
+        **dummy_stage4_params, single_exp_time=60.0, num_pixels_sky_estimate=0.0
+    )
+    with_cost = calculate_single_snr(
+        **dummy_stage4_params, single_exp_time=60.0, num_pixels_sky_estimate=2.0
+    )
+    npt.assert_allclose(without, explicit_zero)
+    assert with_cost < without
+
+def test_the_sky_estimate_averages_down_with_stacking(dummy_stage4_params):
+    """Each frame carries its own sky estimate, so N_est must enter per frame --
+    not once for the whole stack, which would make it vanish as frames are added."""
+    kwargs = dict(**dummy_stage4_params, single_exp_time=10.0, total_exp_time=100.0, num_exposures=10)
+    plain = calculate_total_snr(**kwargs)
+    costed = calculate_total_snr(**kwargs, num_pixels_sky_estimate=4.0)
+
+    # N_pix 4 -> 8 is the same doubling as adding N_est = 4, so the two must agree.
+    doubled = dummy_stage4_params.copy()
+    doubled["num_pixels_aperture"] = 8.0
+    npt.assert_allclose(
+        costed,
+        calculate_total_snr(**doubled, single_exp_time=10.0, total_exp_time=100.0, num_exposures=10)
+    )
+    assert costed < plain
 
 def test_zero_exposure(dummy_stage4_params):
     """Zeroed exposure time: no exposure time means no SNR"""
