@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, AwareDatetime, ConfigDict
+from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, AwareDatetime, ConfigDict, model_validator
 from typing import Literal, Union, Annotated
 
 class StrictModel(BaseModel):
@@ -219,6 +219,27 @@ class EnvironmentCondition(StrictModel):
         description="Tracking error FWHM in arcseconds. (ATBD: FWHM_Trk)"
     )
 
+class SkyAnnulus(StrictModel):
+    """How the sky under the target is estimated, and so how noisy that estimate is."""
+    inner_factor: PositiveFloat = Field(
+        ...,
+        description="Annulus inner radius as a multiple of FWHM_tot. (ATBD: k_in)"
+    )
+    outer_factor: PositiveFloat = Field(
+        ...,
+        description="Annulus outer radius as a multiple of FWHM_tot. (ATBD: k_out)"
+    )
+    estimator: Literal["median", "mean"] = Field(
+        "median",
+        description="How the annulus is reduced to one sky value. A median costs pi/2 more variance than a mean, and is what most pipelines use."
+    )
+
+    @model_validator(mode="after")
+    def _outer_encloses_inner(self):
+        if self.outer_factor <= self.inner_factor:
+            raise ValueError("outer_factor must exceed inner_factor; the annulus has no area otherwise")
+        return self
+
 class BaseOptions(StrictModel):
     aperture_factor: PositiveFloat = Field(
         ..., # Deliberately no default value; the frontend must always supply it explicitly (both shipped clients send 0.85 — see ATBD 5.2)
@@ -227,6 +248,14 @@ class BaseOptions(StrictModel):
     single_exp_time: PositiveFloat = Field(
         ..., 
         description="Integration time for an individual sub-exposure frame in seconds. (ATBD: t_single)"
+    )
+    # Optional, unlike aperture_factor, because omitting it has a defined meaning:
+    # a sky known exactly, which is what every CASTOR release before this one
+    # assumed. Both shipped clients now send an annulus. The diagnostics report
+    # N_est either way, so a caller who leaves it out can see that they did.
+    sky_annulus: SkyAnnulus | None = Field(
+        None,
+        description="Annulus the sky is estimated in. Omit to assume the sky is known exactly, which no real reduction achieves."
     )
 
 class SolveForSNR(BaseOptions):
@@ -333,6 +362,10 @@ class PhysicalDiagnostics(StrictModel):
         ..., 
         description="Number of pixels enclosed within the photometric aperture. (ATBD: N_pix) [count]"
     )
+    num_pixels_sky_estimate: float = Field(
+        ..., 
+        description="Pixel-equivalent noise cost of estimating the sky in the annulus; zero when no annulus was given. (ATBD: N_est) [count]"
+    )
 
 class SystemFlags(StrictModel):
     is_saturated: bool = Field(
@@ -412,6 +445,10 @@ class BatchBaseOptions(StrictModel):
     single_exp_time: PositiveFloat = Field(
         ..., 
         description="Integration time for an individual sub-exposure frame in seconds."
+    )
+    sky_annulus: SkyAnnulus | None = Field(
+        None,
+        description="Annulus the sky is estimated in. Omit to assume the sky is known exactly."
     )
 
 class BatchSolveForSNR(BatchBaseOptions):

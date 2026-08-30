@@ -71,6 +71,12 @@ centres, give 0.37 / 0.47 / 0.32 — the same peak at r', and r' agrees to 3%. B
 that total includes an unnamed camera's QE, so the shape may be that detector.
 See question 3.
 
+**Not corroborated by the second analysis, despite appearances.** Wang Tong's
+reduction of this ratio gives about 1.5, close enough to look like independent
+support, but it is the same frames run through an older version of the core;
+feeding her inputs to that version reproduces 1.60, so the gap to 1.81 measures
+our own change of engine, not the sky. Nothing here is a second observation.
+
 **What changes with an answer.** Nothing about the calculator: the measured
 numbers are in `presets.json` and it predicts correctly whichever the cause is.
 This matters to the observatory. If it is coating loss, these numbers are the

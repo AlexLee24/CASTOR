@@ -15,6 +15,7 @@ __all__ = [
     "calculate_pixel_scale",
     "calculate_total_fwhm",
     "calculate_aperture_geometry",
+    "calculate_sky_estimate_pixels",
     "convert_ab_to_wavelength_flux",
     "convert_vega_to_wavelength_flux",
 
@@ -218,6 +219,66 @@ def calculate_aperture_geometry(
     enclosed_flux = 1.0 - (2.0 ** (-4.0 * (aperture_factor**2)))
     
     return num_pixels, enclosed_flux
+
+# Variance of the median of n samples, relative to the variance of their mean,
+# in the large-n Gaussian limit. Pipelines almost always reduce the annulus with
+# a median (or a sigma-clipped one, which behaves much like it) to keep faint
+# neighbours out, and pay this for the privilege.
+MEDIAN_VARIANCE_PENALTY = np.pi / 2.0
+
+def calculate_sky_estimate_pixels(
+    num_pixels_aperture: Numeric,
+    inner_factor: Numeric,
+    outer_factor: Numeric,
+    total_fwhm: Numeric,
+    pixel_scale: Numeric,
+    estimator: str = "median"
+) -> Numeric:
+    """
+    Calculate the pixel-equivalent noise cost of estimating the sky in an annulus.
+
+    Corresponds to ATBD Section 4.3.2:
+    N_ann = pi * ((k_out * FWHM_tot)^2 - (k_in * FWHM_tot)^2) / S_pixel^2
+    N_est = c * N_pix^2 / N_ann,  c = pi/2 for a median, 1 for a mean
+
+    The sky removed from an aperture is not the true sky but an estimate of it,
+    and the estimate's own error is subtracted from every one of the N_pix
+    pixels at once. So it enters the variance N_pix times, on top of the N_pix
+    it already contributes through the annulus average -- hence N_pix squared.
+    The result is returned as a pixel count because the term carries the same
+    per-pixel variance as the aperture itself: a caller adds it to N_pix and
+    changes nothing else.
+
+    Parameters
+    ----------
+    num_pixels_aperture : Numeric
+        Number of pixels in the photometric aperture (N_pix) [count].
+    inner_factor : Numeric
+        Annulus inner radius as a multiple of FWHM_tot (k_in) [dimensionless].
+    outer_factor : Numeric
+        Annulus outer radius as a multiple of FWHM_tot (k_out) [dimensionless].
+    total_fwhm : Numeric
+        Total combined FWHM (FWHM_tot) [arcsec].
+    pixel_scale : Numeric
+        Pixel scale (S_pixel) [arcsec/pix].
+    estimator : str
+        "median" or "mean" -- how the annulus is reduced to one sky value.
+
+    Returns
+    -------
+    Numeric
+        Pixel-equivalent noise cost of the sky estimate (N_est) [count].
+    """
+    if estimator not in ("median", "mean"):
+        raise ValueError(f"Unknown sky estimator: {estimator!r}")
+
+    num_pixels_annulus = (
+        np.pi * ((outer_factor * total_fwhm) ** 2 - (inner_factor * total_fwhm) ** 2)
+    ) / (pixel_scale ** 2)
+
+    penalty = MEDIAN_VARIANCE_PENALTY if estimator == "median" else 1.0
+
+    return penalty * (num_pixels_aperture ** 2) / num_pixels_annulus
 
 def convert_vega_to_wavelength_flux(
     target_mag: Numeric, 
@@ -503,7 +564,8 @@ def calculate_single_snr(
     dark_current_rate: Numeric,
     readout_noise: Numeric,
     num_pixels_aperture: Numeric,
-    single_exp_time: Numeric
+    single_exp_time: Numeric,
+    num_pixels_sky_estimate: Numeric = 0.0
 ) -> Numeric:
     """
     Calculate the Signal-to-Noise Ratio (SNR) for a single exposure frame.
@@ -526,6 +588,10 @@ def calculate_single_snr(
         Number of pixels in the photometric aperture [count].
     single_exp_time : Numeric
         Integration time for the single exposure [s].
+    num_pixels_sky_estimate : Numeric
+        Pixel-equivalent cost of estimating the sky (N_est), from
+        calculate_sky_estimate_pixels. Zero means the sky is taken as known
+        exactly, which no real reduction achieves.
 
     Returns
     -------
@@ -541,8 +607,11 @@ def calculate_single_snr(
     dark_variance = dark_current_rate * single_exp_time
     readout_variance = readout_noise ** 2.0
     
-    # Total Variance = Source + N_pix * (Sky + Dark + RON^2)
-    total_variance = source_variance + num_pixels_aperture * (sky_variance + dark_variance + readout_variance)
+    # Total Variance = Source + (N_pix + N_est) * (Sky + Dark + RON^2).
+    # N_est rides on the same per-pixel variance as the aperture, because what
+    # the annulus measures is that same background.
+    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
+    total_variance = source_variance + background_pixels * (sky_variance + dark_variance + readout_variance)
     
     return signal / np.sqrt(total_variance)
 
@@ -554,7 +623,8 @@ def calculate_total_snr(
     num_pixels_aperture: Numeric,
     single_exp_time: Numeric,
     total_exp_time: Numeric,
-    num_exposures: Numeric
+    num_exposures: Numeric,
+    num_pixels_sky_estimate: Numeric = 0.0
 ) -> Numeric:
     """
     Calculate the Total Signal-to-Noise Ratio (SNR) across multiple exposures.
@@ -570,6 +640,11 @@ def calculate_total_snr(
         Cumulative integration time across all frames [s].
     num_exposures : Numeric
         Total number of exposure frames [count].
+    num_pixels_sky_estimate : Numeric
+        Pixel-equivalent cost of estimating the sky (N_est), from
+        calculate_sky_estimate_pixels. It applies once per frame: each frame is
+        sky-subtracted with its own estimate, so stacking averages the estimates
+        down at the same rate as everything else.
 
     Returns
     -------
@@ -585,8 +660,9 @@ def calculate_total_snr(
     dark_variance_frame = dark_current_rate * single_exp_time
     readout_variance_frame = readout_noise ** 2.0
     
-    total_variance = source_variance + (num_pixels_aperture * sky_variance_total) + \
-                     (num_exposures * num_pixels_aperture * (dark_variance_frame + readout_variance_frame))
+    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
+    total_variance = source_variance + (background_pixels * sky_variance_total) + \
+                     (num_exposures * background_pixels * (dark_variance_frame + readout_variance_frame))
                      
     return signal / np.sqrt(total_variance)
 

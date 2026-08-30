@@ -10,7 +10,8 @@ from castor.schema import (
     ABMagnitude,
     VegaMagnitude,
     SolveForSNR,
-    SolveForTime
+    SolveForTime,
+    SkyAnnulus
 )
 
 # ==========================================
@@ -154,3 +155,30 @@ class TestStrictModelDefenses:
         
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             TargetProfile(**payload)
+
+
+# ==========================================
+# Test focus 4: the sky annulus
+# ==========================================
+class TestSkyAnnulus:
+    def test_an_inside_out_annulus_is_refused(self):
+        """An annulus with the radii the wrong way round has negative area, which
+        would come back as a negative variance rather than an error."""
+        with pytest.raises(ValidationError, match="outer_factor must exceed inner_factor"):
+            SkyAnnulus(inner_factor=5.0, outer_factor=3.0)
+
+    def test_a_zero_width_annulus_is_refused(self):
+        """Equal radii divide by zero; the caller meant something and should say what."""
+        with pytest.raises(ValidationError, match="outer_factor must exceed inner_factor"):
+            SkyAnnulus(inner_factor=3.0, outer_factor=3.0)
+
+    def test_the_estimator_defaults_to_the_one_pipelines_use(self):
+        """A mean is the cheaper assumption, so defaulting to it would understate the
+        noise of anyone who did not think about it."""
+        assert SkyAnnulus(inner_factor=3.0, outer_factor=5.0).estimator == "median"
+
+    def test_omitting_the_annulus_is_allowed_and_visible(self):
+        """None is a real answer -- the sky is taken as known exactly -- and every
+        response reports N_est, so a caller who left it out can see that they did."""
+        opts = SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=1)
+        assert opts.sky_annulus is None

@@ -267,15 +267,17 @@ This modularity fully decouples the physical realities of the observatory from t
 
 * **Instrument Profile (`instrument`)**: Defines the static hardware components responsible for capturing light. To maximize reusability, it is further subdivided into the telescope's optical system, the camera's sensor electronics, and the passband filter. Notably, the filter schema is designated as `optic_filter` to prevent shadowing Python's built-in `filter` function.
 * **Target Profile (`target`)**: Defines the intrinsic physical properties of the celestial source. To prevent users from accidentally submitting conflicting data (such as providing both `"apparent magnitude"` for a star and `"surface brightness"` for a galaxy simultaneously), we avoid using a single, monolithic structure. Instead, the target relies on a specific type tag (e.g., `"point"` or `"extended"`) to seamlessly switch to the appropriate data format. This ensures that invalid data combinations are immediately blocked at the very edge of the system. Once the data reaches the core physics engine, the code can use pattern matching directly on the target type—routing point sources to PSF-based flux equations and extended sources to surface brightness formulas. This approach completely eliminates the need for complex and hard-to-maintain nested `if-else` branching within the core engine.
-* **Environment Condition (`environment`)**: Defines the atmospheric and situational context that alters the target's light before it reaches the telescope. By implementing this as a discriminated union from the start, the architecture leaves a clean path to introduce other environment type in the future without breaking the existing API contract or core engine logic.
+* **Environment Condition (`environment`)**: Defines the atmospheric and situational context that alters the target's light before it reaches the telescope — the seeing budget, the dark sky baseline, the extinction coefficient, the moon switch, and the observatory's own position on the Earth. Unlike the other three, this pillar is a single flat model rather than a set of alternatives: there is only one kind of sky, and every field applies to it.
 * **Calculation Options (`options`)**: Acts as the software control interface. It separates human-driven observation strategies and runtime overrides—such as toggling between target SNR and exposure time calculations—from the objective physical parameters.
+
+A solid edge means the part is always present. A dashed edge means the caller
+picks exactly one of the alternatives, tagged by a `type` discriminator, so an
+invalid combination cannot be expressed rather than being caught later.
 
 ```mermaid
 graph TD
-    %% Core Root
     Root[ObservationRequest]
 
-    %% Domain Pillars
     P1[instrument]
     P2[target]
     P3[environment]
@@ -283,17 +285,30 @@ graph TD
 
     Root --> P1 & P2 & P3 & P4
 
-    %% Target Profile Decoupling
-    P2 --> P2_1[morphology:<br/>Point / Extended]
-    P2 --> P2_2[sed:<br/>Flat / Temp]
-    P2 --> P2_3[brightness:<br/>Vega / AB / Jy / Flux]
+    P1 --> P1_1[telescope]
+    P1 --> P1_2[camera]
+    P1 --> P1_3[optic_filter]
 
-    %% Styling
+    P2 -.-> P2_1[morphology:<br/>Point / Extended]
+    P2 -.-> P2_2[sed:<br/>Flat / Temp]
+    P2 -.-> P2_3[brightness:<br/>Vega / AB / Jy / Flux]
+
+    P3 --> P3_1[location]
+    P3 --> P3_2[seeing, mu_dark,<br/>extinction, moon]
+
+    P4 -.-> P4_1[SolveForSNR:<br/>given exposures]
+    P4 -.-> P4_2[SolveForTime:<br/>given target SNR]
+
     style Root fill:transparent,stroke:#a871ff,stroke-width:3px
+    style P1 fill:transparent,stroke:#2b8cff,stroke-width:2px
     style P2 fill:transparent,stroke:#2b8cff,stroke-width:2px
+    style P3 fill:transparent,stroke:#2b8cff,stroke-width:2px
+    style P4 fill:transparent,stroke:#2b8cff,stroke-width:2px
     style P2_1 fill:transparent,stroke:#ff8c2b,stroke-width:2px,stroke-dasharray: 5 5
     style P2_2 fill:transparent,stroke:#ff8c2b,stroke-width:2px,stroke-dasharray: 5 5
     style P2_3 fill:transparent,stroke:#ff8c2b,stroke-width:2px,stroke-dasharray: 5 5
+    style P4_1 fill:transparent,stroke:#ff8c2b,stroke-width:2px,stroke-dasharray: 5 5
+    style P4_2 fill:transparent,stroke:#ff8c2b,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ### 5.2 Response Schema

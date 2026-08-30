@@ -11,6 +11,15 @@ preset catalogue it shares with the GUI.
 uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
 ```
 
+For a session of several commands, put the environment on the path once and drop
+the prefix. `rehash` is what zsh needs to notice — it caches command lookups, so
+without it the shell keeps insisting there is no `castor`:
+
+```bash
+source .venv/bin/activate && rehash
+castor calc --site lulin --filter Sloan_r --mag 18 --exp 300 -n 10 --ra 210.8 --dec 54.3
+```
+
 ## The four commands
 
 | | |
@@ -89,6 +98,27 @@ are dropped and named on stderr rather than rejected.
 Saturation leaves by the front door with a computed result attached, but not with
 the exit code of an unremarkable success: every caller checks the exit code, and
 not every caller reads `flags.is_saturated`.
+
+## `castor schema`
+
+The contract, in the form a caller can read without a person in the loop. What
+makes it worth printing rather than documenting is that the descriptions carry
+the two things a caller otherwise has to guess:
+
+```console
+$ castor schema | jq -r '..|objects|select(.description).description' | grep ATBD | head -4
+Physical size of a single detector pixel in micrometers (µm). (ATBD: p_pixel)
+Fraction of incident photons converted to electrons, as a dimensionless ratio from 0.0 to 1.0. (ATBD: QE)
+Thermal electron generation rate per pixel in e-/s/pix. (ATBD: R_dark)
+Electronic noise introduced during the readout phase in e-/pix. (ATBD: RON)
+```
+
+Forty-four fields carry a description and twenty-six of those name their
+[ATBD](ATBD.md) symbol, so a caller never has to guess whether `pixel_pitch` is
+metres or micrometres — the class of mistake that produces a plausible wrong
+answer rather than an error. With the `assumed` list beside it, that is the whole
+of what an autonomous caller needs: what the request must contain, and what was
+filled in when it did not.
 
 ## `castor check`
 

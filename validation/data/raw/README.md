@@ -14,6 +14,7 @@ by a different module for a different question.
 | `slt_sn2024ggi/` | 1090 calibrated SLT frames of SN2024ggi. The 2024-04-14 night is the one that sweeps airmass 1.81-3.72 and closed QUESTIONS.md 4 and 5. | `slt.py` |
 | `slt_nightly/` | The observatory's own nightly archive, `sltYYYYMMDD/` per night, each with `janet/` (science), `flat/` and `bias-dark/`. **Raw, not calibrated** — unlike the two above, these need bias/dark/flat applied first. Many targets per night, so this is the only set with real spread on the sky. | nothing committed yet — see QUESTIONS.md 16 |
 | `sophia_darks_minus80/` | 20 SOPHIA darks, 300 s at -80 °C. Bounded QUESTIONS.md 6. | one-off, result in `provenance.py` |
+| `Radiance_Components.csv` | The one loose file, not a directory: a single ESO SkyCalc export of sky radiance by component, which is what the zodiacal split is checked against. | `skycalc.py` |
 | `lulin_web/` | Filter transmission curves and datasheets downloaded from the observatory's site. | `lulin.py`, `slt.py` |
 
 Three things worth knowing before reducing any of it, each learned the hard way:

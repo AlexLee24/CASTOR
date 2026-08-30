@@ -107,6 +107,17 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)
 
+    # The sky subtracted from the aperture is an estimate made in the annulus, and
+    # its error lands on every aperture pixel at once. Without an annulus there is
+    # nothing to estimate from, so the cost is zero and the sky is taken as exact.
+    n_est = 0.0
+    if opt.sky_annulus is not None:
+        n_est = float(physics.calculate_sky_estimate_pixels(
+            n_pix,
+            opt.sky_annulus.inner_factor, opt.sky_annulus.outer_factor,
+            total_fwhm, pixel_scale, opt.sky_annulus.estimator
+        ))
+
     f_lambda_target = _unify_flux(tgt.brightness, inst.optic_filter.central_wavelength)
     
     f_lambda_sky = float(physics.convert_ab_to_wavelength_flux(mu_sky, inst.optic_filter.central_wavelength))
@@ -149,7 +160,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         dark_current_rate=inst.camera.dark_current_rate,
         readout_noise=inst.camera.readout_noise,
         num_pixels_aperture=n_pix,
-        single_exp_time=opt.single_exp_time
+        single_exp_time=opt.single_exp_time,
+        num_pixels_sky_estimate=n_est
     ))
 
     match opt:
@@ -157,7 +169,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             total_exp_time = opt.single_exp_time * n_exp
             total_snr = float(physics.calculate_total_snr(
                 source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
-                n_pix, opt.single_exp_time, total_exp_time, n_exp
+                n_pix, opt.single_exp_time, total_exp_time, n_exp, n_est
             ))
             final_req_exposures = None # req_exposures isn't returned in SolveForSNR mode
 
@@ -168,7 +180,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             
             total_snr = float(physics.calculate_total_snr(
                 source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
-                n_pix, opt.single_exp_time, total_exp_time, final_req_exposures
+                n_pix, opt.single_exp_time, total_exp_time, final_req_exposures, n_est
             ))
             
         case _:
@@ -207,7 +219,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             pixel_scale=pixel_scale,
             total_throughput=total_throughput,
             enclosed_flux_fraction=f_enc,
-            num_pixels_aperture=n_pix
+            num_pixels_aperture=n_pix,
+            num_pixels_sky_estimate=n_est
         ),
         flags=schema.SystemFlags(
             is_saturated=bool(opt.single_exp_time > t_sat),
