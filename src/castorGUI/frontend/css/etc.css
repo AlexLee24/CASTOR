@@ -63,9 +63,15 @@
     box-sizing: border-box;
 }
 
+/* border-box outright rather than the inherit-from-the-root trick: inheritance
+   follows the flat tree, and <details> now puts a ::details-content between the
+   element and its children. That pseudo-element is not matched by * and so keeps
+   the UA's content-box, which every field inside a disclosure then inherited —
+   harmless for the input wrappers, which have no width of their own, and 46px of
+   overflow for a <select>, which is 100% wide plus its own padding and border. */
 .castor-etc *,
 .castor-etc *::before,
-.castor-etc *::after { box-sizing: inherit; }
+.castor-etc *::after { box-sizing: border-box; }
 
 /* ============================================================================
    Shell — two glass cards side by side, the results given slightly more width
