@@ -5,6 +5,8 @@ their calculator looks up measured zero points, so this compares a prediction
 against a calibration, and the interesting output is *which* differences are
 structural rather than how large any single one is.
 """
+import inspect
+
 import numpy as np
 import pytest
 
@@ -27,21 +29,27 @@ def test_transcription_still_matches_the_live_page(instrument, band, airmass, mo
     assert lco_etc.snr(instrument, band, 18.0, airmass, 100.0, moon) == pytest.approx(snr, abs=0.05)
 
 
-def test_lco_does_not_extinguish_the_sky():
-    """The structural difference that matters most.
+def test_neither_engine_extinguishes_the_sky():
+    """Both hold the background fixed as the target sinks, and for the same reason.
 
-    Their background is identical at the zenith and at airmass 2; CASTOR scales
-    it by 10^(-0.4·k·X). Neither is obviously right — mu_dark is a mixture of
-    airglow emitted at 90 km and zodiacal light arriving from outside the
-    atmosphere — but they cannot both be, and ATBD 4.4 already flags ours as
-    unconfirmed.
+    `mu_dark` is measured looking up through the atmosphere, so the atmosphere is
+    already inside it; extinguishing it again would be counting the same air
+    twice. CASTOR used to do exactly that, which made its sky *fall* with airmass
+    — the one direction no sky does — and the term is gone (calculator.py, ATBD
+    4.2.2 C). ESO's grows instead, which is the remaining open disagreement and
+    is recorded as an xfail in test_eso.py.
+
+    Asserted structurally rather than by sampling: `calculate_sky_background_rate`
+    takes no airmass, so there is nowhere for the dependence to re-enter.
     """
-    at_zenith = lco_etc.sky_rate(1, "V", 0)
-    assert lco_etc.sky_rate(1, "V", 0) == at_zenith
-    # CASTOR's equivalent term, for the size of the disagreement:
-    for band in ("u", "g", "V", "i", "Y"):
-        k = lco_etc.EXTINCTION[lco_etc.FILTERS.index(band)]
-        assert 10.0 ** (-0.4 * k * 1.2) < 1.0
+    assert "airmass" not in inspect.signature(
+        physics.calculate_sky_background_rate).parameters
+    assert "airmass" not in inspect.signature(lco_etc.sky_rate).parameters
+
+    # The target does depend on it, in both, so the absence above is a decision
+    # about the sky rather than an airmass term nobody implemented.
+    assert "airmass" in inspect.signature(lco_etc.source_rate).parameters
+    assert lco_etc.source_rate(1, "V", 18.0, 2.0) < lco_etc.source_rate(1, "V", 18.0, 1.0)
 
 
 @pytest.mark.parametrize("band", lco_etc.FILTERS)
