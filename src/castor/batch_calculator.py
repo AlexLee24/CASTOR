@@ -158,6 +158,13 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     warnings = []
     if np.any(airmass_arr > 2.0):
         warnings.append("Airmass > 2.0 detected in time series: Extinction model accuracy may degrade.")
+    if isinstance(opt, schema.BatchSolveForTime) and np.any(
+        np.asarray(total_snr_arr) < opt.target_snr * (1 - 1e-12)
+    ):
+        warnings.append(
+            "Estimated exposure counts miss the requested SNR at one or more times "
+            "under the correlated-background model; do not use those counts for planning."
+        )
 
     # np.atleast_1d ensures that even a single expanded time point becomes a list cleanly,
     # without crashing

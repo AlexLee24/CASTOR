@@ -747,10 +747,11 @@ def solve_required_exposures(
     single_snr: Numeric
 ) -> Numeric:
     """
-    Calculate the required number of exposures to reach a target SNR.
+    Estimate the exposure count using the independent-noise square-root law.
 
     Corresponds to ATBD Section 4.3.2.
-    Derived algebraically from the SNR accumulation principles.
+    This can underestimate the count when a background-flatness term is
+    correlated across frames, and cannot represent an unreachable target.
 
     Parameters
     ----------
@@ -762,7 +763,7 @@ def solve_required_exposures(
     Returns
     -------
     Numeric
-        Required number of exposures (exact float). 
+        Estimated number of exposures (float, before rounding up).
         Note: The scheduling layer should apply np.ceil() if integer frame counts are required.
     """
     return (target_snr / single_snr) ** 2.0
@@ -808,12 +809,10 @@ def calculate_optimal_exposure_time(
     Calculate the "background-limited" single exposure time.
 
     This is the single-exposure integration time at which the combined shot
-    noise from sky background + dark current overtakes the fixed per-frame
-    readout noise, per pixel. Past this point, lengthening a single exposure
-    further gives rapidly diminishing SNR returns per unit of *total*
-    integration time (splitting a fixed total exposure into more sub-frames
-    stops costing meaningful SNR) — so it becomes more efficient to add more
-    exposures than to keep extending a single one.
+    noise from sky background + dark current equals the fixed per-frame
+    readout noise, per pixel. It is a noise crossover, not an optimum exposure
+    length: saturation, tracking, cosmic rays, overhead, and the intended
+    observing strategy must also be considered.
 
     Derived from a standard-deviation ratio between the two noise sources:
     background shot noise reaches `background_dominance_factor` times the
@@ -846,7 +845,7 @@ def calculate_optimal_exposure_time(
     Returns
     -------
     Numeric
-        Optimal single exposure time (t_opt) [s].
+        Background/read-noise crossover time (t_opt) [s].
     """
     background_rate = sky_count_rate + dark_current_rate
     return ((background_dominance_factor * readout_noise) ** 2.0) / background_rate

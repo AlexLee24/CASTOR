@@ -78,6 +78,13 @@ def batch_base_request():
 # Test cases
 # ==========================================
 
+def test_solve_time_warns_when_correlated_noise_prevents_target(mock_moon_batch, batch_base_request):
+    batch_base_request.instrument.camera.background_flatness_fraction = 0.5
+    response = run_batch_calculation(batch_base_request)
+    assert any(value < batch_base_request.options.target_snr for value in response.core.total_snr)
+    assert any("miss the requested SNR" in warning for warning in response.flags.warnings)
+
+
 def test_expand_time_series():
     """Ensure the time-expansion helper works correctly and has a bound in place"""
     start = datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc)

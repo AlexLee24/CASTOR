@@ -261,7 +261,7 @@ class BaseOptions(StrictModel):
         description="Integration time for an individual sub-exposure frame in seconds. (ATBD: t_single)"
     )
     # Optional, unlike aperture_factor, because omitting it has a defined meaning:
-    # a sky known exactly, which is what every CASTOR release before this one
+    # a sky known exactly, which earlier versions of CASTOR
     # assumed. Both shipped clients now send an annulus. The diagnostics report
     # N_est either way, so a caller who leaves it out can see that they did.
     sky_annulus: SkyAnnulus | None = Field(
@@ -320,7 +320,7 @@ class CoreResult(StrictModel):
     )
     required_exposures: int | None = Field(
         None, 
-        description="Required number of exposures to achieve the target SNR. (ATBD: N_exp_out). Available only in 'solve_time' mode."
+        description="Estimated exposures for the target SNR. Check total_snr against the target when correlated background noise is nonzero. (ATBD: N_exp_out). Available only in 'solve_time' mode."
     )
     saturation_time_limit: float = Field(
         ..., 
@@ -329,8 +329,9 @@ class CoreResult(StrictModel):
     optimal_exposure_time: float = Field(
         ...,
         description=(
-            "Background-limited single exposure time in seconds — the point at which sky + dark "
-            "current shot noise overtakes readout noise. (ATBD: t_opt) [s]"
+            "Background/read-noise crossover time in seconds — sky + dark current shot "
+            "noise equals readout noise at the default factor. This is not a recommended "
+            "exposure length. (ATBD: t_opt) [s]"
         )
     )
 
@@ -494,7 +495,8 @@ class BatchCoreResult(StrictModel):
     required_exposures: list[float] | None = Field(
         None,
         description=(
-            "Exposures needed to reach the target SNR at each timestamp. Available only in "
+            "Estimated exposures for the target SNR at each timestamp; check total_snr "
+            "when correlated background noise is nonzero. Available only in "
             "'solve_time' mode, and the only result array that responds to the calculation "
             "goal — single_snr and saturation_time_limit describe the sky and the detector "
             "and are the same whichever goal is set."

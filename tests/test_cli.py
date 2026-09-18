@@ -109,12 +109,12 @@ def test_a_site_and_a_target_are_enough(run, lulin):
     assert "Lulin Observatory · LOT 1.0 m · Sophia · Sloan r'" in result.stdout
     assert "Total SNR" in result.stdout
 
-def test_solving_for_time_reports_the_frames_needed(run):
+def test_solving_for_time_reports_the_estimated_frames(run):
     result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
                  "--mag", "21", "--exp", "300", "--snr", "50", "--time", WELL_PLACED)
 
     assert result.exit_code == 0
-    assert "Exposures needed" in result.stdout
+    assert "Estimated exposures" in result.stdout
 
 def test_named_hardware_shows_up_in_the_header(run, lulin):
     result = run(*lulin, "--telescope", "SLT", "--filter", "Sloan_z")

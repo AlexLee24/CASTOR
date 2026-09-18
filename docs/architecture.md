@@ -4,7 +4,10 @@
 
 ### 1.1 Product Identity
 
-CASTOR is a lightweight, stateless exposure time calculator (ETC) core engine designed specifically for optical astronomical observations. The project completely excludes graphical user interfaces (GUI) and data persistence layers, focusing entirely on implementing underlying physical algorithms—such as optical geometry, atmospheric physics, energy conversion, and signal-to-noise ratio (SNR) calculations—in pure Python. It is engineered to provide precise, high-concurrency computational support for upper-level astronomical web applications.
+The CASTOR core (`src/castor/`) calculates exposure times and signal-to-noise
+ratios for optical observations. It validates complete observation requests and
+applies the optical, atmospheric, and detector model described in the ATBD.
+The repository also includes a CLI and GUI; this document covers the core.
 
 > This document covers the core engine (`src/castor/`) only. Three things are built on top of it and documented separately: **CASTOR GUI** (`src/castorGUI/`, [architecture](gui_architecture.md)), the **command line** (`src/castorCLI/`, [reference](cli.md)), and the **preset catalogue** both of them read ([presets](presets.md)).
 >
@@ -12,7 +15,11 @@ CASTOR is a lightweight, stateless exposure time calculator (ETC) core engine de
 
 ### 1.2 Core Value
 
-Traditional astronomical exposure time calculators are often tightly coupled with the hardware equipment of specific observatories or exist as monolithic scripts that are difficult to maintain and integrate with modern web services. CASTOR achieves exceptional universality by completely decoupling physical formulas from hardware parameters. Any combination of optical telescopes and sensors can seamlessly invoke this engine for dynamic batch calculations, provided they adhere to the standard data contract.
+Hardware parameters enter through the request schema rather than an internal
+equipment database. A caller can provide a supported telescope, camera, filter,
+target, and observing conditions for a single calculation or a time series.
+Accuracy still depends on the quality of those inputs and on the model's
+documented limits.
 
 ### 1.3 System Context & Boundary
 
@@ -61,25 +68,27 @@ flowchart TD
 
 ##### A. Core Computational Engine
 
-* **Bidirectional Solvers:** Calculating Signal-to-Noise Ratio (SNR) from a given exposure time, and reverse-calculating required exposure times from a target SNR using an exact analytical quadratic solver.
-* **Metric Generation:** Computing total observation time, independent noise contributors (read noise, dark current), electron count rates (source/sky), pixel scale, and sensor saturation flags.
+* **Two calculation modes:** Calculating SNR from a specified exposure count, or estimating a count for a target SNR. The inverse estimate has the correlated-noise limitation described below.
+* **Metric Generation:** Returning source and sky count rates, pixel scale, SNR, and a saturation flag. The caller can derive total integration time from frame count and single-frame duration; readout overhead is not included.
 
 ##### B. Data Contract & Batch Orchestration
 
 * **Strict Validation:** Enforcing physical boundaries (e.g., $0.0-1.0$ limits) and logical mutual exclusivity (time vs. SNR) via Pydantic schemas.
 * **Polymorphic Time-Domain Expansion:** Ingesting continuous time-range contracts (start, end, step) and automatically expanding them into high-resolution discrete arrays.
-* **Vectorized Processing:** Utilizing NumPy for $O(1)$ batch processing of scalar values, discrete arrays, and expanded matrices without Python-level iteration overhead.
+* **Vectorized Processing:** Using NumPy arrays to evaluate the same formulas at multiple timestamps. Work and memory grow with the number of samples.
 
 ##### C. Astronomical & Environmental Modeling
 
-* **Target Morphologies & SEDs:** Supporting both point sources (apparent magnitude) and extended sources (surface brightness), alongside Spectral Energy Distribution (SED) templates for accurate cross-band flux calculations.
+* **Target Morphologies:** Supporting point and extended sources. The schema accepts an SED type, but the current calculation treats every target as spectrally flat across the filter; see the ATBD §5.4.
 * **Dynamic Ephemeris & Background:** Automatically computing instantaneous Airmass, Moon phase, Moon position, and dynamic sky background contributions based on target coordinates and observation timestamps.
 * **Atmospheric Corrections:** Applying atmospheric extinction and Point Spread Function (PSF) enclosed-flux modeling.
 
 ##### D. Hardware Optics & Sensor Modeling
 
 * **Optical Train Aggregation:** Calculating effective light-gathering area (accounting for obstruction) and total system optical throughput.
-* **Dynamic Sensor Configurations:** Adjusting read noise, pixel scale, full-well capacity, and readout overhead dynamically based on user-defined Binning modes (e.g., 1x1, 2x2) and amplifier counts.
+* **Sensor Parameters:** Accepting pixel pitch, quantum efficiency, dark current,
+  read noise, and full-well capacity. Binning modes, amplifier selection, and
+  readout overhead are not modelled.
 
 #### Out of Scope for CASTOR
 
@@ -160,15 +169,27 @@ The system treats the calculation boundary as a strict contract. Utilizing Pydan
 
 ### 3.3 Statelessness
 
-CASTOR is designed as a pure computational kernel. It does not maintain user sessions, historical calculation logs, or hardware databases. Every `ObservationRequest` must be entirely self-contained, carrying all necessary configurations and parameters required for the calculation. This pure $f(\text{input}) = \text{output}$ design ensures that the engine is highly thread-safe, trivially cacheable, and easily scalable for high-concurrency batch processing when invoked by upper-level web APIs.
+CASTOR does not maintain user sessions, calculation logs, or a hardware
+database. Every `ObservationRequest` carries the required instrument, target,
+and environment parameters. The batch path evaluates a series of timestamps
+without storing prior results.
 
 ### 3.4 Analytical Determinism
 
-To guarantee high performance and exact reproducibility, CASTOR avoids iterative approximations or randomized simulations whenever possible. The core computational layer (`physics.py`) relies on exact analytical solvers—such as deterministic quadratic equations to resolve required exposure times from target SNRs. For any identical set of validated inputs, the engine will consistently yield the exact same mathematical outputs in strict $O(1)$ time complexity per data point, making it highly reliable for automated telescope scheduling systems.
+`physics.py` uses algebraic formulas for count rates and SNR. The current
+solve-for-time formula assumes independent noise between exposures and can
+underestimate the count when correlated background noise is present; the
+strict validation test and the release gate are in
+[`validation/QUESTIONS.md`](../validation/QUESTIONS.md). Batch cost also includes
+ephemeris calculations at each requested timestamp. Treat the output as a model
+estimate, not a guarantee for telescope scheduling.
 
 ## 4. Data Flow & Lifecycle
 
-CASTOR processes each calculation request through a straightforward, step-by-step pipeline. When a request arrives, the engine first validates the input data to catch physical errors or conflicting settings immediately. It then aggregates any missing observation conditions, target coordinates, or hardware specifications using its internal modules. Finally, these completed parameters are passed to the core physics engine to compute the required exposure time or signal-to-noise ratio (SNR), and the final metrics are formatted and returned as the response.
+CASTOR validates each request, derives geometry and count rates from the
+supplied parameters, then calculates SNR or an exposure-count estimate. The
+core does not fill in missing hardware specifications; preset resolution is a
+separate responsibility of the CLI and GUI.
 
 ```mermaid
 sequenceDiagram
@@ -211,7 +232,7 @@ sequenceDiagram
             Note over Calc: Vectorization: Align dimensions<br/>& expand into NumPy Arrays
         end
         
-        Calc->>Physics: solve_snr() / solve_time()
+        Calc->>Physics: Count-rate and SNR formulas
         activate Physics
         Note over Physics: Mathematical Solving
         Physics-->>Calc: Result Matrix / Scalar
@@ -219,7 +240,7 @@ sequenceDiagram
     end
 
     %% Phase 4: Egress
-    Calc->>Schema: Package into CastorResponse
+    Calc->>Schema: Package into ObservationResponse
     Schema-->>Calc: Validated Response Object
     Calc-->>Client: Return Result Payload
     deactivate Calc
@@ -231,33 +252,44 @@ sequenceDiagram
 
 * **Input**: A JSON payload or Python dictionary containing the user's observation parameters and hardware configurations.
 * **Action**: The `schema.py` module uses Pydantic to strictly validate the incoming data against two main constraints:
-  1. **Physical Limits**: Ensures values conform to real-world physics (e.g., exposure times must be positive, and optical transmission rates must fall strictly between 0.0 and 1.0).
-  2. **Mutual Exclusivity**: Enforces the core logic requiring the caller to provide either `exposure_time` or `target_snr`, but never both.
+  1. **Physical Limits**: Requires positive exposure times and transmission
+     fractions between 0.0 and 1.0, inclusive.
+  2. **Mutual Exclusivity**: The `options.type` discriminator selects either
+     `solve_snr` with `num_exposures` or `solve_time` with `target_snr`.
 * **Output**: A validated Pydantic object (`ObservationRequest`). If any check fails, the system immediately rejects the request with a validation error to protect the core engine.
 
 #### Phase 2: Context Enrichment
 
 * **Input**: The validated `ObservationRequest` object.
-* **Action**: Action: Determines if the incoming input has missing data or requires complementation by other functions. It then invokes the corresponding internal functions to calculate and fill in these gaps.
-* **Output**: A complete, aggregated set of parameters ready for the mathematical formulas.
+* **Action**: Derives airmass, target and sky rates, and other intermediate
+  quantities from the supplied request. Missing required instrument fields
+  were rejected during validation.
+* **Output**: Intermediate quantities ready for the SNR formulas.
 
 #### Phase 3: Core Computation
 
 * **Input**: The enriched and aggregated parameter set.
 * **Action**:
-  1. **Optional Vectorization**: If the request contains arrays or continuous time ranges, the engine automatically aligns these dimensions and expands them into NumPy arrays to process the entire batch simultaneously without using slow Python loops.
-  2. **Mathematical Solving**: The `physics.py` module takes these raw numbers or matrices and runs the core analytical formulas via `some_function()` or `some_function()`. This layer handles pure mathematics and contains no network or database dependencies.
-* **Output**: Raw numerical results (scalars or matrices) representing the calculated SNR or exposure times.
+  1. **Optional Vectorization**: A batch request expands its time range into
+     timestamps and evaluates the formulas over NumPy arrays.
+  2. **Mathematical Solving**: `physics.py` applies the count-rate and noise
+     formulas to scalar values or NumPy arrays. It has no network or database
+     dependencies.
+* **Output**: SNR values and, in solve-for-time mode, exposure-count estimates.
 
 #### Phase 4: Egress
 
 * **Input**: The raw numerical outputs from the physics engine.
 * **Action**: The orchestrator maps the raw numbers into the final structured output layout. During this step, it also performs hardware boundary checks, such as verifying if the signal level exceeds the sensor's full-well capacity to flag pixel saturation (`is_saturated`).
-* **Output**: A validated `CastorResponse` object, which is returned safely to the external client.
+* **Output**: A validated `ObservationResponse` object returned to the caller.
 
 ## 5. Data Contracts & Schema
 
-The CASTOR project utilizes Pydantic models for strict data validation. The exhaustive list of parameters, data types, physical units, and validation boundaries is the schema itself — [`src/castor/schema.py`](../src/castor/schema.py), where every field carries its unit and its ATBD symbol in the `Field` description — and `castor schema` prints it as JSON Schema. The mathematics behind each symbol is in the [ATBD](ATBD.md).
+CASTOR uses Pydantic models for input validation. The request and response
+fields, types, and boundaries are defined in
+[`src/castor/schema.py`](../src/castor/schema.py); `castor schema` prints the
+request as JSON Schema. Many field descriptions include units and ATBD symbols.
+The equations are in the [ATBD](ATBD.md).
 
 ### 5.1 Request Schema
 
@@ -313,20 +345,17 @@ graph TD
 
 ### 5.2 Response Schema
 
-Similar to the request structure, the `CastorResponse` model is designed to be highly deterministic and easily consumable by the parent system or external APIs.
+The single-request result is an `ObservationResponse`; the time-series result
+is a `BatchObservationResponse`.
 
 The response strictly avoids UI-specific formatting, presentation layers, or plotting objects, focusing purely on returning raw mathematical value and physical metrics. The output is logically grouped into the following categories:
 
-* **Core Solved Metrics**: The primary objective of the calculation, returning either the computed exposure time or the SNR, strictly depending on the mutually exclusive input strategy.
-* **Secondary Diagnostics**: Intermediate physical values computed during calculation, such as total noise electrons, source signal rate, and sky background rate per pixel. Exposing these allows the calling client to render detailed breakdown charts if required.
-* **System Metadata**: Standardized fields encompassing domain-specific warning messages and operational metrics like total observation time (including readout overhead).
+* **Core metrics:** Single-frame and total SNR, and an estimated frame count in solve-for-time mode. The result also includes saturation and noise-crossover times.
+* **Rates and diagnostics:** Source and sky electron rates, effective area, pixel scale, throughput, aperture geometry, and related quantities.
+* **Flags:** Saturation and model warnings. Elapsed observation time, including readout overhead, is not returned.
 
-## 6. Future Extensibility
+## 6. Open work
 
-Vectorized Batch Optimization
-
-TargetProfile to ESO ETC's Form
-
-API Docs
-
-Dedicated exception hierarchy (e.g. `PhysicsBoundaryError`) in place of plain `ValueError`
+Unresolved measurements, model limits, and future work are tracked in
+[`validation/QUESTIONS.md`](../validation/QUESTIONS.md). This architecture
+document describes the implemented system.

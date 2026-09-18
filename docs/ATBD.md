@@ -374,18 +374,28 @@ $N_{\text{est}}$ carries the same per-pixel variance as the aperture, because th
 
 Because $N_{\text{est}} \propto N_{\text{pix}}^2$, it is negligible for tight apertures and dominant for wide ones. At $k_{\text{ap}} = 0.85$ with a $3$–$5 \cdot \text{FWHM}$ annulus it adds about 7% to the variance; at $k_{\text{ap}} = 3$ with a $5$–$8 \cdot \text{FWHM}$ annulus it adds about 36%. That second figure is measured, not assumed: see §5.3.
 
-**4.3.3 Required Exposures**
-If the calculation mode demands solving for time based on a desired signal quality, the required number of exposures is derived as:
+**4.3.3 Exposure Count Estimate**
+The current inverse estimate uses the independent-noise approximation:
 
 $$N_{\text{exp}} = \left( \frac{\text{SNR}_{\text{target}}}{\text{SNR}_{\text{single}}} \right)^2$$
+
+This is exact only when all variance terms average down across frames. With a
+nonzero correlated background-flatness term, it can return a count whose
+forward-calculated SNR misses the target or a count for an unreachable target.
+See §5.3 and question 17 in `validation/QUESTIONS.md`.
 
 **4.3.4 Saturation Limit**
 To ensure the detector operates within its linear regime, the saturation time limit ($t_{\text{sat}}$) evaluates how long it takes for a single pixel to reach its Full Well Capacity (FWC) under the combined flux of the target peak, sky, and dark current:
 
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
-**4.3.5 Background-Limited (Optimal) Exposure Time**
-$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
+**4.3.5 Background/Read Noise Crossover Time**
+$t_{\text{opt}}$ is the single-exposure integration time at which background
+shot noise (sky + dark current) equals the fixed per-frame readout noise, per
+pixel when $k=1$. The API retains the historical name `optimal_exposure_time`,
+but this is a crossover, not a recommended exposure length. Saturation,
+tracking, cosmic rays, overhead, and the observing strategy also matter. It
+is derived from a standard-deviation ratio $k$ between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
 

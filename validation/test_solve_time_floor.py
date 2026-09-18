@@ -45,3 +45,10 @@ def test_solve_time_reaches_the_snr_it_was_asked_for():
     request = _slt_r_request()
     response = run_calculation(request)
     assert response.core.total_snr >= request.options.target_snr
+
+
+def test_solve_time_discloses_when_estimate_misses_target():
+    request = _slt_r_request()
+    response = run_calculation(request)
+    assert response.core.total_snr < request.options.target_snr
+    assert any("does not reach the requested SNR" in warning for warning in response.flags.warnings)

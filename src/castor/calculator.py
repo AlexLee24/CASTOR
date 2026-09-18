@@ -202,6 +202,11 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     warnings = []
     if airmass > 2.0:
         warnings.append("Airmass > 2.0: Extinction model accuracy may degrade.")
+    if isinstance(opt, schema.SolveForTime) and total_snr < opt.target_snr * (1 - 1e-12):
+        warnings.append(
+            "Estimated exposure count does not reach the requested SNR under the "
+            "correlated-background model; do not use this count for planning."
+        )
 
     return schema.ObservationResponse(
         core=schema.CoreResult(

@@ -208,7 +208,7 @@
         el('hero-desc').textContent = lastSingleHero.desc;
     }
 
-    function renderSingle(data, error) {
+    function renderSingle(data, error, request) {
         if (error) {
             el('error-text').textContent = error;
             el('error-box').hidden = false;
@@ -231,9 +231,10 @@
             ? { label: 'Signal-to-Noise Ratio (SNR)',
                 value: fmt(core.total_snr, 2),
                 desc:  'Calculated based on the given exposure time.' }
-            : { label: 'Required Exposures',
+            : { label: 'Estimated Exposures',
                 value: core.required_exposures + ' frames',
-                desc:  'Target SNR achieved: ' + fmt(core.total_snr, 2) };
+                desc:  'Predicted SNR: ' + fmt(core.total_snr, 2) +
+                       ' (requested: ' + fmt(request.options.target_snr, 2) + ')' };
 
         /* Computed either way, written only when it is the answer on show. While
            sweeping the headline belongs to renderBatch, and painting an instant's
@@ -379,7 +380,7 @@
         // Kept short deliberately: a y-axis title is rotated, so its length is vertical,
         // and this panel is only ~26% of the height. "Exposures to Reach Target SNR"
         // overran its own domain and collided with the titles above and below it.
-        var panel2Title = solvingForTime ? 'Exposures Needed' : 'Single-Exposure SNR';
+        var panel2Title = solvingForTime ? 'Estimated Exposures' : 'Single-Exposure SNR';
         // Fewest frames is the good end when solving for time; highest SNR is the good
         // end otherwise. The callout should point at whichever that is.
         var panel2Better = solvingForTime
@@ -652,7 +653,7 @@
         if (best === null) { restoreHero(); return; }
 
         el('hero-label').textContent = solvingForTime
-            ? 'Fewest Exposures in Window' : 'Best SNR in Window';
+            ? 'Lowest Estimate in Window' : 'Best SNR in Window';
         el('hero-value').textContent = solvingForTime
             ? fmt(series[best], 0) + ' frames' : fmt(series[best], 2);
         el('hero-desc').textContent = anyObservable
@@ -721,10 +722,10 @@
                 if (onBusy) { onBusy(true); }
                 postJSON(url, body, mine.signal).then(function (data) {
                     if (mine.signal.aborted) { return; }
-                    onResult(data, null);
+                    onResult(data, null, body);
                 }).catch(function (err) {
                     if (err.name === 'AbortError') { return; }
-                    onResult(null, err.message);
+                    onResult(null, err.message, body);
                 }).then(function () {
                     // Clear busy only for the request that is still current. A superseded
                     // one was aborted by its successor, which has already turned the cue
