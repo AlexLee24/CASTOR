@@ -394,8 +394,13 @@ To ensure the detector operates within its linear regime, the saturation time li
 
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
-**4.3.5 Background-Limited (Optimal) Exposure Time**
-$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
+**4.3.5 Background/Read Noise Crossover Time**
+$t_{\text{opt}}$ is the single-exposure integration time at which background
+shot noise (sky + dark current) equals the fixed per-frame readout noise, per
+pixel when $k=1$. The API retains the historical name `optimal_exposure_time`,
+but this is a crossover, not a recommended exposure length. Saturation,
+tracking, cosmic rays, overhead, and the observing strategy also matter. It
+is derived from a standard-deviation ratio $k$ between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
 

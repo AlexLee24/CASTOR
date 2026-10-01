@@ -261,7 +261,7 @@ class BaseOptions(StrictModel):
         description="Integration time for an individual sub-exposure frame in seconds. (ATBD: t_single)"
     )
     # Optional, unlike aperture_factor, because omitting it has a defined meaning:
-    # a sky known exactly, which is what every CASTOR release before this one
+    # a sky known exactly, which earlier versions of CASTOR
     # assumed. Both shipped clients now send an annulus. The diagnostics report
     # N_est either way, so a caller who leaves it out can see that they did.
     sky_annulus: SkyAnnulus | None = Field(
@@ -346,8 +346,9 @@ class CoreResult(StrictModel):
     optimal_exposure_time: float = Field(
         ...,
         description=(
-            "Background-limited single exposure time in seconds — the point at which sky + dark "
-            "current shot noise overtakes readout noise. (ATBD: t_opt) [s]"
+            "Background/read-noise crossover time in seconds — sky + dark current shot "
+            "noise equals readout noise at the default factor. This is not a recommended "
+            "exposure length. (ATBD: t_opt) [s]"
         )
     )
 

@@ -161,10 +161,10 @@ def _results(request: schema.ObservationRequest, response: schema.ObservationRes
         rows.append(("Total time", f"{frames * single:.0f} s  ({frames} × {single:g} s)"))
     rows += [
         ("Saturates after", f"{core.saturation_time_limit:.1f} s"),
-        ("Background-limited at", f"{core.optimal_exposure_time:.1f} s"),
+        ("Background/read crossover", f"{core.optimal_exposure_time:.1f} s"),
         ("Total FWHM", f'{response.diagnostics.total_fwhm:.2f}"'),
     ]
-    return [f"  {label:<22}{value}" for label, value in rows]
+    return [f"  {label:<28}{value}" for label, value in rows]
 
 def _emit_notes(assumed: list[tuple[str, Any, str]], ignored: list[str],
                 response: schema.ObservationResponse, request: schema.ObservationRequest,

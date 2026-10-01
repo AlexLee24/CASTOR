@@ -4,7 +4,7 @@
 
 ### 1.1 Product Identity
 
-CASTOR GUI is the official reference interface for the [CASTOR](architecture.md) exposure time calculator engine. It gives astronomers a form-driven UI for building an observation request (instrument, target, environment, calculation strategy), running the calculation live, and reading back the results — without writing any code or touching `castor.schema` directly.
+CASTOR GUI is the reference interface for the [CASTOR](architecture.md) exposure time calculator engine. It gives astronomers a form-driven UI for building an observation request (instrument, target, environment, calculation strategy), running the calculation live, and reading back the results — without writing any code or touching `castor.schema` directly.
 
 It is plain HTML, CSS and JavaScript ([`src/castorGUI/frontend/`](../src/castorGUI/frontend/)), served either by its own small development host or by whatever site embeds it. That choice is the product decision, not an implementation detail: CASTOR GUI is meant to be **mounted inside [Kinder](https://kinder.astro.ncu.edu.tw)**, a Flask/Jinja astronomy portal with no frontend build step, and a plain HTML fragment is the only shape that a Jinja template can include natively. See [`frontend/README.md`](../src/castorGUI/frontend/README.md) for the host contract.
 
