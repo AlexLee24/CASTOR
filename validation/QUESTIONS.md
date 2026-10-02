@@ -58,7 +58,9 @@ alone has not exercised the packaging jobs.
 validated across pointings and lunar conditions (HAP-10); Lulin extinction
 remains unmeasured by band (question 4); the default tight aperture needs a
 reduction method that controls PSF variation (HAP-11); VLT is explicitly a
-demonstration profile (questions 14–15). Other unresolved measurements and
+demonstration profile (questions 14–15); colour (Bayer) cameras, including
+both in the `other` profile, are modelled as monochrome and predict optimistic
+SNR (question 18). Other unresolved measurements and
 model gaps stay in the table below, with the person or work needed to close
 each. Do not treat a green specification suite as evidence that every preset
 is empirically calibrated.
@@ -105,6 +107,7 @@ validation result.
 | 15 | FORS2's throughput is a fudge that works in one band | BUILD | strict xfail, `test_eso.py` |
 | 16 | Everything measured here looks in one direction | OBSERVE | `test_lulin.py` |
 | 17 | Solve-for-time ignores the correlated flatness-noise ceiling | BUILD | Closed — `test_solve_time_floor.py` |
+| 18 | Colour (Bayer) cameras are modelled as monochrome | BUILD | caveat on the `other` profile |
 
 ---
 
@@ -683,6 +686,31 @@ both surface the unreachable state; the batch path reports unreachable timestamp
 as `None` gaps. `test_solve_time_floor.py` is now a passing regression covering a
 reachable target that meets its request, an unreachable target that is flagged,
 and the `f = 0` control. Derivation in ATBD §4.3.3.
+
+## 18. Colour (Bayer) cameras are modelled as monochrome — BUILD
+
+**Found 2026-10-02**, not in Lulin data. An outside trial used CASTOR to predict
+single-frame SNR for a colour DSLR (a 6D). Run as shipped, with the camera
+entered as monochrome, the prediction came out about √2 too optimistic. After
+the trial calibrated the zero point from the same frames and adjusted by hand
+for the Bayer pattern (half the throughput, pixel pitch ×√2), the median
+measured/predicted SNR was 1.09. That fit tests noise only, because the signal
+was calibrated from those frames, and the hand adjustment is an approximation.
+
+**The gap.** `CameraSchema` has no colour filter array. Every pixel in the
+aperture collects the band at `quantum_efficiency`. On a Bayer sensor only 1/2
+(G) or 1/4 (R, B) of the pixels sit behind any one colour, and debayering
+interpolates the rest, which correlates neighbouring pixels' noise.
+
+**Already in the shipped presets.** Both cameras in the `other` profile,
+ASI2600MC and ASI533MC, are colour (MC) sensors entered as monochrome with QE
+0.8. That profile now carries a `caveat` saying so, shown by the GUI and the
+CLI. It is a disclosure; the numbers are unchanged.
+
+**What closes it.** A camera field naming the colour filter array and the
+channel(s) a band uses. A decision about where noise is counted: raw CFA pixels
+(simpler and honest) or debayered pixels (correlated). Then a check against real
+colour-camera frames. Until then ATBD §5.3 states the limitation.
 
 ---
 

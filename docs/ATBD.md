@@ -188,9 +188,9 @@ This profile defines the intrinsic physical properties of the celestial source. 
 | `morphology.type` | - | - | Spatial distribution discriminator: `"point"` or `"extended"`. |
 | `sed.type` | - | - | Spectral model discriminator: `"flat"` or `"Temp"`. |
 | `brightness.type` | - | - | Brightness model discriminator: `"vega_mag"`, `"ab_mag"`, `"jansky_flux"`, or `"wavelength_flux"`. |
-| `brightness.target_mag` | $m$ | mag | Apparent magnitude (Required if type is Vega or AB). |
+| `brightness.target_mag` | $m$ | mag | Apparent magnitude (Required if type is Vega or AB). mag/arcsec² when `morphology.type` is `"extended"`. |
 | `brightness.zero_point_flux` | $F_{\text{zp}}$ | erg/s/cm²/Å | Reference flux (Required ONLY if type is `"vega_mag"`). |
-| `brightness.flux_value` | $F_\nu, F_\lambda$ | Jy, erg... | Direct physical flux (Required if type is Jansky or Wavelength). |
+| `brightness.flux_value` | $F_\nu, F_\lambda$ | Jy, erg... | Direct physical flux (Required if type is Jansky or Wavelength). Per arcsec² when `morphology.type` is `"extended"`. |
 
 ### 3.3 Environment Condition (`environment`)
 
@@ -437,6 +437,8 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 * **Photon Noise Only, Partially Closed for Flat-Fielding:** Every other noise term modeled here scales with photon or electron counts; scintillation and PSF instability do not, and they set a floor the model cannot reach. Measured against 314 stars on fifteen LOT/SOPHIA $r'$ frames (2025-11-06), predictions track the observed scatter to within 8% across seven flux bins spanning $2$ to $260\ \text{ke}^-$ (`validation/test_endtoend.py`). An apparent shortfall above $60\ \text{ke}^-$ that grew with brightness — obs/pred as low as 0.22 for the brightest stars — turned out to be a validation artifact, not a gap in this model: those frames' 16-bit readout saturates at $65535\ \text{ADU} \times 0.92\ \text{e}^-/\text{ADU} = 60292\ \text{e}^-$ peak-pixel count, far below the $150000\ \text{e}^-$ Full Well Capacity this preset carries, and stars riding that ceiling were not excluded. Once stars peaking above $50000\ \text{e}^-$ are dropped, the same bins agree with prediction to within 8%, comparable to the fainter ones. Flat-field and background-gradient residual is no longer entirely outside the model: $V_{\text{flat}}$ (§4.3.1a) carries it when `background_flatness_fraction` is set, measured at 2.0% of the background on the one camera it has been checked against (SLT/DU934P). It defaults to 0.0 (not modelled) for every other preset, and the measured value is itself an upper limit from a cloudy night, not a floor a clear one would also hit.
 
 * **Cost of the Sky Estimate:** That same measurement is where $N_{\text{est}}$ (§4.3.2) comes from. Without it the engine ran 13% optimistic at $k_{\text{ap}} = 3$ (observed/predicted 0.868); with it, 1.011. The correction was not fitted — its size follows from the aperture and annulus geometry alone, and the two agree to better than a percent.
+
+* **Monochrome Detectors Only:** Every camera is modelled as monochrome — every pixel in the aperture collects the band at the camera's `quantum_efficiency`. A one-shot-colour (Bayer) sensor imaged through one colour channel uses only 1/2 (G) or 1/4 (R, B) of its pixels for that band, and debayering interpolates the rest, which correlates neighbouring pixels' noise. The engine has no colour-filter-array description, so for such a camera the predicted SNR is optimistic; an outside trial on a colour DSLR in 2026-10 found roughly a factor of $\sqrt{2}$, recovered only by hand-adjusting throughput and pixel size. Both cameras in the shipped `other` profile are colour sensors, and that profile carries a caveat saying so. See `validation/QUESTIONS.md` item 18.
 
 ### 5.4 Design Rationale and Model Simplification
 

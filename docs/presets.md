@@ -46,7 +46,8 @@ profile whose numbers are not good enough to plan real observations with says so
 here, in the one place a user picking it will actually look —
 [`validation/provenance.py`](../validation/provenance.py) records where every
 value came from, but that file is in the repository, not in front of someone
-choosing from a dropdown. VLT carries one.
+choosing from a dropdown. VLT carries one, and so does Other, whose two cameras
+are colour sensors the engine models as monochrome (QUESTIONS.md 18).
 
 ## Band-dependent overrides
 

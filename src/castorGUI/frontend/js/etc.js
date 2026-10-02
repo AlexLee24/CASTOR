@@ -874,8 +874,13 @@
         syncGroups('brightness', brightness);
         el('label-target-mag').textContent =
             brightness === 'ab_mag' ? 'Apparent Magnitude (AB)' : 'Apparent Magnitude';
+        // An extended target is read per square arcsecond in every brightness
+        // system, so the unit says so; a total magnitude there is silently wrong.
+        var perArea = form.elements['target.morphology.type'].value === 'extended'
+            ? '/arcsec&sup2;' : '';
+        el('unit-target-mag').innerHTML = 'mag' + perArea;
         el('unit-flux-value').innerHTML =
-            brightness === 'jansky_flux' ? 'Jy' : 'erg/s/cm&sup2;/&Aring;';
+            (brightness === 'jansky_flux' ? 'Jy' : 'erg/s/cm&sup2;/&Aring;') + perArea;
 
         syncGroups('sed', form.elements['target.sed.type'].value);
         syncGroups('options', form.elements['options.type'].value);

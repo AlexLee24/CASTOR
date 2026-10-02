@@ -24,6 +24,7 @@ API returns, rather than a guess.
 Run it straight from a checkout, the way server.py is run; the sys.path line below
 is what makes that work without installing anything.
 """
+import copy
 import json
 import sys
 from datetime import datetime, timezone
@@ -122,14 +123,38 @@ def _format_errors(exc: ValidationError) -> str:
         for err in exc.errors()
     ) or "Invalid input"
 
+def _mark_modified(labels: dict[str, str], preset_instrument: dict[str, Any],
+                   request: schema.ObservationRequest) -> dict[str, str]:
+    """Flags each named piece of hardware whose numbers no longer match its preset.
+
+    The header names the configuration a result came from. Once --set has changed a
+    camera's read noise, printing "ZWO ASI2600MC Pro" alone claims a camera that was
+    not the one calculated, so the name stays (it is still the starting point) but
+    says it was edited.
+    """
+    marked = dict(labels)
+    for section, preset_values in preset_instrument.items():
+        if section in marked and getattr(request.instrument, section).model_dump() != preset_values:
+            marked[section] = f"{marked[section]} (modified)"
+    return marked
+
+# Extended targets are read per square arcsecond in every brightness system
+# (physics.calculate_extended_source_rate scales by the aperture area), so the unit
+# has to say so or a total magnitude looks like a valid input.
+_UNITS = {"vega_mag": "mag", "ab_mag": "mag", "jansky_flux": "Jy",
+          "wavelength_flux": "erg/s/cm²/Å"}
+
 def _header(labels: dict[str, str] | None, request: schema.ObservationRequest) -> list[str]:
     configuration = " · ".join(labels.values()) if labels else "custom configuration"
     brightness = request.target.brightness
+    unit = _UNITS[brightness.type]
+    if isinstance(request.target.morphology, schema.ExtendedMorphology):
+        unit += "/arcsec²"
     described = getattr(brightness, "target_mag", None)
     described = (
-        f"{brightness.type.replace('_mag', '').upper()} {described:g}"
+        f"{brightness.type.replace('_mag', '').upper()} {described:g} {unit}"
         if described is not None
-        else f"{brightness.type} {getattr(brightness, 'flux_value', '')}"
+        else f"{getattr(brightness, 'flux_value', ''):g} {unit}"
     )
     return [
         configuration,
@@ -215,7 +240,8 @@ def cli() -> None:
 @click.option("--filter", "optic_filter", help="Filter within the site (default: the first it lists).")
 @click.option("--ra", type=float, help="Right ascension, degrees J2000.")
 @click.option("--dec", type=float, help="Declination, degrees J2000.")
-@click.option("--mag", type=float, help="Target magnitude (AB unless --set says otherwise).")
+@click.option("--mag", type=float, help="Target magnitude (AB unless --set says otherwise); "
+              "mag/arcsec² for target.morphology.type=extended.")
 @click.option("--exp", type=float, help="Single exposure time, seconds.")
 @click.option("-n", "--exposures", type=int, help="Number of frames; solves for SNR.")
 @click.option("--snr", type=float, help="Target SNR; solves for the number of frames.")
@@ -240,6 +266,7 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
     data: dict[str, Any] = {}
     labels = None
     catalogue = None
+    preset_instrument: dict[str, Any] = {}
 
     if request_file is not None:
         data = _deep_merge(data, _read_request(request_file))
@@ -247,8 +274,12 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
     if site is not None:
         catalogue = _load_presets(presets_file)
         try:
-            data = _deep_merge(data, catalogue.resolve(site, telescope, camera, optic_filter))
+            fragment = catalogue.resolve(site, telescope, camera, optic_filter)
+            data = _deep_merge(data, fragment)
             labels = catalogue.labels(site, telescope, camera, optic_filter)
+            # A copy: _deep_merge hands the fragment's own dicts to data, and --set
+            # below edits data in place, which would edit this reference with it.
+            preset_instrument = copy.deepcopy(fragment.get("instrument", {}))
         except presets.PresetNotFound as exc:
             raise SystemExit(_fail(exc))
     elif any(name is not None for name in (telescope, camera, optic_filter)):
@@ -291,6 +322,9 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
         raise SystemExit(_fail(_format_errors(exc)))
 
     response = run_calculation(request)
+
+    if labels is not None:
+        labels = _mark_modified(labels, preset_instrument, request)
 
     caveat = catalogue.profile(site).caveat if (catalogue and site) else None
 

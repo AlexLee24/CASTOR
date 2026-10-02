@@ -243,6 +243,7 @@
     },
     "other": {
       "name": "Other",
+      "caveat": "Both cameras here are one-shot-colour (Bayer) sensors, but CASTOR models every camera as monochrome: every pixel collecting the band at full QE. Through one colour channel only 1/2 (G) or 1/4 (R, B) of the pixels do, so predicted SNR is optimistic - by about 1.4x in one outside trial on a colour DSLR. See validation/QUESTIONS.md 18.",
       "environment": {
         "location": {
           "latitude_deg": 24.1144,

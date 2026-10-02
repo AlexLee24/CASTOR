@@ -121,6 +121,28 @@ def test_named_hardware_shows_up_in_the_header(run, lulin):
 
     assert "SLT 0.4 m" in result.stdout and "Sloan z'" in result.stdout
 
+def test_edited_hardware_is_not_named_as_the_preset(run, lulin):
+    """--set changes the numbers after the names were chosen; the header must not
+    go on claiming the preset camera was the one calculated."""
+    result = run(*lulin, "--set", "instrument.camera.readout_noise=9.9")
+
+    assert "Sophia (modified)" in result.stdout
+    assert "LOT 1.0 m ·" in result.stdout  # untouched hardware keeps its plain name
+
+def test_restating_a_preset_value_is_not_an_edit(run, lulin):
+    """The mark compares numbers, not whether --set was used."""
+    result = run(*lulin, "--set", "instrument.camera.quantum_efficiency=0.85")
+
+    assert "(modified)" not in result.stdout
+
+def test_the_header_gives_the_brightness_unit(run, lulin):
+    assert "AB 18 mag at" in run(*lulin).stdout
+
+def test_an_extended_target_is_read_per_square_arcsecond(run, lulin):
+    result = run(*lulin, "--set", "target.morphology.type=extended")
+
+    assert "AB 18 mag/arcsec² at" in result.stdout
+
 # ==========================================
 # Never inventing a number quietly
 # ==========================================
