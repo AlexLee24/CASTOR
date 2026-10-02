@@ -19,12 +19,40 @@ model estimates.
 
 ## Requirements & Installation
 
-To use CASTOR, you will need:
+CASTOR needs Python >= 3.12.
 
-- Python >= 3.12
-- `uv` (for dependency management)
+### To use it
 
-You can clone the repository and install the dependencies easily:
+Install it like any Python package, and the `castor` command works from any
+directory:
+
+```bash
+pip install git+https://github.com/happpycorn/CASTOR.git
+```
+
+Either of these does the same, keeping CASTOR in an environment of its own so it
+cannot clash with your other packages:
+
+```bash
+pipx install git+https://github.com/happpycorn/CASTOR.git
+uv tool install git+https://github.com/happpycorn/CASTOR.git
+```
+
+Then check it runs:
+
+```bash
+castor presets
+```
+
+pip and pipx resolve dependencies from the minimum versions in `pyproject.toml`,
+so they may pick newer releases than the ones tested; `uv.lock` records those,
+and only a checkout installed with `uv sync` follows it. The install also brings
+in the GUI's dependencies (FastAPI, pywebview) even if you only use the command
+line.
+
+### To work on it
+
+Clone the repository and let `uv` install the exact locked versions:
 
 ```bash
 git clone https://github.com/happpycorn/CASTOR.git
@@ -32,8 +60,7 @@ cd CASTOR
 uv sync
 ```
 
-See `pyproject.toml` for dependency requirements and `uv.lock` for the versions
-used by this checkout.
+Inside a checkout, run the CLI as `uv run castor ...`.
 
 ## Usage
 
@@ -63,8 +90,10 @@ usually one line. Everything the CLI filled in for you is reported on stderr, so
 "the tool chose this" never gets mistaken for "the observer meant this".
 
 ```bash
-uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
 ```
+
+From a development checkout, prefix it with `uv run`.
 
 | command | |
 |---|---|

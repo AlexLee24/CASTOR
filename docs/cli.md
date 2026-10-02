@@ -7,11 +7,20 @@ preset catalogue it shares with the GUI.
 > of the same engine ([Architecture](architecture.md)) and the same preset file
 > ([Presets](presets.md)); neither is part of it.
 
+Installed with pip, pipx or `uv tool install` (see the README), `castor` is an
+ordinary command:
+
+```bash
+castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+```
+
+From a development checkout it runs through the project environment instead:
+
 ```bash
 uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
 ```
 
-For a session of several commands, put the environment on the path once and drop
+For a session of several commands there, put the environment on the path once and drop
 the prefix. `rehash` is what zsh needs to notice — it caches command lookups, so
 without it the shell keeps insisting there is no `castor`:
 
