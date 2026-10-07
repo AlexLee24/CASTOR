@@ -445,6 +445,20 @@ def test_a_provenance_table_that_is_not_utf8_is_bad_input(run, table_for_shipped
     assert result.stderr.startswith("error: Cannot read provenance table")
     assert "not UTF-8 text" in result.stderr
 
+def test_a_preset_file_that_is_not_utf8_is_bad_input(run, monkeypatch, tmp_path):
+    """The same file read through the variable, as every command now reads it."""
+    path = tmp_path / "utf16.json"
+    path.write_text(json.dumps({"profiles": {}}), encoding="utf-16")
+
+    named = run("check", "--presets-file", str(path))
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(path))
+    searched = run("check")
+
+    for result in (named, searched):
+        assert result.exit_code == 3
+        assert result.stderr.startswith("error: Cannot read presets at")
+        assert "not UTF-8 text" in result.stderr
+
 # ==========================================
 # Several preset files
 # ==========================================

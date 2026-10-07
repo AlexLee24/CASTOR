@@ -427,6 +427,11 @@ def _read(source: Path) -> Any:
         raw = source.read_text(encoding="utf-8")
     except OSError as exc:
         raise PresetError(f"Cannot read presets at {source}: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        # Windows PowerShell 5.1 writes UTF-16 when output is redirected with >,
+        # and a file on CASTOR_PRESETS_PATH may have been written on such a host.
+        raise PresetError(
+            f"Cannot read presets at {source}: it is not UTF-8 text ({exc})") from exc
 
     try:
         return json.loads(raw)
