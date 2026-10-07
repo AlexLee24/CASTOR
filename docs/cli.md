@@ -197,6 +197,8 @@ both implement "first entry listed is the default", "a hardware-only profile
 fills in no location", "`median_seeing_fwhm` is displayed and never applied". The
 browser cannot run Python, so two implementations are unavoidable; what
 `presets.py` prevents is a *third* appearing the moment another Python caller
-wants presets. Hardware named `PROFILE/KEY` exists only in `presets.py`: the
-browser's selectors stay within one site, so there is nothing for `etc.js` to
-mirror.
+wants presets. What keeps the two from drifting apart is `tests/test_gui_form.py`,
+which runs `etc.js` under Node and checks the request it sends against
+`resolve()` for every shipped configuration. Hardware named `PROFILE/KEY` exists
+only in `presets.py`: the browser's selectors stay within one profile, so there
+is nothing for `etc.js` to mirror.

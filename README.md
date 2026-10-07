@@ -84,6 +84,9 @@ uv run pytest              # the specification suite, on every commit
 uv run pytest validation   # the comparisons, on purpose — see validation/VALIDATION_REPORT.md
 ```
 
+The browser form's tests (`tests/test_gui_form.py`) run `etc.js` under Node.js
+and are skipped where it is not installed.
+
 ## Useful Resources
 
 - **[System Architecture](docs/architecture.md):** Core engine components, modular design, and data flow pipeline.

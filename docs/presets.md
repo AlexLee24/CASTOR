@@ -131,8 +131,9 @@ read beside these sites rather than instead of them.
 | | reads |
 |---|---|
 | `presets.load(*paths)` | exactly the files given, merged in order; with none, the shipped file alone |
-| `castor` with no `--presets-file`, and castorGUI's presets route | `presets.search_path()`: the shipped file, then each file on `CASTOR_PRESETS_PATH` |
+| `castor` with no `--presets-file`, and castorGUI's presets route (`server.py`) | `presets.search_path()`: the shipped file, then each file on `CASTOR_PRESETS_PATH` |
 | `castor … --presets-file A --presets-file B` | A, then B, and nothing else |
+| Kinder's presets route | the shipped file alone, as raw bytes; reading the variable too would mean serving `presets.document(*presets.search_path(…))`, still without `jsonify`'s key sorting |
 
 `CASTOR_PRESETS_PATH` is a list like `PATH` (`:`-separated, `;` on Windows).
 `load()` never reads it on its own: a library caller gets the files it named.
@@ -191,6 +192,25 @@ refused when read: such a name could not be told from a qualified one. None
 does today. Qualifying with the site's own profile (`lulin/SLT` under
 `--site lulin`) is the plain name written in full.
 
-The browser does not offer this. Its selectors stay within the chosen site, so
-the resolution rules it mirrors are unchanged; other files' profiles simply
-appear as more sites to choose from.
+### In the browser
+
+The browser does not offer `PROFILE/KEY`: its selectors stay within the chosen
+profile. Another file's profiles are listed in the same profile selector as the
+sites, but a hardware family chosen there is not a site and gives the form no
+sky. The form keeps the one it holds — the last site's location, `mu_dark` and
+extinction — **less the previous filter's band correction**, which leaves with
+that filter just as a borrowed filter's sky stays behind above. So a family
+chosen after Lulin sends the preset values this resolves to:
+
+```bash
+castor calc --site lulin --telescope FAMILY/T --camera FAMILY/C --filter FAMILY/F …
+```
+
+Lulin's site-wide sky, that is, not its r' sky under a filter never measured
+there. `tests/test_gui_form.py` holds the browser to that, and to `resolve()`
+for every shipped configuration. A sky value typed over by hand, or read in by
+LOAD, is the reader's own and stays.
+
+Known limitation: nothing on the page but the location fields says whose sky a
+family is running under — the selector shows the family's name — and the way to
+choose that site is to pick it first, then the family.
