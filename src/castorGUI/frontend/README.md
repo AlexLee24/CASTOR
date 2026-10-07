@@ -42,6 +42,14 @@ Those routes must accept and return exactly what `castor.schema` defines:
 `server.py` is the reference implementation, and is small on purpose — the
 contract is the schema, not the server.
 
+The presets route returns the preset document with its key order intact, since
+the first entry in each catalogue is the default. A Python host can serve what
+`server.py` serves with
+`castorCLI.presets.document(*castorCLI.presets.search_path())`: the shipped
+file, then any files on `CASTOR_PRESETS_PATH`, validated, and as written. A
+host whose copy of the shipped file lives elsewhere passes that path to
+`search_path()`.
+
 Everything the CSS touches lives under `.castor-etc`, and the page background,
 fonts, outer padding and page title are left to the host — the partial starts
 straight at the two panels, so a host with its own nav bar and heading above the

@@ -130,7 +130,9 @@ presets are deliberately out of scope for `castor/` (§1.3), and a host with its
 hardware database — Kinder is one — has no use for a reader of this repository's
 JSON file. Putting it in the engine would make it dead weight there.
 `castorCLI/provenance.py`, the check that every preset number says where it came
-from, sits beside it for the same reason.
+from, sits beside it for the same reason. A host that writes preset files of its
+own instead can have them read beside the shipped one
+([presets](presets.md#several-files)); the engine sees none of it either way.
 
 ### Module Responsibilities
 

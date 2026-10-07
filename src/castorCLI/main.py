@@ -26,6 +26,7 @@ is what makes that work without installing anything.
 """
 import json
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -116,11 +117,17 @@ def _parse_set(item: str) -> tuple[str, Any]:
 
 def _format_errors(exc: ValidationError) -> str:
     """The same flattening server.py returns over HTTP, so a field named by the API
-    is named identically here."""
-    return "; ".join(
+    is named identically here.
+
+    Notes added to the error follow it in parentheses. presets.load() adds one naming
+    the file a preset error came from, since a location starting at "profiles" says
+    nothing about which of several files holds it; a request's errors carry none.
+    """
+    message = "; ".join(
         "{}: {}".format(".".join(str(part) for part in err["loc"]), err["msg"])
         for err in exc.errors()
     ) or "Invalid input"
+    return message + "".join(f" ({note})" for note in getattr(exc, "__notes__", ()))
 
 def _header(labels: dict[str, str] | None, request: schema.ObservationRequest) -> list[str]:
     configuration = " · ".join(labels.values()) if labels else "custom configuration"
@@ -167,9 +174,10 @@ def _emit_notes(assumed: list[tuple[str, Any, str]], ignored: list[str],
     """Everything the caller did not ask for goes to stderr, so stdout stays the answer."""
     # First, because it qualifies every number printed above it. A profile that
     # cannot be trusted for real planning has to say so where the person running
-    # the calculation will see it, not only in the repository.
+    # the calculation will see it, not only in the repository. One line each when
+    # hardware from another profile brought its own along (see _caveat).
     if caveat:
-        click.echo(f"\nCAVEAT: {caveat}", err=True)
+        click.echo("\n" + "\n".join(f"CAVEAT: {line}" for line in caveat.splitlines()), err=True)
 
     if ignored:
         click.echo("ignored (a saved form holds more than a request does): "
@@ -196,6 +204,13 @@ def _emit_notes(assumed: list[tuple[str, Any, str]], ignored: list[str],
 # Commands
 # ==========================================
 
+# Shared by every command that reads presets. Naming any file replaces the search
+# path rather than adding to it, so a single --presets-file still means exactly
+# what it always has; reading CASTOR's sites beside another file means naming both,
+# or putting the other file on CASTOR_PRESETS_PATH.
+PRESETS_FILE_HELP = ("Preset file to read instead of the shipped one and any on "
+                     "CASTOR_PRESETS_PATH. Repeat to merge several, in order.")
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def cli() -> None:
     """CASTOR — exposure time calculator.
@@ -205,9 +220,11 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--site", help="Observing profile; fills in the site's sky and its hardware.")
-@click.option("--telescope", help="Telescope within the site (default: the first it lists).")
-@click.option("--camera", help="Camera within the site (default: the first it lists).")
-@click.option("--filter", "optic_filter", help="Filter within the site (default: the first it lists).")
+@click.option("--telescope", help="Telescope within the site (default: the first it lists), "
+                                   "or PROFILE/KEY to take one from another profile.")
+@click.option("--camera", help="Camera within the site (default: the first it lists), or PROFILE/KEY.")
+@click.option("--filter", "optic_filter",
+              help="Filter within the site (default: the first it lists), or PROFILE/KEY.")
 @click.option("--ra", type=float, help="Right ascension, degrees J2000.")
 @click.option("--dec", type=float, help="Declination, degrees J2000.")
 @click.option("--mag", type=float, help="Target magnitude (AB unless --set says otherwise).")
@@ -220,7 +237,7 @@ def cli() -> None:
               help="Saved request to start from; '-' reads stdin. The web form's SAVE writes this shape.")
 @click.option("--set", "overrides", multiple=True, metavar="PATH=VALUE",
               help="Override any field by dotted path, e.g. --set environment.mu_dark=20.8. Repeatable.")
-@click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
+@click.option("--presets-file", type=click.Path(path_type=Path), multiple=True, help=PRESETS_FILE_HELP)
 @click.option("--json", "as_json", is_flag=True, help="Emit request, response and assumptions as JSON.")
 def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, snr,
          seeing, at_time, request_file, overrides, presets_file, as_json) -> None:
@@ -287,7 +304,7 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
 
     response = run_calculation(request)
 
-    caveat = catalogue.profile(site).caveat if (catalogue and site) else None
+    caveat = _caveat(catalogue, site, telescope, camera, optic_filter) if (catalogue and site) else None
 
     if as_json:
         click.echo(json.dumps({
@@ -305,13 +322,17 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
         raise SystemExit(EXIT_SATURATED)
 
 @cli.command(name="presets")
-@click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
+@click.option("--presets-file", type=click.Path(path_type=Path), multiple=True, help=PRESETS_FILE_HELP)
 @click.option("--json", "as_json", is_flag=True, help="Emit the preset file itself.")
 @click.option("--bands", is_flag=True,
               help="Also show what each filter overrides. Lulin's most important "
                    "numbers live here, not on the site or the telescope.")
 def list_presets(presets_file, as_json, bands) -> None:
-    """List the sites and hardware --site can name. A * marks each catalogue's default."""
+    """List the sites and hardware --site can name. A * marks each catalogue's default.
+
+    --telescope, --camera and --filter can also take an entry from another profile
+    than the site's, written PROFILE/KEY.
+    """
     catalogue = _load_presets(presets_file)
 
     if as_json:
@@ -413,7 +434,7 @@ def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
     return checked, problems
 
 @cli.command(name="check")
-@click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
+@click.option("--presets-file", type=click.Path(path_type=Path), multiple=True, help=PRESETS_FILE_HELP)
 @click.option("--provenance", "provenance_file", type=click.Path(path_type=Path),
               help="Also hold every number in the file to this provenance table, "
                    "JSON of {path: [value, class, note]}.")
@@ -438,10 +459,9 @@ def check_presets(presets_file, provenance_file) -> None:
             table = provenance.load_table(provenance_file)
         except provenance.ProvenanceError as exc:
             raise SystemExit(_fail(exc))
-        # The file as written, not the loaded catalogue: a record vouches for the
-        # number the file holds, and loading coerces.
-        source = presets_file if presets_file is not None else presets.DEFAULT_PATH
-        profiles = json.loads(Path(source).read_text(encoding="utf-8")).get("profiles", {})
+        # The files as written, not the loaded catalogue: a record vouches for the
+        # number a file holds, and loading coerces. The same files, merged the same way.
+        profiles = _written_profiles(presets_file)
         held = len(provenance.walk(profiles))
         problems += [str(problem) for problem in provenance.check(profiles, table)]
 
@@ -518,12 +538,46 @@ def _drop_path(data: dict, loc: tuple) -> str | None:
         return ".".join(trail + [str(leaf)])
     return None
 
-def _load_presets(presets_file: Path | None) -> presets.PresetFile:
+def _preset_files(presets_file: tuple[Path, ...] | Path | None) -> tuple[Path, ...]:
+    """The files --presets-file names or, when it names none, the search path.
+
+    One path or None is still accepted, as before the option could be repeated.
+    """
+    files = (presets_file,) if isinstance(presets_file, (str, Path)) else tuple(presets_file or ())
+    return files or tuple(presets.search_path())
+
+def _load_presets(presets_file: tuple[Path, ...] | Path | None) -> presets.PresetFile:
+    """Reads and merges the files _preset_files() names."""
+    return _read_presets(presets.load, presets_file)
+
+def _written_profiles(presets_file: tuple[Path, ...] | Path | None) -> dict[str, Any]:
+    """The same files' profiles as written, merged as _load_presets() merges them.
+
+    What a provenance record vouches for: presets.document() keeps every number
+    exactly as its file spells it, where load() would coerce it.
+    """
+    return _read_presets(presets.document, presets_file)["profiles"]
+
+def _read_presets(reader: Callable[..., Any], presets_file: tuple[Path, ...] | Path | None) -> Any:
     try:
-        return presets.load(presets_file)
+        return reader(*_preset_files(presets_file))
     except (presets.PresetError, ValidationError) as exc:
         message = _format_errors(exc) if isinstance(exc, ValidationError) else str(exc)
         raise SystemExit(_fail(message))
+
+def _caveat(catalogue: presets.PresetFile, site: str, telescope: str | None,
+            camera: str | None, optic_filter: str | None) -> str | None:
+    """Every caveat behind the configuration, one per line, or None.
+
+    The site's own reads exactly as it always has. One brought in by hardware named
+    from another profile is prefixed with that profile's id, since nothing else on
+    screen says where the borrowed numbers came from.
+    """
+    caveats = catalogue.caveats(site, telescope, camera, optic_filter)
+    return "\n".join(
+        text if profile_id == site else f"{profile_id}: {text}"
+        for profile_id, text in caveats.items()
+    ) or None
 
 def _read_request(path: Path) -> dict:
     try:
