@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from castor import schema
 from castor.batch_calculator import run_batch_calculation, _expand_time_series
+from castor.calculator import run_calculation
 
 # ==========================================
 # Fixtures: prepare fake batch test data and interceptors
@@ -172,3 +173,186 @@ def test_batch_pipeline_real_astropy_path(batch_base_request):
     assert len(response.core.timestamps_iso) == 13
     assert len(response.core.total_snr) == 13
     assert all(snr > 0 for snr in response.core.total_snr)
+
+
+# ==========================================
+# Per-timestamp data: what each step was computed from
+# ==========================================
+
+def _per_step_arrays(response):
+    """Every list the batch response carries, by dotted name."""
+    arrays = {}
+    for block in ("core", "budget", "diagnostics", "ephemeris"):
+        for name, value in getattr(response, block).model_dump().items():
+            if isinstance(value, list):
+                arrays[f"{block}.{name}"] = value
+    for which in ("single", "total"):
+        for name, value in getattr(response.noise, which).model_dump().items():
+            arrays[f"noise.{which}.{name}"] = value
+    return arrays
+
+def test_every_per_step_array_is_as_long_as_the_series(mock_moon_batch, batch_base_request):
+    """Including the terms built only from constants, such as read noise, which
+    physics hands back as a single number."""
+    response = run_batch_calculation(batch_base_request)
+    arrays = _per_step_arrays(response)
+
+    assert {len(values) for values in arrays.values()} == {13}
+    assert len(set(arrays["noise.total.readout_variance"])) == 1
+    assert len(set(arrays["noise.single.num_pixels_background"])) == 1
+
+def test_a_single_point_series_is_still_a_series(mock_moon_batch, batch_base_request):
+    batch_base_request.environment.end_time_utc = batch_base_request.environment.start_time_utc
+    arrays = _per_step_arrays(run_batch_calculation(batch_base_request))
+    assert {len(values) for values in arrays.values()} == {1}
+
+@pytest.mark.parametrize("options", [
+    schema.BatchSolveForTime(aperture_factor=0.85, single_exp_time=120.0, target_snr=50.0),
+    schema.BatchSolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=7),
+])
+def test_each_steps_snr_is_exactly_its_noise_over_root_variance(mock_moon_batch, batch_base_request, options):
+    batch_base_request.options = options
+    batch_base_request.options.sky_annulus = schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0)
+    batch_base_request.instrument.camera.background_flatness_fraction = 0.02
+    response = run_batch_calculation(batch_base_request)
+    single, total = response.noise.single, response.noise.total
+
+    for i in range(len(response.core.timestamps_iso)):
+        assert single.signal[i] / np.sqrt(single.total_variance[i]) == response.core.single_snr[i]
+        assert total.signal[i] / np.sqrt(total.total_variance[i]) == response.core.total_snr[i]
+
+def test_total_time_follows_the_frames_at_each_step(mock_moon_batch, batch_base_request):
+    """In solve_time the frame count moves with the sky, and the total time and the
+    stacked noise terms move with it."""
+    response = run_batch_calculation(batch_base_request)
+    frames = response.core.required_exposures
+
+    assert response.core.total_exp_time == [300.0 * n for n in frames]
+    assert response.noise.total.num_exposures == frames
+    assert response.noise.total.exp_time == response.core.total_exp_time
+    assert set(response.noise.single.exp_time) == {300.0}
+    assert set(response.noise.single.num_exposures) == {1.0}
+
+    batch_base_request.options = schema.BatchSolveForSNR(aperture_factor=1.5, single_exp_time=300.0, num_exposures=5)
+    given = run_batch_calculation(batch_base_request)
+    assert set(given.core.total_exp_time) == {1500.0}
+    assert set(given.noise.total.num_exposures) == {5.0}
+
+def test_each_step_reports_the_airmass_sky_and_moon_it_used(mock_moon_batch, batch_base_request):
+    """mock_moon_batch walks the target from 30 to 60 degrees from the zenith under a
+    full moon 90 degrees away, with the sky held at 21.0."""
+    response = run_batch_calculation(batch_base_request)
+    zenith = np.linspace(30.0, 60.0, 13)
+
+    np.testing.assert_allclose(response.diagnostics.airmass, 1.0 / np.cos(np.radians(zenith)), rtol=1e-12)
+    assert set(response.diagnostics.sky_surface_brightness) == {21.0}
+    assert set(response.ephemeris.moon_phase_angle_deg) == {0.0}
+    assert set(response.ephemeris.moon_separation_deg) == {90.0}
+
+def test_the_optimal_exposure_moves_with_the_sky(mock_moon_batch, batch_base_request):
+    camera = batch_base_request.instrument.camera
+    response = run_batch_calculation(batch_base_request)
+
+    expected = [camera.readout_noise ** 2 / (sky + camera.dark_current_rate)
+                for sky in response.budget.sky_count_rate]
+    np.testing.assert_allclose(response.core.optimal_exposure_time, expected, rtol=1e-12)
+    assert response.core.background_dominance_factor == [1.0] * 13
+
+def _without_t_opt(response):
+    """The batch response with the two fields k is allowed to touch taken out."""
+    dumped = response.model_dump()
+    del dumped["core"]["optimal_exposure_time"]
+    del dumped["core"]["background_dominance_factor"]
+    return dumped
+
+@pytest.mark.parametrize("options", [
+    schema.BatchSolveForTime(aperture_factor=0.85, single_exp_time=300.0, target_snr=100.0),
+    schema.BatchSolveForSNR(aperture_factor=1.5, single_exp_time=300.0, num_exposures=5),
+])
+@pytest.mark.parametrize("k", [0.5, 3.0, 3.1235])
+def test_k_scales_every_steps_t_opt_and_moves_nothing_else(mock_moon_batch, batch_base_request, options, k):
+    """The time-series counterpart of the single test in test_calculator.py: the
+    requested k reaches the t_opt of every step, as k² times the crossover's, is
+    echoed at every step, and leaves the SNRs, frame counts, rates, noise terms
+    and ephemeris exactly where they were."""
+    batch_base_request.options = options
+    baseline = run_batch_calculation(batch_base_request)
+
+    request = batch_base_request.model_copy(deep=True)
+    request.options.background_dominance_factor = k
+    response = run_batch_calculation(request)
+
+    np.testing.assert_allclose(response.core.optimal_exposure_time,
+                               [k ** 2 * t for t in baseline.core.optimal_exposure_time], rtol=1e-12)
+    assert response.core.background_dominance_factor == [k] * 13
+    assert _without_t_opt(response) == _without_t_opt(baseline)
+
+def _leaves(dumped: dict, prefix: str = ""):
+    """(dotted path, value) for every non-dict value in a model_dump()."""
+    for key, value in dumped.items():
+        if isinstance(value, dict):
+            yield from _leaves(value, f"{prefix}{key}.")
+        else:
+            yield f"{prefix}{key}", value
+
+# What the single response carries and a batch response does not: the Stage 2
+# values that are fixed for a whole series (architecture.md §5.2).
+SINGLE_ONLY = {
+    "diagnostics.total_fwhm", "diagnostics.effective_area", "diagnostics.pixel_scale",
+    "diagnostics.total_throughput", "diagnostics.enclosed_flux_fraction",
+    "diagnostics.num_pixels_aperture", "diagnostics.num_pixels_sky_estimate",
+}
+
+def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
+    """The same physics in two orchestrators drifts unless a test holds them
+    together (LESSONS.md). Unmocked, at one pinned instant, with the moon on in
+    both, everything the two responses share must agree.
+
+    "Share" is read off the two dumps, not listed by hand, so a field added to
+    both is compared without anyone remembering to add it here, and a field the
+    single response gains alone fails until it is named in SINGLE_ONLY. Each
+    per-step list holds one value, which must be the single response's. flags
+    are not per step — the batch's summarise the whole series, here one step —
+    so is_saturated must match, and so must the number of warnings; their
+    wording differs (the batch's says "in time series").
+
+    k is set off its default, and passed to both through the one options dump,
+    so that t_opt and its echoed k are held to the same convention in both
+    orchestrators rather than agreeing only because both fell back to 1.0.
+
+    throughput_correction stays at 1.0 here: the batch calculator does not apply
+    it (the single one does), which is a separate fix this test does not cover."""
+    assert batch_base_request.instrument.throughput_correction == 1.0
+    batch_base_request.instrument.camera.background_flatness_fraction = 0.02
+    batch_base_request.options = schema.BatchSolveForTime(
+        aperture_factor=0.85, single_exp_time=120.0, target_snr=40.0,
+        sky_annulus=schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0),
+        background_dominance_factor=3.0)
+    env = batch_base_request.environment
+    env.end_time_utc = env.start_time_utc
+    batch = run_batch_calculation(batch_base_request)
+
+    single = run_calculation(schema.ObservationRequest(
+        instrument=batch_base_request.instrument,
+        target=batch_base_request.target,
+        environment=schema.EnvironmentCondition(
+            location=env.location, observing_time_utc=env.start_time_utc, auto_calc_background=True,
+            mu_dark=env.mu_dark, zodiacal_share=env.zodiacal_share, extinction_coeff=env.extinction_coeff,
+            seeing_fwhm=env.seeing_fwhm, diffraction_fwhm=env.diffraction_fwhm,
+            optical_fwhm=env.optical_fwhm, tracking_fwhm=env.tracking_fwhm),
+        options=schema.SolveForTime(**batch_base_request.options.model_dump(exclude={"type"})),
+    ))
+
+    in_batch = dict(_leaves(batch.model_dump()))
+    in_single = dict(_leaves(single.model_dump()))
+    assert set(in_single) - set(in_batch) == SINGLE_ONLY
+
+    assert batch.flags.is_saturated == single.flags.is_saturated
+    assert len(batch.flags.warnings) == len(single.flags.warnings)
+    per_step = {path: value for path, value in in_single.items()
+                if path in in_batch and not path.startswith("flags.")}
+    assert {"core.saturation_time_limit", "ephemeris.moon_elevation_deg",
+            "core.optimal_exposure_time", "core.background_dominance_factor"} <= set(per_step)
+    assert in_single["core.background_dominance_factor"] == 3.0
+    for path, value in per_step.items():
+        assert in_batch[path] == [pytest.approx(value, rel=1e-9, abs=1e-9)], path

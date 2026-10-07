@@ -225,6 +225,28 @@ def test_set_parses_json_values(run, lulin):
 
     assert json.loads(result.stdout)["request"]["target"]["morphology"]["type"] == "extended"
 
+def test_k_is_reached_with_set_and_echoed_both_ways(run, lulin):
+    """No flag is needed for the t_opt convention: --set reaches it, the request
+    echo shows what was asked and the response shows what was used."""
+    default = json.loads(run(*lulin, "--json").stdout)
+    doubled = json.loads(run(*lulin, "--set", "options.background_dominance_factor=2", "--json").stdout)
+
+    assert default["request"]["options"]["background_dominance_factor"] == 1.0
+    assert doubled["request"]["options"]["background_dominance_factor"] == 2.0
+    assert doubled["response"]["core"]["background_dominance_factor"] == 2.0
+    assert doubled["response"]["core"]["optimal_exposure_time"] == pytest.approx(
+        4.0 * default["response"]["core"]["optimal_exposure_time"], rel=1e-12
+    )
+
+def test_a_non_default_k_is_named_beside_the_time_it_changes(run, lulin):
+    """The default output is unchanged; off the default the reader is told which
+    k the background-limited time was solved for."""
+    assert "(k =" not in run(*lulin).stdout
+
+    stated = run(*lulin, "--set", "options.background_dominance_factor=3.1235")
+    line = next(row for row in stated.stdout.splitlines() if "Background-limited at" in row)
+    assert line.endswith("(k = 3.1235)")
+
 # ==========================================
 # Reading back what the form saved
 # ==========================================
@@ -278,6 +300,48 @@ def test_json_carries_the_request_the_response_and_the_choices(run, lulin):
 def test_json_stdout_is_only_json(run, lulin):
     """Anything else on stdout would break the caller that reaches for --json."""
     json.loads(run(*lulin, "--json").stdout)
+
+def test_json_has_the_keys_cli_md_names(run, lulin):
+    """docs/cli.md lists the top-level keys for a caller writing a strict parser."""
+    payload = json.loads(run(*lulin, "--json").stdout)
+
+    assert set(payload) == {"assumed", "ignored", "caveat", "request", "response"}
+
+def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
+    """--json is the whole response, so what the engine now reports about how it got
+    its answer arrives with it: the variance terms, the total time, the airmass
+    and sky it used, and where the target and moon were."""
+    response = json.loads(run(*lulin, "--json").stdout)["response"]
+
+    assert response["core"]["total_exp_time"] == 3000.0          # -n 10 --exp 300
+    assert response["diagnostics"]["airmass"] >= 1.0
+    assert 15.0 < response["diagnostics"]["sky_surface_brightness"] < 25.0
+    for block in ("single", "total"):
+        assert set(response["noise"][block]) == {
+            "exp_time", "num_exposures", "signal", "source_variance", "sky_variance",
+            "dark_variance", "readout_variance", "flatness_variance", "total_variance",
+            "num_pixels_background",
+        }
+    assert response["noise"]["total"]["num_exposures"] == 10
+    assert response["ephemeris"]["target_elevation_deg"] == pytest.approx(81.5, abs=0.5)   # WELL_PLACED
+    assert set(response["ephemeris"]) == {
+        "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+    }
+
+@pytest.mark.parametrize("question, rows", [
+    (["-n", "10"], ["Total SNR", "Single-frame SNR", "Total time", "Saturates after",
+                    "Background-limited at", "Total FWHM"]),
+    (["--snr", "50"], ["Total SNR", "Single-frame SNR", "Exposures needed", "Total time",
+                       "Saturates after", "Background-limited at", "Total FWHM"]),
+])
+def test_the_text_answer_keeps_its_rows(run, question, rows):
+    """The response grew; what calc prints did not. Its rows are the same ones, in
+    the same order, so nothing that reads stdout has to change."""
+    result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
+                 "--mag", "21", "--exp", "300", *question, "--time", WELL_PLACED)
+
+    printed = [line[2:24].strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    assert printed == rows
 
 # ==========================================
 # Discovery

@@ -19,7 +19,7 @@ The algorithm architecture follows a strict forward-propagation pipeline, progre
 * **Stage 1: External Input Parameters:** The foundational stage comprising user-defined environmental, hardware, and observational settings.
 * **Stage 2: Physical & Environmental Conversions:** Translates external parameters into physical and optical characteristics, such as Airmass ($X$), Effective Area ($A_{\text{eff}}$), and Total FWHM ($FWHM_{\text{total}}$).
 * **Stage 3: Photoelectron Count Rates:** Computes the intermediate photoelectron count rates for the target source ($Rate_{\text{src}}$), sky background ($Rate_{\text{sky}}$), and peak pixels ($Rate_{\text{peak}}$) based on the Stage 2 outputs.
-* **Stage 4: Final Output Metrics:** Calculates the observational parameters, including the total SNR ($\text{SNR}_{\text{total}}$), single-exposure SNR ($\text{SNR}_{\text{single}}$), required number of exposures ($N_{\text{exp}}$), and saturation limits ($t_{\text{sat}}$).
+* **Stage 4: Final Output Metrics:** Calculates the observational parameters, including the total SNR ($\text{SNR}_{\text{total}}$), single-exposure SNR ($\text{SNR}_{\text{single}}$), required number of exposures ($N_{\text{exp}}$), total integration time ($t_{\text{total}}$), saturation limits ($t_{\text{sat}}$), and the noise budget behind both SNRs: the signal and each variance term (§4.3.6).
 
 ### 2.2 Processing Flowchart
 
@@ -56,10 +56,10 @@ flowchart LR
     
     %% Observation Settings
     kap([APERTURE_FACTOR = 0.85])
-    t_tot([total_exp_time])
     t_single_in([single_exp_time])
     N_exp_in([num_exposures])
     SNR_tgt([target_snr])
+    k_bg([background_dominance_factor])
 
     %% ==========================================
     %% Layer 2: Level III Physical Conversions
@@ -90,6 +90,7 @@ flowchart LR
     N_exp_out[Required num_exposures]
     t_sat[saturation_time]
     t_opt[optimal_exposure_time]
+    t_tot[total_exp_time]
 
     %% ==========================================
     %% Dependencies
@@ -117,9 +118,10 @@ flowchart LR
     t_tot & t_single_in & N_exp_in --> SNR_total
     
     SNR_tgt & SNR_single --> N_exp_out
+    t_single_in & N_exp_in & N_exp_out --> t_tot
     
     FWC & R_peak & R_sky & R_dark --> t_sat
-    R_sky & R_dark & RON --> t_opt
+    R_sky & R_dark & RON & k_bg --> t_opt
 
     %% ==========================================
     %% Styling Classes
@@ -129,10 +131,10 @@ flowchart LR
     classDef layer3 stroke:#2ecc71,stroke-width:2.5px;
     classDef layer4 stroke:#f39c12,stroke-width:3px;
 
-    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_tot,t_single_in,N_exp_in,SNR_tgt layer1;
+    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_single_in,N_exp_in,SNR_tgt,k_bg layer1;
     class X,Flux_moon,mu_sky,FWHM_tot,Ep,A_eff,S_pix,T_sys layer2;
     class f_enc,N_pix,R_sky,R_src,R_peak layer3;
-    class SNR_total,SNR_single,N_exp_out,t_sat,t_opt layer4;
+    class SNR_total,SNR_single,N_exp_out,t_sat,t_opt,t_tot layer4;
 ```
 
 ## 3. Input Parameters Definition (Stage 1)
@@ -200,8 +202,8 @@ This profile defines the physical environment, geometric constraints, and atmosp
 | --- | --- | --- | --- |
 | `location` | $Lat, Lon, Elev$ | deg, m | Strict geographic bounds for observer (Latitude: $\pm 90^\circ$, Longitude: $\pm 180^\circ$). |
 | `observing_time_utc` | $t_{\text{obs}}$ | ISO 8601 | Timezone-aware observation timestamp. |
-| `auto_calc_background` | - | boolean | Selects the source of $\mu_{\text{sky}}$ (§4.1.1): `true` layers the real-time lunar contribution on top of `mu_dark`; `false` uses `mu_dark` as-is. `mu_dark` is required either way — this flag never derives it. |
-| `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky. Used directly, or as the baseline for `auto_calc_background`. Where `zodiacal_share` accompanies it, this is the *local* component only — airglow and light pollution — with zodiacal light and scattered starlight split back out; where it does not, this is the whole moonless sky, undecomposed. |
+| `auto_calc_background` | - | boolean | Selects the source of $\mu_{\text{sky}}$ (§4.1.1): `true` layers the real-time lunar contribution on top of `mu_dark`; `false` leaves the moon out. A `zodiacal_share`, where set, applies either way. `mu_dark` is required either way — this flag never derives it. |
+| `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky, and the baseline every $\mu_{\text{sky}}$ is built on (§4.1.1). Where `zodiacal_share` accompanies it, this is the *local* component only — airglow and light pollution — with zodiacal light and scattered starlight split back out; where it does not, this is the whole moonless sky, undecomposed. |
 | `zodiacal_share` | - | dimensionless, optional | Fraction of the *original, undecomposed* moonless-sky measurement `mu_dark` was split from that was zodiacal light and scattered starlight, at this site's own reference sightline. `None` (the default, and the value for every site without this measurement) means not modelled: `mu_dark` is the whole sky and §4.1.1's $Flux_{\text{zodi}}$ term is zero. |
 | `extinction_coeff` | $k_{\text{ext}}$ | mag/airmass | Atmospheric attenuation per unit airmass. |
 | `fwhm_components` | $FWHM_{\text{comps}}$ | arcsec | Spatial spreading errors (Seeing, Diffraction, Optical, Tracking). |
@@ -213,10 +215,12 @@ This profile holds user-configurable settings that dictate the desired constrain
 | Python Field | Math Symbol | Unit | Description |
 | --- | --- | --- | --- |
 | `aperture_factor` | $k_{\text{ap}}$ | dimensionless | Multiplier defining the photometric aperture radius, in units of $FWHM_{\text{tot}}$. No schema default; callers supply it, and both shipped clients send 0.85 (§5.2). |
-| `total_exp_time` | $t_{\text{total}}$ | s | Cumulative integration time across all frames. |
 | `single_exp_time` | $t_{\text{single}}$ | s | Integration time for an individual sub-exposure frame. |
 | `num_exposures` | $N_{\text{exp}}$ | count | Total number of exposure frames. |
 | `target_snr` | $\text{SNR}_{\text{target}}$ | dimensionless | Goal Signal-to-Noise Ratio to solve for time or exposures. |
+| `background_dominance_factor` | $k$ | dimensionless | How many times the readout noise the background shot noise must reach in $t_{\text{opt}}$ (§4.3.5). Moves $t_{\text{opt}}$ only. Default $1.0$, the crossover; provisional. |
+
+The cumulative integration time $t_{\text{total}} = t_{\text{single}} \cdot N_{\text{exp}}$ is not a request field. It follows from the two above — $N_{\text{exp}}$ given (`solve_snr`) or solved for (`solve_time`, §4.3.3) — and is reported as `core.total_exp_time`. It is integration time only; readout overhead is not modelled (`validation/QUESTIONS.md` 11).
 
 ## 4. Mathematical Formulation and Theoretical Basis
 
@@ -231,7 +235,9 @@ The airmass ($X$) is approximated using the secant of the zenith angle ($z$), de
 
 $$X \approx \sec(z) = \frac{1}{\cos(z)}$$
 
-The total sky surface brightness ($\mu_{\text{sky}}$) depends on `auto_calc_background`. When enabled, it accounts for the local dark-sky flux, the real-time contribution from the moon, and — where `zodiacal_share` is supplied — a pointing-dependent zodiacal-light term:
+The zenith angle is clamped to $z \le 89^\circ$ first, so $X$ stays finite (at most about 57). A target below the horizon therefore gets a large airmass rather than an error. The response reports both sides of that: the clamped $X$ as `diagnostics.airmass`, and the unclamped elevation $90^\circ - z$ as `ephemeris.target_elevation_deg`.
+
+The total sky surface brightness ($\mu_{\text{sky}}$) accounts for the local dark-sky flux, a pointing-dependent zodiacal-light term where `zodiacal_share` is supplied, and, when `auto_calc_background` is enabled, the real-time contribution from the moon:
 
 $$\mu_{\text{sky}} = -2.5 \log_{10}(Flux_{\text{dark}} + Flux_{\text{zodi}} + Flux_{\text{moon}})$$
 
@@ -239,7 +245,7 @@ $$\mu_{\text{sky}} = -2.5 \log_{10}(Flux_{\text{dark}} + Flux_{\text{zodi}} + Fl
 
 $Flux_{\text{zodi}}$ is zero unless `zodiacal_share` is set. Where it is, `zodiacal_share` gives the fraction of the original, undecomposed measurement that was zodiacal light at the site's reference sightline; inverting it against $Flux_{\text{dark}}$ (now the local-only baseline) recovers the zodiacal flux there, and a latitude-dependent shape table (`castor.moon.ZODIACAL_LATITUDE_SHAPE`, derived from ESO SkyCalc — see `validation/QUESTIONS.md` 9 and 10) scales it to the target's actual ecliptic latitude, computed from `ra`/`dec` alone. This is a single averaged shape across bands and one solar elongation only; both are documented simplifications, not zero dependences.
 
-When `auto_calc_background` is disabled, no lunar or zodiacal geometry is evaluated and $\mu_{\text{sky}} = \mu_{\text{dark}}$ directly. $\mu_{\text{dark}}$ is a required input in both cases — moonless-sky brightness (light pollution, airglow, etc.) cannot be derived from time and location alone, so this flag only ever adds terms on top of it, never substitutes for it.
+When `auto_calc_background` is disabled, $Flux_{\text{moon}}$ is left out. $Flux_{\text{zodi}}$ is not: together with $\mu_{\text{dark}}$ it describes the moonless sky, so it does not depend on the flag. With neither term, $\mu_{\text{sky}} = \mu_{\text{dark}}$ directly. The $\mu_{\text{sky}}$ actually used is reported as `diagnostics.sky_surface_brightness`. $\mu_{\text{dark}}$ is a required input in both cases — moonless-sky brightness (light pollution, airglow, etc.) cannot be derived from time and location alone, so this flag only ever adds terms on top of it, never substitutes for it.
 
 **4.1.2 Spatial Resolution**
 The total spatial spreading, represented by the Full Width at Half Maximum ($FWHM_{\text{tot}}$), combines contributions from atmospheric seeing, diffraction, optical aberrations, and tracking errors:
@@ -385,11 +391,36 @@ To ensure the detector operates within its linear regime, the saturation time li
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
 **4.3.5 Background-Limited (Optimal) Exposure Time**
-$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
+$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) reaches $k$ times the fixed per-frame readout noise, per pixel — at $k = 1$, the point where it just overtakes it. Beyond this point read noise costs less than the penalty $p$ that $k$ leaves (below), which bounds what lengthening a single exposure can still gain per unit of *total* integration time; once that is small, it becomes more efficient to add exposures than to keep extending one. $k$ is the standard-deviation ratio between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
 
-$k = 1.0$ (the current fixed default) is the literal crossover point, where background shot noise just overtakes readout noise. This default is provisional — it is not yet backed by a specific reference guideline, and $k$ is not currently exposed as a request parameter.
+$k$ is the request option `options.background_dominance_factor`, and the response echoes the value used as `core.background_dominance_factor`. A time series takes the same option and applies it at every timestamp: its per-step $t_{\text{opt}}$ moves with $Rate_{\text{sky}}$ while $k$ stays fixed, and it echoes $k$ as a list as long as the series, like every other per-step value. Its default, $k = 1.0$, is the literal crossover point, where background shot noise just overtakes readout noise; a request that omits it gets that, as every request did before $k$ was exposed. The default is provisional — it is not yet backed by a specific reference guideline (`validation/QUESTIONS.md` 12). $k$ enters nothing but $t_{\text{opt}}$: both SNRs are evaluated at the requested $t_{\text{single}}$, whatever $t_{\text{opt}}$ comes out as.
+
+What a choice of $k$ costs is easiest to read as the read-noise penalty it leaves. At $t_{\text{opt}}$ the background variance per pixel is $(k \cdot \text{RON})^2$, so the total per-pixel noise exceeds the background's own by
+
+$$p = \sqrt{1 + 1/k^2} - 1, \qquad k = \frac{1}{\sqrt{(1+p)^2 - 1}}$$
+
+$k = 1$ leaves $p = 41.4\%$; $k = 3.1235$ leaves $p = 5\%$. For a faint source the same ratio holds for the whole aperture of a stack of $t_{\text{opt}}$ frames, because $N_{\text{bkg}}$ multiplies sky, dark current and read noise alike (§4.3.1): the stack reaches $1/(1+p)$ of the SNR a read-noise-free detector would in the same time, or needs $(1+p)^2 = 1 + 1/k^2$ times the integration to match it — twice as long at $k = 1$, 10% longer at $k = 3.1235$. Source shot noise and $V_{\text{flat}}$ add equally to both sides and only dilute $p$, so this is the background-limited worst case.
+
+**4.3.6 Noise Budget**
+
+Both SNRs of 4.3.1 are a signal $S$ over the square root of a total variance $V_{\text{tot}}$, and the response reports every term of it rather than only the ratio — as `noise.single` ($t = t_{\text{single}}$, $N_{\text{exp}} = 1$) and `noise.total` ($t = t_{\text{total}}$), each summed over the aperture:
+
+| Field | Expression | Unit |
+| --- | --- | --- |
+| `signal` | $S = Rate_{\text{src}} \cdot t$ | e⁻ |
+| `source_variance` | $Rate_{\text{src}} \cdot t$ | e⁻² |
+| `sky_variance` | $N_{\text{bkg}} \cdot Rate_{\text{sky}} \cdot t$ | e⁻² |
+| `dark_variance` | $N_{\text{exp}} \cdot N_{\text{bkg}} \cdot R_{\text{dark}} \cdot t_{\text{single}}$ | e⁻² |
+| `readout_variance` | $N_{\text{exp}} \cdot N_{\text{bkg}} \cdot \text{RON}^2$ | e⁻² |
+| `flatness_variance` | $V_{\text{flat}}(t)$ (§4.3.1a) | e⁻² |
+| `total_variance` | $V_{\text{tot}}$, the sum of the five | e⁻² |
+| `num_pixels_background` | $N_{\text{bkg}} = N_{\text{pix}} + N_{\text{est}}$ | count |
+
+$\text{SNR} = S / \sqrt{V_{\text{tot}}}$ holds exactly for the reported values, because the engine forms both SNRs from these same terms. $V_{\text{tot}}$ is evaluated in the grouping 4.3.1 writes, so it equals the sum of the five reported terms only to rounding (at most a few parts in $10^{16}$); it, not that sum, is the denominator. A time series reports the same terms at every timestamp.
+
+One consequence of 4.3.1a can be read straight off `noise.single`. A stack of $N$ frames has $V_{\text{flat}}(N t_{\text{single}}) = N^2 \, V_{\text{flat}}(t_{\text{single}})$ while its other variance grows as $N$, so its SNR approaches $S_{\text{single}} / \sqrt{V_{\text{flat}}(t_{\text{single}})}$ and never passes it. The `solve_time` solver does not yet respect that ceiling (`validation/QUESTIONS.md` 17).
 
 ## 5. Algorithm Limitations & Assumptions
 

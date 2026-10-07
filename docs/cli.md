@@ -92,6 +92,15 @@ changed:
 and is repeatable, which is what keeps the flag list short: the common fields get
 flags, everything else is reachable without one.
 
+`options.background_dominance_factor` is one of those: k, how far the background
+must outweigh read noise in the "Background-limited at" time (ATBD 4.3.5). Its
+default of 1.0 belongs to the engine, not to this tool, so it is not on the
+`assumed` list — but whenever k is anything else the result names it beside that
+time, because a request file can set it without the person reading the output
+ever having typed it. The time-series contract (`castor schema --batch`) takes the
+same field and echoes it at every step, so one `options` object gives a single
+request and a series the same t_opt convention.
+
 `--request` reads what the GUI's SAVE writes. A saved form holds more than a
 request does — the batch fields, both branches of every either/or — so the extras
 are dropped and named on stderr rather than rejected.
@@ -138,6 +147,25 @@ Saturation leaves by the front door with a computed result attached, but not wit
 the exit code of an unremarkable success: every caller checks the exit code, and
 not every caller reads `flags.is_saturated`.
 
+### `--json` is the whole response, the text is a summary
+
+`--json` prints one object with five keys and stdout holds nothing else:
+`assumed` and `ignored` (the notes above, as lists), the profile's `caveat` (or
+`null`), the validated `request` and the engine's full `response`. The text
+answer prints seven rows at most; the response holds more, and a caller that
+needs it should read the JSON rather than parse the text:
+
+| key | |
+|---|---|
+| `response.noise.single`, `response.noise.total` | The signal and each variance term behind both SNRs ([ATBD](ATBD.md) §4.3.6). `signal / sqrt(total_variance)` is the SNR exactly. |
+| `response.core.total_exp_time` | t_single × N, integration only — no readout overhead. |
+| `response.core.background_dominance_factor` | The k `optimal_exposure_time` was solved for, echoed at the default too; the text names it only off the default. |
+| `response.diagnostics.airmass`, `.sky_surface_brightness` | The airmass (after the 89° clamp) and the μ_sky the calculation actually used. |
+| `response.ephemeris` | Target and moon elevation, lunar phase angle and separation. A target below the horizon has a negative elevation here, while its airmass is clamped. |
+
+Adding these left the text rows exactly as they were (`tests/test_cli.py` pins
+them), so a script reading stdout without `--json` did not have to change.
+
 ## `castor schema`
 
 The contract, in the form a caller can read without a person in the loop. What
@@ -152,7 +180,7 @@ Thermal electron generation rate per pixel in e-/s/pix. (ATBD: R_dark)
 Electronic noise introduced during the readout phase in e-/pix. (ATBD: RON)
 ```
 
-Forty-four fields carry a description and twenty-six of those name their
+Fifty-three fields carry a description and thirty-one of those name their
 [ATBD](ATBD.md) symbol, so a caller never has to guess whether `pixel_pitch` is
 metres or micrometres — the class of mistake that produces a plausible wrong
 answer rather than an error. With the `assumed` list beside it, that is the whole

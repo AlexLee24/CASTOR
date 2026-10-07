@@ -11,7 +11,11 @@ from castor.schema import (
     VegaMagnitude,
     SolveForSNR,
     SolveForTime,
-    SkyAnnulus
+    SkyAnnulus,
+    BatchSolveForSNR,
+    BatchSolveForTime,
+    ObservationResponse,
+    NoiseComponents,
 )
 
 # ==========================================
@@ -182,3 +186,94 @@ class TestSkyAnnulus:
         response reports N_est, so a caller who left it out can see that they did."""
         opts = SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=1)
         assert opts.sky_annulus is None
+
+
+# ==========================================
+# Test focus 5: the background-dominance factor k
+# ==========================================
+class TestBackgroundDominanceFactor:
+    # Every options class that takes k, with the goal field each one needs. The
+    # batch classes are here because a time series reports t_opt at every step.
+    OPTIONS = [
+        (SolveForSNR, {"num_exposures": 1}),
+        (SolveForTime, {"target_snr": 10.0}),
+        (BatchSolveForSNR, {"num_exposures": 1}),
+        (BatchSolveForTime, {"target_snr": 10.0}),
+    ]
+
+    @pytest.mark.parametrize("options,goal", OPTIONS)
+    def test_omitting_k_reads_as_the_crossover(self, options, goal):
+        """Every goal, single or time series, takes it, and leaving it out means what
+        every request before the field existed meant: t_opt at k = 1, the crossover."""
+        opts = options(aperture_factor=0.85, single_exp_time=120.0, **goal)
+        assert opts.background_dominance_factor == 1.0
+
+    @pytest.mark.parametrize("options,goal", OPTIONS)
+    @pytest.mark.parametrize("k", [0.0, -1.0])
+    def test_a_non_positive_k_is_refused(self, options, goal, k):
+        """k = 0 asks for a zero-length frame and a negative one for a negative
+        length; both would come back as a number rather than an error."""
+        with pytest.raises(ValidationError, match="greater than 0"):
+            options(aperture_factor=0.85, single_exp_time=120.0,
+                    background_dominance_factor=k, **goal)
+
+    @pytest.mark.parametrize("options,goal", OPTIONS)
+    def test_a_misspelled_k_is_refused_not_defaulted(self, options, goal):
+        """With a default in place, a typo that strict mode let through would read
+        as k = 1 and look exactly like the value the caller asked for."""
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            options(aperture_factor=0.85, single_exp_time=120.0,
+                    background_dominance=3.0, **goal)
+
+    def test_the_batch_contract_takes_k_on_the_same_terms(self):
+        """The time-series options are a separate class, not a subclass, so nothing
+        but this keeps the two copies of the field alike: same type, default and
+        bound. Only the wording may differ. The GUI sends one options object to
+        both endpoints, so a k that one of them refused, or read differently, would
+        break the series or set its t_opt apart from the single result's."""
+        def contract(options):
+            field = dict(options.model_json_schema()["properties"]["background_dominance_factor"])
+            assert "(ATBD: k)" in field.pop("description")
+            return field
+
+        assert contract(BatchSolveForSNR) == contract(BatchSolveForTime) == contract(SolveForSNR)
+        assert contract(SolveForSNR) == {"default": 1.0, "exclusiveMinimum": 0,
+                                         "title": "Background Dominance Factor", "type": "number"}
+
+
+# ==========================================
+# Test focus 6: what a response promises to carry
+# ==========================================
+class TestResponseContract:
+    def test_the_noise_budget_and_pointing_are_part_of_the_contract(self):
+        """Required, not optional: the calculator fills them on every run, so a
+        caller generated from the JSON Schema need not guard against their absence."""
+        contract = ObservationResponse.model_json_schema()
+        defs = contract["$defs"]
+
+        assert {"noise", "ephemeris"} <= set(contract["required"])
+        assert "total_exp_time" in defs["CoreResult"]["required"]
+        assert {"airmass", "sky_surface_brightness"} <= set(defs["PhysicalDiagnostics"]["required"])
+        assert set(defs["NoiseBudget"]["required"]) == {"single", "total"}
+        assert set(defs["ObservationEphemeris"]["required"]) == {
+            "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+        }
+
+    def test_every_noise_term_says_its_unit(self):
+        """A variance in e-² and a signal in e- sit side by side; the description is
+        the only place a caller can tell which is which."""
+        for name, field in NoiseComponents.model_fields.items():
+            assert field.description and "[" in field.description, name
+
+    def test_existing_keys_keep_their_place_in_a_dump(self):
+        """The new blocks are appended, so a consumer that diffed or indexed the old
+        key order still finds core, budget, diagnostics and flags where they were."""
+        assert list(ObservationResponse.model_fields)[:4] == ["core", "budget", "diagnostics", "flags"]
+
+    def test_a_noise_block_refuses_unknown_terms(self):
+        terms = dict(exp_time=60.0, num_exposures=1, signal=1.0, source_variance=1.0,
+                     sky_variance=1.0, dark_variance=1.0, readout_variance=1.0,
+                     flatness_variance=0.0, total_variance=4.0, num_pixels_background=3.0)
+        NoiseComponents(**terms)
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            NoiseComponents(**terms, scintillation_variance=1.0)
