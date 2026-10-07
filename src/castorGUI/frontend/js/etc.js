@@ -913,8 +913,9 @@
        the field's own declared default, not silently keep whatever the previous
        selection left sitting in the input. Left off (the default) for the
        environment section, where a fragment is deliberately partial by design --
-       see applyBand above, which already handles its own staleness by re-applying
-       the base fragment before layering a band's override on top. */
+       see applyBand below, which handles its own staleness by taking the previous
+       band's correction back out and re-applying the site before layering the new
+       band's on top. */
     function applyFragment(section, fragment, resetMissing) {
         var flat = flattenFragment(section, fragment || {}, {});
         if (resetMissing) {
@@ -1030,6 +1031,34 @@
         { kind: 'filters', select: 'select-filter', section: 'instrument.optic_filter', key: 'optic_filter', panel: 'filter' }
     ];
 
+    /* What the chosen filter's own sky correction wrote into the form, by field: the
+       value it replaced and the value it wrote. The correction is that band's sky at
+       that filter's site, so it leaves with the filter, whatever is chosen next -- the
+       way castorCLI/presets.py builds each fragment afresh and simply never adds a
+       filter's sky anywhere but under its own site. */
+    var bandSky = {};
+
+    function layBandSky(sky) {
+        var replaced = {};
+        Object.keys(flattenFragment('environment', sky, {})).forEach(function (name) {
+            if (form.elements[name]) { replaced[name] = form.elements[name].value; }
+        });
+        applyFragment('environment', sky);
+        Object.keys(replaced).forEach(function (name) {
+            bandSky[name] = { replaced: replaced[name], wrote: form.elements[name].value };
+        });
+    }
+
+    /* Only a field still holding what the band wrote is put back. One typed over since
+       is the reader's own, and no selector has any business undoing it. */
+    function liftBandSky() {
+        Object.keys(bandSky).forEach(function (name) {
+            var input = form.elements[name];
+            if (input.value === bandSky[name].wrote) { input.value = bandSky[name].replaced; }
+        });
+        bandSky = {};
+    }
+
     /* A filter may also speak for the sky it looks through and for the efficiency of
        everything in front of it, because both depend on the band while the request has
        one number for each. Mirrors _overlay in castorCLI/presets.py.
@@ -1039,7 +1068,10 @@
        that carries a correction to one that does not would leave the previous band's
        numbers sitting in the form, looking like the new filter's. Bands with no
        measurement must fall back to the site and the rig, not to whatever was chosen
-       before them.
+       before them. Re-applying the site cannot do that alone, though: it puts back
+       mu_dark and extinction_coeff, which every site sets, but not zodiacal_share,
+       which only a band sets, and a hardware family has no environment to re-apply at
+       all. So the band's correction is also taken back out by name (liftBandSky).
 
        A catalogue sitting on Custom is left alone in both steps. Those numbers are the
        reader's own, and a filter has no business overwriting them. */
@@ -1047,9 +1079,10 @@
         var profile = profiles()[el('select-profile').value];
         if (!profile) { return; }
 
+        liftBandSky();
         if (profile.environment) {
             applyFragment('environment', profile.environment);
-            if (entry && entry.environment) { applyFragment('environment', entry.environment); }
+            if (entry && entry.environment) { layBandSky(entry.environment); }
         }
 
         var telescopeId = el('select-telescope').value;
@@ -1087,8 +1120,13 @@
             renderSpecs();
             return;
         }
+        // The filter whose correction the sky holds is being replaced, whatever this
+        // profile offers in its place -- possibly no filters at all.
+        liftBandSky();
         // A profile with an environment block is a real site; one without is a hardware
-        // family and must not invent a location. See data/presets.json.
+        // family and must not invent a location. See data/presets.json. A family keeps
+        // the sky already in the form, less that correction: Lulin's site-wide sky, not
+        // Lulin's r' sky, under a filter that was never measured there.
         if (profile.environment) { applyFragment('environment', profile.environment); }
 
         CATALOGUES.forEach(function (cat) {
@@ -1378,6 +1416,9 @@
             } else {
                 input.value = String(value);
             }
+            // The file's number now, not a band's: choosing a profile later must not
+            // take it back out as if a filter had put it there (see liftBandSky).
+            delete bandSky[input.name];
         }
 
         if (typeof data.batch_enabled === 'boolean') {
