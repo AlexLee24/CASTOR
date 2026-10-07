@@ -10,7 +10,6 @@ result of run_calculation() straight back out.
 
     python src/castorGUI/server.py            # http://127.0.0.1:8600
 """
-import json
 import sys
 from pathlib import Path
 
@@ -27,6 +26,7 @@ if str(_SRC_DIR) not in sys.path:
 from castor import schema  # noqa: E402
 from castor.calculator import run_calculation  # noqa: E402
 from castor.batch_calculator import run_batch_calculation  # noqa: E402
+from castorCLI import presets as preset_reader  # noqa: E402
 
 def _asset_root() -> Path:
     """Where frontend/ and data/ live at runtime.
@@ -102,22 +102,34 @@ def index() -> HTMLResponse:
 
 @app.get("/api/exposure_time_calculator/presets")
 def presets() -> JSONResponse:
-    """Thin passthrough of the hardware preset file.
+    """Thin passthrough of the hardware preset files.
 
-    Handed on as parsed and never re-shaped: key order is part of the contract,
+    Handed on as written and never re-shaped: key order is part of the contract,
     since the first entry in each catalogue is the one that gets applied by default.
+
+    The shipped file comes first and CASTOR_PRESETS_PATH may name more after it,
+    merged by the same reader the CLI uses (castorCLI.presets.search_path and
+    document); with the variable unset this serves the shipped file exactly as it
+    always has. Read through the reader rather than as raw JSON so that a file the
+    CLI would refuse is refused here too: the form skips a field it does not know
+    without a word, so an unvalidated file would apply partly and say nothing.
     """
     if not PRESETS_PATH.is_file():
         return JSONResponse({"error": "Presets file not found"}, status_code=404)
-    return JSONResponse(json.loads(PRESETS_PATH.read_text(encoding="utf-8")))
+    try:
+        return JSONResponse(preset_reader.document(*preset_reader.search_path(PRESETS_PATH)))
+    except preset_reader.PresetError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    except ValidationError as exc:
+        return _validation_error_response(exc, status_code=500)
 
 
-def _validation_error_response(exc: ValidationError) -> JSONResponse:
+def _validation_error_response(exc: ValidationError, status_code: int = 400) -> JSONResponse:
     messages = [
         "{}: {}".format(".".join(str(part) for part in err["loc"]), err["msg"])
         for err in exc.errors()
     ]
-    return JSONResponse({"error": "; ".join(messages) or "Invalid input"}, status_code=400)
+    return JSONResponse({"error": "; ".join(messages) or "Invalid input"}, status_code=status_code)
 
 
 @app.post("/api/exposure_time_calculator")
