@@ -93,9 +93,37 @@ def kinds(problems):
 def test_walk_names_every_number_by_where_it_sits(profiles):
     assert provenance.walk(profiles) == EXPECTED
 
-def test_walk_keeps_the_file_order(profiles):
-    """Problems are reported in this order, so it has to be the file's own."""
+def test_walk_order_is_stable(profiles):
+    """Unrecorded numbers are reported in this order, so it must not wander."""
     assert list(provenance.walk(profiles)) == list(EXPECTED)
+
+def test_walk_orders_by_section_not_by_how_the_file_is_written():
+    """Sections come in walk()'s own order whatever order the file writes them
+    in; only profiles, entries and fields keep the file's. Pinned so the order
+    problems are reported in is described as it is, not as file order."""
+    profiles = {"fam": {
+        "cameras": {"C": {"camera": {"pixel_pitch": 3.76}}},
+        "telescopes": {"T": {"telescope": {"focal_length": 8.0}}},
+        "filters": {"r": {
+            "telescope": {"T": {"optical_throughput": 0.5}},
+            "environment": {"mu_dark": 21.0},
+            "optic_filter": {"central_wavelength": 600.0, "filter_bandwidth": 130.0}}},
+        "median_seeing_fwhm": 1.2,
+        "environment": {"mu_dark": 21.5},
+    }}
+    order = [
+        "fam.environment.mu_dark",
+        "fam.median_seeing_fwhm",
+        "fam.telescopes.T.focal_length",
+        "fam.cameras.C.pixel_pitch",
+        "fam.filters.r.central_wavelength",
+        "fam.filters.r.filter_bandwidth",
+        "fam.filters.r.environment.mu_dark",
+        "fam.filters.r.telescope.T.optical_throughput",
+    ]
+
+    assert list(provenance.walk(profiles)) == order
+    assert kinds(provenance.check(profiles, {})) == [(path, "missing_record") for path in order]
 
 # ==========================================
 # Checking a file against its table
@@ -161,7 +189,7 @@ def test_a_record_that_is_not_a_triple_is_reported_not_raised(profiles, table, e
     assert kinds(provenance.check(profiles, table)) == [(path, "malformed_record")]
 
 def test_every_problem_is_found_in_one_pass(profiles, table):
-    """A broken table lists all of its faults, unrecorded numbers first in file
+    """A broken table lists all of its faults, unrecorded numbers first in walk()
     order, then the table's own findings in table order."""
     del table["site.environment.mu_dark"]
     del table["family.cameras.C2.readout_noise"]

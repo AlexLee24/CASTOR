@@ -120,6 +120,11 @@ def walk(profiles: Mapping[str, Any]) -> dict[str, Any]:
 
     Keys outside those sections — names, caveats, a host's own display
     metadata — carry no numbers CASTOR reads and are not walked.
+
+    The order is fixed by section, not by how the file happens to be written.
+    Profiles, entries and fields come in file order, but within a profile it is
+    always environment, median seeing, telescopes, cameras, filters, and within
+    a filter its own fields, then its environment, then its telescope overrides.
     """
     out = {}
     sections = (("telescopes", "telescope"), ("cameras", "camera"), ("filters", "optic_filter"))
@@ -164,7 +169,7 @@ def check(profiles: Mapping[str, Any], table: Mapping[str, Any]) -> list[Problem
         MIN_NOTE_LENGTH characters.
 
     Every record is checked, including one with no number to vouch for. Problems
-    come in a stable order: unrecorded numbers in file order, then the table's
+    come in a stable order: unrecorded numbers in walk() order, then the table's
     findings in table order.
     """
     values = walk(profiles)
