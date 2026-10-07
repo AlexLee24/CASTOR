@@ -36,14 +36,19 @@ def test_the_shipped_file_passes_the_rule_hosts_run():
 def test_the_exported_record_passes_castor_check(tmp_path):
     """Run as a script, provenance.py prints the record as the JSON table
     `castor check --provenance` reads. The shipped pair has to pass there too,
-    which also proves the export loses nothing on the way through JSON."""
+    which also proves the export loses nothing on the way through JSON.
+
+    The shipped file is named rather than left to the search path: the record
+    is about that file alone, and files on CASTOR_PRESETS_PATH in the shell
+    running this would otherwise be held to it too."""
     exported = subprocess.run([sys.executable, provenance.__file__],
                               capture_output=True, text=True, check=True).stdout
     path = tmp_path / "provenance.json"
     path.write_text(exported, encoding="utf-8")
 
     assert rule.load_table(path) == provenance.PROVENANCE
-    result = CliRunner().invoke(cli, ["check", "--provenance", str(path)])
+    result = CliRunner().invoke(
+        cli, ["check", "--presets-file", str(presets.DEFAULT_PATH), "--provenance", str(path)])
     assert result.exit_code == 0, result.stderr
     assert f"{len(VALUES)} values checked against" in result.stdout
 
