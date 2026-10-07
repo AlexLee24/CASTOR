@@ -183,8 +183,9 @@ class EnvironmentCondition(StrictModel):
         description=(
             "Boolean toggle for whether to layer the real-time lunar/geometric sky-brightness "
             "contribution (derived from observing_time_utc, location, and the target's position) "
-            "on top of the user-supplied `mu_dark` baseline. When False, `mu_dark` is used directly "
-            "as the total sky surface brightness. `mu_dark` is required either way — this flag never "
+            "on top of the user-supplied `mu_dark` baseline. When False, the moon is left out and "
+            "the sky is `mu_dark`, completed by its zodiacal term when `zodiacal_share` is set, which "
+            "applies either way. `mu_dark` is required either way — this flag never "
             "derives mu_dark itself, since moonless-sky brightness (light pollution, airglow, etc.) "
             "cannot be inferred from time and location alone."
         )
@@ -192,7 +193,7 @@ class EnvironmentCondition(StrictModel):
 
     mu_dark: float = Field(
         ...,
-        description="Moonless-night baseline surface brightness of the sky in mag/arcsec², used as-is or as the base for auto_calc_background. (ATBD: mu_dark)"
+        description="Moonless-night baseline surface brightness of the sky in mag/arcsec², the base every sky is built on: completed by a zodiacal term when zodiacal_share is set, with the moon on top when auto_calc_background is True. (ATBD: mu_dark)"
     )
     zodiacal_share: float | None = Field(
         default=None,
@@ -201,9 +202,10 @@ class EnvironmentCondition(StrictModel):
         description=(
             "Fraction of the moonless sky that was zodiacal light and scattered starlight, "
             "not airglow or light pollution, in the original measurement `mu_dark` was split "
-            "from — at this site's own reference sightline. Used only when auto_calc_background "
-            "is True, to add a pointing-dependent term on top of mu_dark (now the local-only "
-            "baseline that split left behind). None means not modelled: mu_dark is treated as "
+            "from — at this site's own reference sightline. Adds a pointing-dependent term on top "
+            "of mu_dark (now the local-only baseline that split left behind) whether or not "
+            "auto_calc_background is True: the two together are the moonless sky, and that flag "
+            "only adds the moon. None means not modelled: mu_dark is treated as "
             "the whole moonless sky with no pointing correction, the behaviour before this field "
             "existed. Site-specific and rarely known; see validation/QUESTIONS.md 9 and 10."
         )
