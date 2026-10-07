@@ -609,7 +609,10 @@ class BatchBaseOptions(StrictModel):
     )
     # BaseOptions' k, on the same terms: a time series reports t_opt at every step,
     # so it takes the convention that t_opt is solved for, and one options object
-    # sent to both endpoints (as the GUI does) gives both the same t_opt.
+    # sent to both endpoints (as the GUI does) gives both the same t_opt -- provided
+    # instrument.throughput_correction is 1.0: the batch calculator does not apply it
+    # yet, so otherwise its sky rate and t_opt differ (see
+    # test_a_batch_step_is_the_single_request_at_that_instant).
     background_dominance_factor: PositiveFloat = Field(
         1.0,
         description=(
