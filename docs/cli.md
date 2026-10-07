@@ -101,10 +101,11 @@ not every caller reads `flags.is_saturated`.
 
 ### `--json` is the whole response, the text is a summary
 
-`--json` prints the validated request, the engine's full response and the
-`assumed` list, and stdout holds nothing else. The text answer prints seven rows
-at most; the response holds more, and a caller that needs it should read the
-JSON rather than parse the text:
+`--json` prints one object with five keys and stdout holds nothing else:
+`assumed` and `ignored` (the notes above, as lists), the profile's `caveat` (or
+`null`), the validated `request` and the engine's full `response`. The text
+answer prints seven rows at most; the response holds more, and a caller that
+needs it should read the JSON rather than parse the text:
 
 | key | |
 |---|---|

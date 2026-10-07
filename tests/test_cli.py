@@ -271,6 +271,12 @@ def test_json_stdout_is_only_json(run, lulin):
     """Anything else on stdout would break the caller that reaches for --json."""
     json.loads(run(*lulin, "--json").stdout)
 
+def test_json_has_the_keys_cli_md_names(run, lulin):
+    """docs/cli.md lists the top-level keys for a caller writing a strict parser."""
+    payload = json.loads(run(*lulin, "--json").stdout)
+
+    assert set(payload) == {"assumed", "ignored", "caveat", "request", "response"}
+
 def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
     """--json is the whole response, so what the engine now reports about how it got
     its answer arrives with it: the variance terms, the total time, the airmass
