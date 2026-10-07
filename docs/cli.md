@@ -97,7 +97,9 @@ must outweigh read noise in the "Background-limited at" time (ATBD 4.3.5). Its
 default of 1.0 belongs to the engine, not to this tool, so it is not on the
 `assumed` list — but whenever k is anything else the result names it beside that
 time, because a request file can set it without the person reading the output
-ever having typed it.
+ever having typed it. The time-series contract (`castor schema --batch`) takes the
+same field and echoes it at every step, so one `options` object gives a single
+request and a series the same t_opt convention.
 
 `--request` reads what the GUI's SAVE writes. A saved form holds more than a
 request does — the batch fields, both branches of every either/or — so the extras
@@ -157,6 +159,7 @@ needs it should read the JSON rather than parse the text:
 |---|---|
 | `response.noise.single`, `response.noise.total` | The signal and each variance term behind both SNRs ([ATBD](ATBD.md) §4.3.6). `signal / sqrt(total_variance)` is the SNR exactly. |
 | `response.core.total_exp_time` | t_single × N, integration only — no readout overhead. |
+| `response.core.background_dominance_factor` | The k `optimal_exposure_time` was solved for, echoed at the default too; the text names it only off the default. |
 | `response.diagnostics.airmass`, `.sky_surface_brightness` | The airmass (after the 89° clamp) and the μ_sky the calculation actually used. |
 | `response.ephemeris` | Target and moon elevation, lunar phase angle and separation. A target below the horizon has a negative elevation here, while its airmass is clamped. |
 

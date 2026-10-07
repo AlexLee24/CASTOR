@@ -378,8 +378,9 @@ the ATBD.
 **Narrowed.** For a long time that warning was nowhere but the docstring, and
 1.0 was the only value a request could get. k is now a request option,
 `options.background_dominance_factor`, echoed back as
-`core.background_dominance_factor`; the schema and ATBD 4.3.5 both call the
-default provisional, and 4.3.5 states what each k costs — at t_opt, read noise
+`core.background_dominance_factor`, and a time series, which reports t_opt at
+every step, takes and echoes the same option. The schema and ATBD 4.3.5 both call
+the default provisional, and 4.3.5 states what each k costs — at t_opt, read noise
 raises the per-pixel noise by p = √(1 + 1/k²) − 1, 41% at the default and 5% at
 k = 3.1235. A caller with a convention of its own can now state it.
 

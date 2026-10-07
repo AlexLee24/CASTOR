@@ -170,8 +170,12 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         inst.camera.full_well_capacity, peak_rate_arr, sky_rate_arr, inst.camera.dark_current_rate
     )
 
+    # The same k a single request takes, applied at every step: t_opt moves with
+    # the sky, k does not. It moves t_opt and nothing else — see calculator.py and
+    # ATBD 4.3.5.
     t_opt_arr = physics.calculate_optimal_exposure_time(
-        sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise
+        sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
+        background_dominance_factor=opt.background_dominance_factor
     )
     
     warnings = []
@@ -201,6 +205,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             required_exposures=None if req_exp_int_arr is None else to_list(req_exp_int_arr),
             saturation_time_limit=to_list(t_sat_arr),
             optimal_exposure_time=to_list(t_opt_arr),
+            background_dominance_factor=to_list(opt.background_dominance_factor),
             total_exp_time=to_list(total_exp_time)
         ),
         # Reuses the zenith angles the photometry already needed; elevation is just

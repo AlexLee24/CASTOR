@@ -607,6 +607,19 @@ class BatchBaseOptions(StrictModel):
         None,
         description="Annulus the sky is estimated in. Omit to assume the sky is known exactly."
     )
+    # BaseOptions' k, on the same terms: a time series reports t_opt at every step,
+    # so it takes the convention that t_opt is solved for, and one options object
+    # sent to both endpoints (as the GUI does) gives both the same t_opt.
+    background_dominance_factor: PositiveFloat = Field(
+        1.0,
+        description=(
+            "Ratio of (sky + dark) shot-noise sigma to readout-noise sigma per pixel that "
+            "optimal_exposure_time is solved for at every timestamp: "
+            "t_opt = (k * RON)² / (Rate_sky + R_dark). 1.0, the crossover, is the default and "
+            "is provisional (validation/QUESTIONS.md 12). Changes optimal_exposure_time only. "
+            "(ATBD: k)"
+        )
+    )
 
 class BatchSolveForSNR(BatchBaseOptions):
     type: Literal["solve_snr"] = "solve_snr"
@@ -650,8 +663,21 @@ class BatchCoreResult(StrictModel):
     optimal_exposure_time: list[float] = Field(
         ...,
         description=(
-            "Background-limited single exposure time at each timestamp; it moves with the sky. "
-            "(ATBD: t_opt) [s]"
+            "Background-limited single exposure time at each timestamp, the point at which sky + "
+            "dark current shot noise reaches background_dominance_factor times the readout noise; "
+            "it moves with the sky. (ATBD: t_opt) [s]"
+        )
+    )
+    # A list, like every other per-step value, though it is the same at every step:
+    # a batch step then carries the same keys as the single response at that
+    # instant. Required, unlike CoreResult's, whose default keeps older stored
+    # responses readable: the batch t_opt it qualifies is itself new, so there is
+    # no body of stored batch responses with a t_opt and no k to keep.
+    background_dominance_factor: list[float] = Field(
+        ...,
+        description=(
+            "The k optimal_exposure_time was solved for, at each timestamp; echoed from "
+            "options.background_dominance_factor, so the same at every step. (ATBD: k) [dimensionless]"
         )
     )
     total_exp_time: list[float] = Field(

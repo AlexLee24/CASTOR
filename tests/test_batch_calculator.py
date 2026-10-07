@@ -256,6 +256,36 @@ def test_the_optimal_exposure_moves_with_the_sky(mock_moon_batch, batch_base_req
     expected = [camera.readout_noise ** 2 / (sky + camera.dark_current_rate)
                 for sky in response.budget.sky_count_rate]
     np.testing.assert_allclose(response.core.optimal_exposure_time, expected, rtol=1e-12)
+    assert response.core.background_dominance_factor == [1.0] * 13
+
+def _without_t_opt(response):
+    """The batch response with the two fields k is allowed to touch taken out."""
+    dumped = response.model_dump()
+    del dumped["core"]["optimal_exposure_time"]
+    del dumped["core"]["background_dominance_factor"]
+    return dumped
+
+@pytest.mark.parametrize("options", [
+    schema.BatchSolveForTime(aperture_factor=0.85, single_exp_time=300.0, target_snr=100.0),
+    schema.BatchSolveForSNR(aperture_factor=1.5, single_exp_time=300.0, num_exposures=5),
+])
+@pytest.mark.parametrize("k", [0.5, 3.0, 3.1235])
+def test_k_scales_every_steps_t_opt_and_moves_nothing_else(mock_moon_batch, batch_base_request, options, k):
+    """The time-series counterpart of the single test in test_calculator.py: the
+    requested k reaches the t_opt of every step, as k² times the crossover's, is
+    echoed at every step, and leaves the SNRs, frame counts, rates, noise terms
+    and ephemeris exactly where they were."""
+    batch_base_request.options = options
+    baseline = run_batch_calculation(batch_base_request)
+
+    request = batch_base_request.model_copy(deep=True)
+    request.options.background_dominance_factor = k
+    response = run_batch_calculation(request)
+
+    np.testing.assert_allclose(response.core.optimal_exposure_time,
+                               [k ** 2 * t for t in baseline.core.optimal_exposure_time], rtol=1e-12)
+    assert response.core.background_dominance_factor == [k] * 13
+    assert _without_t_opt(response) == _without_t_opt(baseline)
 
 def _leaves(dumped: dict, prefix: str = ""):
     """(dotted path, value) for every non-dict value in a model_dump()."""
@@ -286,13 +316,18 @@ def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
     so is_saturated must match, and so must the number of warnings; their
     wording differs (the batch's says "in time series").
 
+    k is set off its default, and passed to both through the one options dump,
+    so that t_opt and its echoed k are held to the same convention in both
+    orchestrators rather than agreeing only because both fell back to 1.0.
+
     throughput_correction stays at 1.0 here: the batch calculator does not apply
     it (the single one does), which is a separate fix this test does not cover."""
     assert batch_base_request.instrument.throughput_correction == 1.0
     batch_base_request.instrument.camera.background_flatness_fraction = 0.02
     batch_base_request.options = schema.BatchSolveForTime(
         aperture_factor=0.85, single_exp_time=120.0, target_snr=40.0,
-        sky_annulus=schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0))
+        sky_annulus=schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0),
+        background_dominance_factor=3.0)
     env = batch_base_request.environment
     env.end_time_utc = env.start_time_utc
     batch = run_batch_calculation(batch_base_request)
@@ -316,6 +351,8 @@ def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
     assert len(batch.flags.warnings) == len(single.flags.warnings)
     per_step = {path: value for path, value in in_single.items()
                 if path in in_batch and not path.startswith("flags.")}
-    assert {"core.saturation_time_limit", "ephemeris.moon_elevation_deg"} <= set(per_step)
+    assert {"core.saturation_time_limit", "ephemeris.moon_elevation_deg",
+            "core.optimal_exposure_time", "core.background_dominance_factor"} <= set(per_step)
+    assert in_single["core.background_dominance_factor"] == 3.0
     for path, value in per_step.items():
         assert in_batch[path] == [pytest.approx(value, rel=1e-9, abs=1e-9)], path
