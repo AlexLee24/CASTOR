@@ -65,7 +65,7 @@ uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 
 |---|---|
 | `castor calc` | Run one calculation. `--set` overrides any field by dotted path. |
 | `castor presets` | List the sites and hardware `--site` can name; `--bands` also shows what each filter overrides, which is where Lulin's measured numbers live. |
-| `castor check` | Resolve every combination the preset file offers and report what a user would actually get. Loading only proves the shapes are right. |
+| `castor check` | Resolve every combination the preset file offers and report what a user would actually get. Loading only proves the shapes are right. `--provenance` also holds every number to a table of where it came from. |
 | `castor schema` | The JSON Schema of a request, for building one `--set` at a time. |
 
 ### How much to trust the numbers
@@ -76,8 +76,9 @@ great deal — so the repository records it rather than leaving you to guess.
 calculators, published sky models, and real photometry from Lulin;
 [`validation/provenance.py`](validation/provenance.py) gives an origin for every
 number in `presets.json`, and a test fails if the file holds one it cannot
-account for. Profiles whose numbers cannot carry a real observation say so, in
-the GUI and on the command line both.
+account for. The rule itself is `castorCLI.provenance`, so a preset file of your
+own can be held to it too (`castor check --provenance`). Profiles whose numbers
+cannot carry a real observation say so, in the GUI and on the command line both.
 
 ```bash
 uv run pytest              # the specification suite, on every commit

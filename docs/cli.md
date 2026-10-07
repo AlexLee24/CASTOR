@@ -26,7 +26,7 @@ castor calc --site lulin --filter Sloan_r --mag 18 --exp 300 -n 10 --ra 210.8 --
 |---|---|
 | `calc` | Run one calculation. |
 | `presets` | List what `--site` can name. `--bands` also shows what each filter overrides. |
-| `check` | Resolve every combination the preset file offers and inspect the results. |
+| `check` | Resolve every combination the preset file offers and inspect the results. `--provenance` also holds every number to a table of where it came from. |
 | `schema` | The JSON Schema of a request, for building one `--set` at a time. |
 
 ## What makes this more than a wrapper
@@ -138,6 +138,63 @@ resolve that combination and look. `check` now looks:
 
 Exit 3 on any finding, so CI can run it. Verified against a deliberately broken
 file rather than only against the good one.
+
+### `--provenance`: where every number came from
+
+```bash
+uv run python validation/provenance.py > provenance.json   # the shipped file's record
+uv run castor check --provenance provenance.json
+```
+
+With a provenance table, `check` also holds the file to the rule
+[`validation/provenance.py`](../validation/provenance.py) holds the shipped file
+to: every number has a record saying where it came from, and every record a
+number. The table is JSON, one record per number, keyed by where the number sits:
+
+```json
+{
+  "lulin.cameras.Sophia.readout_noise": [7.9, "MEASURED", "photon transfer curve over 123 frames; datasheet -152 1 MHz port says 8.5"]
+}
+```
+
+A record is the value it vouches for, how that value is known (`MEASURED`,
+`DOCUMENT`, `DERIVED` or `GUESS`) and a note of at least ten characters naming
+the document, frames or computation. Findings print after the file's own, in the
+same `PROBLEM` lines:
+
+- a number with no record, or a record for a number the file does not hold;
+- a record vouching for a different value than the file holds — the file
+  changed and its citation did not;
+- a class outside the four, or a note too short to name a source.
+
+The file is read as written, not as loaded: loading coerces, and a record
+vouches for what the file says. A table that cannot be read is bad input, exit 3.
+
+The rule is `castorCLI.provenance`, as functions over a file's `profiles` object
+exactly as JSON gives it, for a host that keeps its own preset file:
+
+```python
+import json
+from castorCLI import provenance
+
+profiles = json.loads(open("my_presets.json").read())["profiles"]
+for problem in provenance.check(profiles, provenance.load_table("my_provenance.json")):
+    print(problem.kind, problem)
+```
+
+`walk(profiles)` names every number by its path. `check(profiles, table)` returns
+one `Problem` per finding, carrying the `path`, a `message` for people and a
+stable `kind` a host can count, translate or set aside: `missing_record`,
+`orphan_record`, `value_mismatch`, `unknown_class`, `short_note` or
+`malformed_record`. A table in Python is any mapping of path to a
+`(value, class, note)` triple; `load_table(path)` reads the JSON form, and
+`summary(profiles, table)` counts each profile's numbers by class.
+`check_file(catalogue)` in `main.py` is likewise the rest of `check` without the
+printing.
+
+The shipped file's own record stays in `validation/`: where each of this
+repository's numbers came from is a fact about the repository, not something the
+package carries.
 
 ## Design notes
 

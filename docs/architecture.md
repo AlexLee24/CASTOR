@@ -121,7 +121,7 @@ src/
 │   ├── schema.py           # Data Contracts & Mutex Validation
 │   ├── moon.py             # Astropy-Based Ephemeris, Lunar & Zodiacal Sky Brightness
 │   └── physics.py          # Pure Mathematical & Optical Physics Engine
-├── castorCLI/          # command line + the preset reader  -> cli.md, presets.md
+├── castorCLI/          # command line, the preset reader and its provenance check  -> cli.md, presets.md
 └── castorGUI/          # browser and desktop UI            -> gui_architecture.md
 ```
 
@@ -129,6 +129,8 @@ src/
 presets are deliberately out of scope for `castor/` (§1.3), and a host with its own
 hardware database — Kinder is one — has no use for a reader of this repository's
 JSON file. Putting it in the engine would make it dead weight there.
+`castorCLI/provenance.py`, the check that every preset number says where it came
+from, sits beside it for the same reason.
 
 ### Module Responsibilities
 

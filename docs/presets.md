@@ -116,5 +116,10 @@ Every value in this file has an entry in
 a number the table does not account for, or a different number than the one
 recorded. Changing a preset means saying where the new value came from.
 
+The rule itself is not specific to this file. `castorCLI/provenance.py` holds it,
+and `castor check --provenance TABLE` applies it to any preset file — a host that
+writes its own can keep a table beside it and hold it to the same standard. See
+[CLI](cli.md) for the table's form.
+
 `GUESS` rows are not defects to be hidden. They are the honest state of the file,
 and naming them is what stops anyone having to rediscover which ones they are.
