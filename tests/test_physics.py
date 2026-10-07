@@ -377,6 +377,7 @@ def test_optimal_exposure_time_scales_with_dominance_factor_squared():
     t_k2 = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise, background_dominance_factor=2.0)
 
     assert t_k2 == pytest.approx(t_k1 * 4.0)
+
 @pytest.mark.parametrize("penalty", [0.05, 0.10, np.sqrt(2.0) - 1.0])
 def test_dominance_factor_is_the_read_noise_penalty_it_leaves(penalty):
     """ATBD 4.3.5's relation between k and the read-noise penalty p, pinned both ways.
