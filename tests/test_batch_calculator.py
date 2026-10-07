@@ -257,10 +257,34 @@ def test_the_optimal_exposure_moves_with_the_sky(mock_moon_batch, batch_base_req
                 for sky in response.budget.sky_count_rate]
     np.testing.assert_allclose(response.core.optimal_exposure_time, expected, rtol=1e-12)
 
+def _leaves(dumped: dict, prefix: str = ""):
+    """(dotted path, value) for every non-dict value in a model_dump()."""
+    for key, value in dumped.items():
+        if isinstance(value, dict):
+            yield from _leaves(value, f"{prefix}{key}.")
+        else:
+            yield f"{prefix}{key}", value
+
+# What the single response carries and a batch response does not: the Stage 2
+# values that are fixed for a whole series (architecture.md §5.2).
+SINGLE_ONLY = {
+    "diagnostics.total_fwhm", "diagnostics.effective_area", "diagnostics.pixel_scale",
+    "diagnostics.total_throughput", "diagnostics.enclosed_flux_fraction",
+    "diagnostics.num_pixels_aperture", "diagnostics.num_pixels_sky_estimate",
+}
+
 def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
     """The same physics in two orchestrators drifts unless a test holds them
     together (LESSONS.md). Unmocked, at one pinned instant, with the moon on in
     both, everything the two responses share must agree.
+
+    "Share" is read off the two dumps, not listed by hand, so a field added to
+    both is compared without anyone remembering to add it here, and a field the
+    single response gains alone fails until it is named in SINGLE_ONLY. Each
+    per-step list holds one value, which must be the single response's. flags
+    are not per step — the batch's summarise the whole series, here one step —
+    so is_saturated must match, and so must the number of warnings; their
+    wording differs (the batch's says "in time series").
 
     throughput_correction stays at 1.0 here: the batch calculator does not apply
     it (the single one does), which is a separate fix this test does not cover."""
@@ -284,27 +308,14 @@ def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
         options=schema.SolveForTime(**batch_base_request.options.model_dump(exclude={"type"})),
     ))
 
-    pairs = {
-        "core.single_snr": (batch.core.single_snr, single.core.single_snr),
-        "core.total_snr": (batch.core.total_snr, single.core.total_snr),
-        "core.required_exposures": (batch.core.required_exposures, single.core.required_exposures),
-        "core.optimal_exposure_time": (batch.core.optimal_exposure_time, single.core.optimal_exposure_time),
-        "core.total_exp_time": (batch.core.total_exp_time, single.core.total_exp_time),
-        "diagnostics.airmass": (batch.diagnostics.airmass, single.diagnostics.airmass),
-        "diagnostics.sky_surface_brightness": (batch.diagnostics.sky_surface_brightness,
-                                               single.diagnostics.sky_surface_brightness),
-        "ephemeris.target_elevation_deg": (batch.ephemeris.target_elevation_deg,
-                                           single.ephemeris.target_elevation_deg),
-        "ephemeris.moon_phase_angle_deg": (batch.ephemeris.moon_phase_angle_deg,
-                                           single.ephemeris.moon_phase_angle_deg),
-        "ephemeris.moon_separation_deg": (batch.ephemeris.moon_separation_deg,
-                                          single.ephemeris.moon_separation_deg),
-    }
-    for name in ("source_count_rate", "sky_count_rate", "peak_pixel_rate"):
-        pairs[f"budget.{name}"] = (getattr(batch.budget, name), getattr(single.budget, name))
-    for which in ("single", "total"):
-        for name, value in getattr(single.noise, which).model_dump().items():
-            pairs[f"noise.{which}.{name}"] = (getattr(getattr(batch.noise, which), name), value)
+    in_batch = dict(_leaves(batch.model_dump()))
+    in_single = dict(_leaves(single.model_dump()))
+    assert set(in_single) - set(in_batch) == SINGLE_ONLY
 
-    for name, (series, value) in pairs.items():
-        assert series == [pytest.approx(value, rel=1e-9, abs=1e-9)], name
+    assert batch.flags.is_saturated == single.flags.is_saturated
+    assert len(batch.flags.warnings) == len(single.flags.warnings)
+    per_step = {path: value for path, value in in_single.items()
+                if path in in_batch and not path.startswith("flags.")}
+    assert {"core.saturation_time_limit", "ephemeris.moon_elevation_deg"} <= set(per_step)
+    for path, value in per_step.items():
+        assert in_batch[path] == [pytest.approx(value, rel=1e-9, abs=1e-9)], path
