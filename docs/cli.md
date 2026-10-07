@@ -99,6 +99,23 @@ Saturation leaves by the front door with a computed result attached, but not wit
 the exit code of an unremarkable success: every caller checks the exit code, and
 not every caller reads `flags.is_saturated`.
 
+### `--json` is the whole response, the text is a summary
+
+`--json` prints the validated request, the engine's full response and the
+`assumed` list, and stdout holds nothing else. The text answer prints seven rows
+at most; the response holds more, and a caller that needs it should read the
+JSON rather than parse the text:
+
+| key | |
+|---|---|
+| `response.noise.single`, `response.noise.total` | The signal and each variance term behind both SNRs ([ATBD](ATBD.md) §4.3.6). `signal / sqrt(total_variance)` is the SNR exactly. |
+| `response.core.total_exp_time` | t_single × N, integration only — no readout overhead. |
+| `response.diagnostics.airmass`, `.sky_surface_brightness` | The airmass (after the 89° clamp) and the μ_sky the calculation actually used. |
+| `response.ephemeris` | Target and moon elevation, lunar phase angle and separation. A target below the horizon has a negative elevation here, while its airmass is clamped. |
+
+Adding these left the text rows exactly as they were (`tests/test_cli.py` pins
+them), so a script reading stdout without `--json` did not have to change.
+
 ## `castor schema`
 
 The contract, in the form a caller can read without a person in the loop. What
