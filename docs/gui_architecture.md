@@ -108,7 +108,7 @@ src/castorGUI/
 
 * **`etc.css`:** Scoped tokens with `var(--kw-*, fallback)`.
 
-* **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server.
+* **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server. Its presets route serves `castorCLI.presets.document()` over the shipped file and any on `CASTOR_PRESETS_PATH` ([Presets](presets.md#several-files)): as written and in order, but validated first, since the form applies the fields it recognises and skips the rest without a word. With the variable unset it serves the shipped file exactly as before.
 
 * **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Telescopes, cameras and filters are all listed per site. Key order is significant — the first entry in each catalogue is the default applied on load — which is why Kinder's presets route serves the file as raw bytes rather than through `jsonify`, whose key sorting would scramble it. Kinder serving it verbatim also makes its shape a contract rather than an internal detail.
 
@@ -167,4 +167,5 @@ sequenceDiagram
 
 * **Desktop build:** Wrapping the same frontend in a native window (`pywebview` is already declared for this) rather than maintaining a second, separately-written desktop UI.
 * **Completing the Kinder mount:** Kinder's `exposure_time_calculator.html` still carries its own forked copy of the form. Switching it to `{% include %}` this frontend is what ends the duplication; the routes and the vendored engine are already in place.
-* **Preset source swap:** Serving profiles from Kinder's hardware database while keeping `presets.json` as the standalone fallback. Note the current direction is the reverse — Kinder reads this file.
+* **Preset source swap:** Serving profiles from Kinder's hardware database while keeping `presets.json` as the standalone fallback. Note the current direction is the reverse — Kinder reads this file. A host can already add files of its own after it (`CASTOR_PRESETS_PATH`); they appear as further sites.
+* **Hardware from another profile:** The CLI can put one profile's telescope, camera or filter under another's sky (`PROFILE/KEY`); the selectors here stay within the chosen site. Offering it would mean `etc.js` mirroring the rules for which band values follow a borrowed filter too — one more rule held in two places ([Lessons](LESSONS.md#the-same-physics-implemented-twice-will-drift-silently)) — so it waits for a reason worth that.

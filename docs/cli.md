@@ -69,6 +69,16 @@ Same text the GUI shows beside the site selector, from the same `caveat` field.
 where each number came from, but that file is in the repository and this is where
 the calculation is actually being run.
 
+Hardware named from another profile brings that profile's caveat along, on a
+line of its own and prefixed with the profile id:
+
+```
+CAVEAT: vlt: Demonstration only - do not plan real observations with this. ...
+```
+
+With `--json` the same lines arrive joined by newlines in the one `caveat`
+string, which for a configuration drawn from one profile is exactly what it was.
+
 ### Layered input, in one direction
 
 Each layer wins over the last, so a saved request can be reused with one thing
@@ -85,6 +95,34 @@ flags, everything else is reachable without one.
 `--request` reads what the GUI's SAVE writes. A saved form holds more than a
 request does — the batch fields, both branches of every either/or — so the extras
 are dropped and named on stderr rather than rejected.
+
+### More than one preset file
+
+`calc`, `presets` and `check` read the shipped file and then each file on
+`CASTOR_PRESETS_PATH`. `--presets-file` replaces that whole list with the files
+it names; it repeats, and they merge in the order given, so a single one still
+means exactly what it always did:
+
+```bash
+export CASTOR_PRESETS_PATH=~/my_rigs.json
+castor presets                                             # lulin, vlt, other, then my_rigs.json's
+castor presets --presets-file a.json --presets-file b.json # a.json's, then b.json's; nothing else
+```
+
+A profile defined in two files, a file that cannot be read, or one that breaks
+any rule a single file is held to is bad input (exit 3). The merge rules are in
+[Presets](presets.md#several-files).
+
+`--telescope`, `--camera` and `--filter` take `PROFILE/KEY` to use an entry from
+a profile other than the site's — someone's own refractor under Lulin's sky:
+
+```bash
+castor calc --site lulin --telescope other/RedCat51 --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+```
+
+The site keeps its location and sky; what a borrowed filter carries applies only
+where it was measured ([Presets](presets.md#hardware-from-another-profile)). A
+name that does not exist lists what that profile does have.
 
 ### Exit codes distinguish kinds of outcome
 
@@ -139,6 +177,12 @@ resolve that combination and look. `check` now looks:
 Exit 3 on any finding, so CI can run it. Verified against a deliberately broken
 file rather than only against the good one.
 
+Given several files it checks every profile in each, each against its own
+catalogues — which is what a host generating a file of its own runs alongside
+the shipped one. It does not enumerate combinations across profiles (every site
+with every borrowed rig); the rules that govern those are pinned by tests in
+`tests/test_presets.py` instead.
+
 ## Design notes
 
 **Why `presets.py` lives here and not in the engine.** Hardware presets are out
@@ -152,4 +196,6 @@ both implement "first entry listed is the default", "a hardware-only profile
 fills in no location", "`median_seeing_fwhm` is displayed and never applied". The
 browser cannot run Python, so two implementations are unavoidable; what
 `presets.py` prevents is a *third* appearing the moment another Python caller
-wants presets.
+wants presets. Hardware named `PROFILE/KEY` exists only in `presets.py`: the
+browser's selectors stay within one site, so there is nothing for `etc.js` to
+mirror.

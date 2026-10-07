@@ -128,7 +128,9 @@ src/
 `castorCLI/presets.py` deserves a note on why it sits outside the engine: hardware
 presets are deliberately out of scope for `castor/` (§1.3), and a host with its own
 hardware database — Kinder is one — has no use for a reader of this repository's
-JSON file. Putting it in the engine would make it dead weight there.
+JSON file. Putting it in the engine would make it dead weight there. A host that
+writes preset files of its own instead can have them read beside the shipped one
+([presets](presets.md#several-files)); the engine sees none of it either way.
 
 ### Module Responsibilities
 
