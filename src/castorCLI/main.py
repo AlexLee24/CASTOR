@@ -384,7 +384,8 @@ def list_presets(presets_file, as_json, bands) -> None:
         click.echo("")
 
 def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
-    """Everything `castor check` verifies about a loaded preset file.
+    """Everything `castor check` verifies about a loaded preset file, or several
+    merged by presets.load().
 
     Returns how many complete configurations were resolved, and one line per
     problem found, as `castor check` prints them. An empty list is a clean file.
@@ -436,7 +437,7 @@ def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
 @cli.command(name="check")
 @click.option("--presets-file", type=click.Path(path_type=Path), multiple=True, help=PRESETS_FILE_HELP)
 @click.option("--provenance", "provenance_file", type=click.Path(path_type=Path),
-              help="Also hold every number in the file to this provenance table, "
+              help="Also hold every number in the files read to this provenance table, "
                    "JSON of {path: [value, class, note]}.")
 def check_presets(presets_file, provenance_file) -> None:
     """Verify a preset file beyond what loading it proves.
@@ -448,7 +449,8 @@ def check_presets(presets_file, provenance_file) -> None:
     nothing; the only way to see it is to resolve the combination and look.
 
     With --provenance, every number in the file must also have a record in that
-    table saying where it came from, and every record a number.
+    table saying where it came from, and every record a number. Given several
+    files, one table covers them all; to hold each to its own, check each alone.
     """
     catalogue = _load_presets(presets_file)
     checked, problems = check_file(catalogue)
@@ -460,7 +462,11 @@ def check_presets(presets_file, provenance_file) -> None:
         except provenance.ProvenanceError as exc:
             raise SystemExit(_fail(exc))
         # The files as written, not the loaded catalogue: a record vouches for the
-        # number a file holds, and loading coerces. The same files, merged the same way.
+        # number a file holds, and loading coerces. The same files, merged the same
+        # way, so one table covers them all. Profile ids are unique across files, so
+        # each path still names one number in one file; and hardware named
+        # PROFILE/KEY is borrowed when a configuration is chosen, not copied into a
+        # file, so its numbers are walked once, under the profile that owns them.
         profiles = _written_profiles(presets_file)
         held = len(provenance.walk(profiles))
         problems += [str(problem) for problem in provenance.check(profiles, table)]

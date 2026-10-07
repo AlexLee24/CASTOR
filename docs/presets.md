@@ -157,7 +157,10 @@ read beside these sites rather than instead of them.
   castorGUI's route serves) keeps the first file's.
 
 The [provenance](#where-the-numbers-come-from) table covers the shipped file
-only. A file from elsewhere answers for its own numbers.
+only. A file from elsewhere answers for its own numbers, and can be held to the
+same rule with a table of its own: `castor check --presets-file it.json
+--provenance its_table.json`. Given several files, `check --provenance` holds
+them all to one table; [CLI](cli.md) has how that reads.
 
 ## Hardware from another profile
 

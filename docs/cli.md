@@ -217,6 +217,23 @@ vouches for what the file says. A table that cannot be read is bad input, exit 3
 That includes one that is not UTF-8 text, which is what `>` writes in Windows
 PowerShell 5.1 (UTF-16): the table is read as UTF-8, like the preset file.
 
+Given [several preset files](#more-than-one-preset-file), one table covers every
+number in all of them: the same files `check` reads, merged the same way
+(`presets.document()`, which keeps each as written). A profile id is defined in
+one file only, so a path still names one number in one file. Hardware named
+`PROFILE/KEY` is borrowed when a configuration is chosen, not copied into a file,
+so its numbers are recorded once, under the profile that owns them — a record
+under the site borrowing it is for a number no file holds. To keep each file's
+record beside it, check the files one at a time:
+
+```bash
+castor check --presets-file my_rigs.json --provenance my_rigs.provenance.json
+```
+
+Without `--presets-file`, `check` reads `CASTOR_PRESETS_PATH`'s files too, and
+the shipped record says nothing about them; with that variable set, name the
+shipped file to check it against its record alone.
+
 The rule is `castorCLI.provenance`, as functions over a file's `profiles` object
 exactly as JSON gives it, for a host that keeps its own preset file:
 

@@ -337,10 +337,13 @@ def table_for_shipped(tmp_path):
     the shipped file's real record but is not part of this suite: what is under
     test here is the command, not the record.
     """
-    path = tmp_path / "provenance.json"
+    return _record_everything(tmp_path / "provenance.json", _shipped_profiles())
+
+def _record_everything(path, profiles):
+    """Writes a table recording every number in `profiles`, claiming no source for any."""
     path.write_text(json.dumps({
         key: [value, provenance.GUESS, "fixture: no source claimed"]
-        for key, value in provenance.walk(_shipped_profiles()).items()
+        for key, value in provenance.walk(profiles).items()
     }), encoding="utf-8")
     return path
 
@@ -585,3 +588,106 @@ def test_a_sites_own_caveat_reads_as_it_always_has(run):
 
     assert f"\nCAVEAT: {caveat}\n" in run(*args).stderr
     assert json.loads(run(*args, "--json").stdout)["caveat"] == caveat
+
+# ==========================================
+# Provenance across several preset files
+# ==========================================
+
+def _problems(result):
+    return [line.removeprefix("  PROBLEM  ") for line in result.stderr.splitlines()
+            if line.startswith("  PROBLEM  ")]
+
+def _written(*paths):
+    """The files' profiles as written and merged: what check --provenance walks."""
+    return presets.document(*paths)["profiles"]
+
+def test_one_table_covers_every_merged_file(run, hardware_only_presets, tmp_path):
+    """Profile ids are unique across files, so one table keyed by path still names
+    each number in exactly one of them, and the merged count is the files' sum."""
+    table = _record_everything(tmp_path / "provenance.json", _written(SHIPPED, hardware_only_presets))
+
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--provenance", str(table))
+
+    assert result.exit_code == 0, result.stderr
+    held = len(provenance.walk(_written(SHIPPED))) + len(provenance.walk(_written(hardware_only_presets)))
+    assert f"{held} values checked against {table}" in result.stdout
+    assert result.stdout.splitlines()[-1] == "no problems found"
+
+def test_a_later_files_numbers_need_records_of_their_own(run, hardware_only_presets,
+                                                         table_for_shipped):
+    """The shipped record vouches for the shipped file. A file read beside it
+    answers for every number it holds, and nothing of the shipped file's is
+    reported along the way."""
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--provenance", str(table_for_shipped))
+
+    problems = _problems(result)
+    assert result.exit_code == 3
+    assert [problem.split(":")[0] for problem in problems] == list(
+        provenance.walk(_written(hardware_only_presets)))
+    assert all(problem.endswith("the table does not say where it came from") for problem in problems)
+
+def test_each_file_can_be_held_to_a_table_of_its_own(run, hardware_only_presets,
+                                                     table_for_shipped, tmp_path):
+    """One check per file, each with its own table: how a host keeps its record
+    beside the file it is about."""
+    own = _record_everything(tmp_path / "own.json", _written(hardware_only_presets))
+
+    assert run("check", "--presets-file", SHIPPED, "--provenance", str(table_for_shipped)).exit_code == 0
+    assert run("check", "--presets-file", str(hardware_only_presets), "--provenance", str(own)).exit_code == 0
+
+def test_the_variables_files_are_held_to_the_table_too(run, monkeypatch, hardware_only_presets,
+                                                       table_for_shipped):
+    """With no --presets-file, check reads the search path, so a file on
+    CASTOR_PRESETS_PATH is part of what the table must cover. Naming the shipped
+    file sets the variable aside, as it does for every command."""
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(hardware_only_presets))
+
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 3
+    assert "bare_scope.telescopes.T.primary_mirror_diameter" in [
+        problem.split(":")[0] for problem in _problems(result)]
+    assert run("check", "--presets-file", SHIPPED, "--provenance", str(table_for_shipped)).exit_code == 0
+
+def test_a_later_file_is_vouched_for_as_written(run, hardware_only_presets, tmp_path):
+    """Merging goes through presets.document(), not the loaded catalogue, so a
+    second file's quoted number is still compared as the file spells it."""
+    data = json.loads(hardware_only_presets.read_text())
+    data["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]["focal_length"] = "8.0"
+    hardware_only_presets.write_text(json.dumps(data))
+    merged = _written(SHIPPED, hardware_only_presets)
+    merged["bare_scope"]["telescopes"]["T"]["telescope"]["focal_length"] = 8.0
+    table = _record_everything(tmp_path / "provenance.json", merged)
+
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--provenance", str(table))
+
+    assert _problems(result) == [
+        "bare_scope.telescopes.T.focal_length: the file holds '8.0' but its record vouches for 8.0"]
+
+def test_borrowed_hardware_is_recorded_once_under_its_owner(run, lulin, hardware_only_presets,
+                                                            tmp_path):
+    """PROFILE/KEY borrows an entry when a configuration is chosen and copies
+    nothing into a file. Lulin running bare_scope's rig needs no record under
+    lulin, and a record written there vouches for a number no file holds."""
+    files = ["--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets)]
+    table = _record_everything(tmp_path / "provenance.json", _written(SHIPPED, hardware_only_presets))
+
+    borrowed = run(*lulin, *files, "--telescope", "bare_scope/T", "--camera", "bare_scope/C",
+                   "--filter", "bare_scope/F")
+    assert borrowed.exit_code == 0, borrowed.stderr
+    assert run("check", *files, "--provenance", str(table)).exit_code == 0
+
+    records = json.loads(table.read_text(encoding="utf-8"))
+    records["lulin.telescopes.bare_scope/T.focal_length"] = [
+        8.0, provenance.DOCUMENT, "copied from bare_scope's own record"]
+    table.write_text(json.dumps(records), encoding="utf-8")
+
+    result = run("check", *files, "--provenance", str(table))
+
+    assert result.exit_code == 3
+    assert _problems(result) == [
+        "lulin.telescopes.bare_scope/T.focal_length: the table records 8.0 "
+        "for a number the file does not hold"]

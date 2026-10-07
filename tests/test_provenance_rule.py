@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from castorCLI import provenance
+from castorCLI import presets, provenance
 
 # ==========================================
 # Fixtures
@@ -318,3 +318,23 @@ def test_bad_records_in_a_readable_table_are_problems_not_errors(tmp_path, profi
     problems = provenance.check(profiles, provenance.load_table(path))
 
     assert kinds(problems) == [("site.cameras.C.pixel_pitch", "malformed_record")]
+
+# ==========================================
+# Several preset files
+# ==========================================
+
+def test_the_merged_view_is_each_files_numbers_side_by_side(tmp_path, profiles, table):
+    """castor check --provenance walks presets.document() over every file it reads.
+    A profile id is defined in one file only, so the merged view holds each file's
+    paths unchanged and in file order, none shadowed or lost, and one table over it
+    is every file's table together."""
+    paths = []
+    for profile_id, profile in profiles.items():
+        path = tmp_path / f"{profile_id}.json"
+        path.write_text(json.dumps({"profiles": {profile_id: profile}}), encoding="utf-8")
+        paths.append(path)
+
+    merged = presets.document(*paths)["profiles"]
+
+    assert list(provenance.walk(merged).items()) == list(EXPECTED.items())
+    assert provenance.check(merged, table) == []
