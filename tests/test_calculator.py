@@ -5,7 +5,7 @@ import pytest
 from datetime import datetime, timezone
 
 # Assumes your module path is castor
-from castor import moon, schema
+from castor import moon, physics, schema
 from castor.calculator import run_calculation
 
 # ==========================================
@@ -224,6 +224,66 @@ def test_extended_sources_have_no_psf_peak(base_request, aperture_factor):
 
     per_pixel = response.budget.source_count_rate / response.diagnostics.num_pixels_aperture
     assert response.budget.peak_pixel_rate == pytest.approx(per_pixel, rel=1e-9)
+
+
+# ==========================================
+# The background-dominance factor k moves t_opt and nothing else
+# ==========================================
+
+def _without_t_opt(response):
+    """The response with the two fields k is allowed to touch taken out."""
+    dumped = response.model_dump()
+    del dumped["core"]["optimal_exposure_time"]
+    del dumped["core"]["background_dominance_factor"]
+    return dumped
+
+def test_omitting_k_is_the_crossover_it_always_was(mock_moon, base_request):
+    """A request without the field gets the same response as one that states 1.0,
+    and that t_opt is the call the engine made before k was a request option."""
+    omitted = run_calculation(base_request)
+
+    stated = base_request.model_copy(deep=True)
+    stated.options.background_dominance_factor = 1.0
+    assert run_calculation(stated).model_dump() == omitted.model_dump()
+
+    assert omitted.core.background_dominance_factor == 1.0
+    assert omitted.core.optimal_exposure_time == physics.calculate_optimal_exposure_time(
+        omitted.budget.sky_count_rate,
+        base_request.instrument.camera.dark_current_rate,
+        base_request.instrument.camera.readout_noise,
+    )
+
+@pytest.mark.parametrize("goal", ["solve_time", "solve_snr"])
+@pytest.mark.parametrize("k", [0.5, 3.0, 3.1235])
+def test_k_scales_t_opt_by_its_square_and_moves_nothing_else(mock_moon, base_request, goal, k):
+    """t_opt = (k*RON)^2 / (Rate_sky + R_dark), so k = 3 is exactly nine times the
+    crossover. SNR is computed at the frame length the caller asked for, not at
+    t_opt, so the SNRs, t_sat, the budget and the diagnostics must not move — a k
+    that leaked into them would be a second, undocumented knob on the noise model.
+    """
+    if goal == "solve_snr":
+        base_request.options = schema.SolveForSNR(
+            aperture_factor=1.5, single_exp_time=300.0, num_exposures=5
+        )
+    baseline = run_calculation(base_request)
+
+    request = base_request.model_copy(deep=True)
+    request.options.background_dominance_factor = k
+    response = run_calculation(request)
+
+    assert response.core.optimal_exposure_time == pytest.approx(
+        k ** 2 * baseline.core.optimal_exposure_time, rel=1e-12
+    )
+    assert response.core.background_dominance_factor == k
+    assert _without_t_opt(response) == _without_t_opt(baseline)
+
+def test_a_response_stored_before_k_existed_still_reads(mock_moon, base_request):
+    """Responses recorded before the echo existed have no such key. They were all
+    computed at 1.0, so that is what they must read back as — not a validation error."""
+    stored = run_calculation(base_request).model_dump(mode="json")
+    del stored["core"]["background_dominance_factor"]
+
+    assert schema.ObservationResponse.model_validate(stored).core.background_dominance_factor == 1.0
 
 
 # ==========================================

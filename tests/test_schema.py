@@ -12,6 +12,8 @@ from castor.schema import (
     SolveForSNR,
     SolveForTime,
     SkyAnnulus,
+    BatchSolveForSNR,
+    BatchSolveForTime,
     ObservationResponse,
     NoiseComponents,
 )
@@ -187,7 +189,60 @@ class TestSkyAnnulus:
 
 
 # ==========================================
-# Test focus 5: what a response promises to carry
+# Test focus 5: the background-dominance factor k
+# ==========================================
+class TestBackgroundDominanceFactor:
+    # Every options class that takes k, with the goal field each one needs. The
+    # batch classes are here because a time series reports t_opt at every step.
+    OPTIONS = [
+        (SolveForSNR, {"num_exposures": 1}),
+        (SolveForTime, {"target_snr": 10.0}),
+        (BatchSolveForSNR, {"num_exposures": 1}),
+        (BatchSolveForTime, {"target_snr": 10.0}),
+    ]
+
+    @pytest.mark.parametrize("options,goal", OPTIONS)
+    def test_omitting_k_reads_as_the_crossover(self, options, goal):
+        """Every goal, single or time series, takes it, and leaving it out means what
+        every request before the field existed meant: t_opt at k = 1, the crossover."""
+        opts = options(aperture_factor=0.85, single_exp_time=120.0, **goal)
+        assert opts.background_dominance_factor == 1.0
+
+    @pytest.mark.parametrize("options,goal", OPTIONS)
+    @pytest.mark.parametrize("k", [0.0, -1.0])
+    def test_a_non_positive_k_is_refused(self, options, goal, k):
+        """k = 0 asks for a zero-length frame and a negative one for a negative
+        length; both would come back as a number rather than an error."""
+        with pytest.raises(ValidationError, match="greater than 0"):
+            options(aperture_factor=0.85, single_exp_time=120.0,
+                    background_dominance_factor=k, **goal)
+
+    @pytest.mark.parametrize("options,goal", OPTIONS)
+    def test_a_misspelled_k_is_refused_not_defaulted(self, options, goal):
+        """With a default in place, a typo that strict mode let through would read
+        as k = 1 and look exactly like the value the caller asked for."""
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            options(aperture_factor=0.85, single_exp_time=120.0,
+                    background_dominance=3.0, **goal)
+
+    def test_the_batch_contract_takes_k_on_the_same_terms(self):
+        """The time-series options are a separate class, not a subclass, so nothing
+        but this keeps the two copies of the field alike: same type, default and
+        bound. Only the wording may differ. The GUI sends one options object to
+        both endpoints, so a k that one of them refused, or read differently, would
+        break the series or set its t_opt apart from the single result's."""
+        def contract(options):
+            field = dict(options.model_json_schema()["properties"]["background_dominance_factor"])
+            assert "(ATBD: k)" in field.pop("description")
+            return field
+
+        assert contract(BatchSolveForSNR) == contract(BatchSolveForTime) == contract(SolveForSNR)
+        assert contract(SolveForSNR) == {"default": 1.0, "exclusiveMinimum": 0,
+                                         "title": "Background Dominance Factor", "type": "number"}
+
+
+# ==========================================
+# Test focus 6: what a response promises to carry
 # ==========================================
 class TestResponseContract:
     def test_the_noise_budget_and_pointing_are_part_of_the_contract(self):

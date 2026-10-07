@@ -380,6 +380,36 @@ def test_optimal_exposure_time_scales_with_dominance_factor_squared():
 
     assert t_k2 == pytest.approx(t_k1 * 4.0)
 
+@pytest.mark.parametrize("penalty", [0.05, 0.10, np.sqrt(2.0) - 1.0])
+def test_dominance_factor_is_the_read_noise_penalty_it_leaves(penalty):
+    """ATBD 4.3.5's relation between k and the read-noise penalty p, pinned both ways.
+
+    Per pixel, at t_opt the total noise is sqrt(1 + 1/k^2) times the background's
+    own, so the k a planner wants for a penalty p is 1/sqrt((1+p)^2 - 1). The second
+    half checks the claim built on it: for a faint source the same ratio holds for
+    the whole aperture of a stack of t_opt frames, because N_bkg multiplies sky,
+    dark and read noise alike — so the stack's SNR is 1/(1+p) of a read-noise-free
+    detector's in the same time.
+    """
+    sky_rate, dark_rate, readout_noise = 2.0, 0.5, 5.0
+    k = 1.0 / np.sqrt((1.0 + penalty) ** 2 - 1.0)
+
+    t_opt = calculate_optimal_exposure_time(sky_rate, dark_rate, readout_noise,
+                                            background_dominance_factor=k)
+    background = (sky_rate + dark_rate) * t_opt
+    assert np.sqrt(background + readout_noise ** 2) / np.sqrt(background) == pytest.approx(1.0 + penalty)
+
+    stack = dict(source_count_rate=1e-9, sky_count_rate=sky_rate, dark_current_rate=dark_rate,
+                 num_pixels_aperture=12.0, single_exp_time=t_opt, total_exp_time=10 * t_opt,
+                 num_exposures=10, num_pixels_sky_estimate=3.0)
+    with_read_noise = calculate_total_snr(**stack, readout_noise=readout_noise)
+    without_read_noise = calculate_total_snr(**stack, readout_noise=0.0)
+    assert with_read_noise / without_read_noise == pytest.approx(1.0 / (1.0 + penalty), rel=1e-6)
+
+def test_the_documented_five_percent_dominance_factor():
+    """The worked example ATBD 4.3.5 quotes: k = 3.1235 leaves a 5% penalty."""
+    assert np.sqrt(1.0 + 1.0 / 3.1235 ** 2) - 1.0 == pytest.approx(0.05, abs=1e-5)
+
 # ------------------------------------------
 # Noise budget (ATBD 4.3.6)
 # ------------------------------------------

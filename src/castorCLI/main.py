@@ -160,9 +160,14 @@ def _results(request: schema.ObservationRequest, response: schema.ObservationRes
         rows.append(("Exposures needed", f"{core.required_exposures}"))
     if frames:
         rows.append(("Total time", f"{frames * single:.0f} s  ({frames} × {single:g} s)"))
+    # Off the default k the same label means a different convention, and a request
+    # file can set k without the person reading this ever typing it — so say which.
+    background_limited = f"{core.optimal_exposure_time:.1f} s"
+    if core.background_dominance_factor != 1.0:
+        background_limited += f"  (k = {core.background_dominance_factor:g})"
     rows += [
         ("Saturates after", f"{core.saturation_time_limit:.1f} s"),
-        ("Background-limited at", f"{core.optimal_exposure_time:.1f} s"),
+        ("Background-limited at", background_limited),
         ("Total FWHM", f'{response.diagnostics.total_fwhm:.2f}"'),
     ]
     return [f"  {label:<22}{value}" for label, value in rows]

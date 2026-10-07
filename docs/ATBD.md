@@ -59,6 +59,7 @@ flowchart LR
     t_single_in([single_exp_time])
     N_exp_in([num_exposures])
     SNR_tgt([target_snr])
+    k_bg([background_dominance_factor])
 
     %% ==========================================
     %% Layer 2: Level III Physical Conversions
@@ -120,7 +121,7 @@ flowchart LR
     t_single_in & N_exp_in & N_exp_out --> t_tot
     
     FWC & R_peak & R_sky & R_dark --> t_sat
-    R_sky & R_dark & RON --> t_opt
+    R_sky & R_dark & RON & k_bg --> t_opt
 
     %% ==========================================
     %% Styling Classes
@@ -130,7 +131,7 @@ flowchart LR
     classDef layer3 stroke:#2ecc71,stroke-width:2.5px;
     classDef layer4 stroke:#f39c12,stroke-width:3px;
 
-    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_single_in,N_exp_in,SNR_tgt layer1;
+    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_single_in,N_exp_in,SNR_tgt,k_bg layer1;
     class X,Flux_moon,mu_sky,FWHM_tot,Ep,A_eff,S_pix,T_sys layer2;
     class f_enc,N_pix,R_sky,R_src,R_peak layer3;
     class SNR_total,SNR_single,N_exp_out,t_sat,t_opt,t_tot layer4;
@@ -217,6 +218,7 @@ This profile holds user-configurable settings that dictate the desired constrain
 | `single_exp_time` | $t_{\text{single}}$ | s | Integration time for an individual sub-exposure frame. |
 | `num_exposures` | $N_{\text{exp}}$ | count | Total number of exposure frames. |
 | `target_snr` | $\text{SNR}_{\text{target}}$ | dimensionless | Goal Signal-to-Noise Ratio to solve for time or exposures. |
+| `background_dominance_factor` | $k$ | dimensionless | How many times the readout noise the background shot noise must reach in $t_{\text{opt}}$ (§4.3.5). Moves $t_{\text{opt}}$ only. Default $1.0$, the crossover; provisional. |
 
 The cumulative integration time $t_{\text{total}} = t_{\text{single}} \cdot N_{\text{exp}}$ is not a request field. It follows from the two above — $N_{\text{exp}}$ given (`solve_snr`) or solved for (`solve_time`, §4.3.3) — and is reported as `core.total_exp_time`. It is integration time only; readout overhead is not modelled (`validation/QUESTIONS.md` 11).
 
@@ -389,11 +391,17 @@ To ensure the detector operates within its linear regime, the saturation time li
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
 **4.3.5 Background-Limited (Optimal) Exposure Time**
-$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
+$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) reaches $k$ times the fixed per-frame readout noise, per pixel — at $k = 1$, the point where it just overtakes it. Beyond this point read noise costs less than the penalty $p$ that $k$ leaves (below), which bounds what lengthening a single exposure can still gain per unit of *total* integration time; once that is small, it becomes more efficient to add exposures than to keep extending one. $k$ is the standard-deviation ratio between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
 
-$k = 1.0$ (the current fixed default) is the literal crossover point, where background shot noise just overtakes readout noise. This default is provisional — it is not yet backed by a specific reference guideline, and $k$ is not currently exposed as a request parameter.
+$k$ is the request option `options.background_dominance_factor`, and the response echoes the value used as `core.background_dominance_factor`. A time series takes the same option and applies it at every timestamp: its per-step $t_{\text{opt}}$ moves with $Rate_{\text{sky}}$ while $k$ stays fixed, and it echoes $k$ as a list as long as the series, like every other per-step value. Its default, $k = 1.0$, is the literal crossover point, where background shot noise just overtakes readout noise; a request that omits it gets that, as every request did before $k$ was exposed. The default is provisional — it is not yet backed by a specific reference guideline (`validation/QUESTIONS.md` 12). $k$ enters nothing but $t_{\text{opt}}$: both SNRs are evaluated at the requested $t_{\text{single}}$, whatever $t_{\text{opt}}$ comes out as.
+
+What a choice of $k$ costs is easiest to read as the read-noise penalty it leaves. At $t_{\text{opt}}$ the background variance per pixel is $(k \cdot \text{RON})^2$, so the total per-pixel noise exceeds the background's own by
+
+$$p = \sqrt{1 + 1/k^2} - 1, \qquad k = \frac{1}{\sqrt{(1+p)^2 - 1}}$$
+
+$k = 1$ leaves $p = 41.4\%$; $k = 3.1235$ leaves $p = 5\%$. For a faint source the same ratio holds for the whole aperture of a stack of $t_{\text{opt}}$ frames, because $N_{\text{bkg}}$ multiplies sky, dark current and read noise alike (§4.3.1): the stack reaches $1/(1+p)$ of the SNR a read-noise-free detector would in the same time, or needs $(1+p)^2 = 1 + 1/k^2$ times the integration to match it — twice as long at $k = 1$, 10% longer at $k = 3.1235$. Source shot noise and $V_{\text{flat}}$ add equally to both sides and only dilute $p$, so this is the background-limited worst case.
 
 **4.3.6 Noise Budget**
 
