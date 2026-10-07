@@ -808,11 +808,14 @@ def calculate_optimal_exposure_time(
     Calculate the "background-limited" single exposure time.
 
     This is the single-exposure integration time at which the combined shot
-    noise from sky background + dark current overtakes the fixed per-frame
-    readout noise, per pixel. Past this point, lengthening a single exposure
-    further gives rapidly diminishing SNR returns per unit of *total*
-    integration time (splitting a fixed total exposure into more sub-frames
-    stops costing meaningful SNR) — so it becomes more efficient to add more
+    noise from sky background + dark current reaches
+    `background_dominance_factor` times the fixed per-frame readout noise, per
+    pixel — at the default 1.0, the point where it just overtakes it. Past
+    this point, read noise costs less than the penalty that factor leaves
+    (ATBD 4.3.5), which bounds what lengthening a single exposure further can
+    still gain per unit of *total* integration time (splitting a fixed total
+    exposure into more sub-frames of at least this length costs no more than
+    that penalty) — so once it is small, it becomes more efficient to add more
     exposures than to keep extending a single one.
 
     Derived from a standard-deviation ratio between the two noise sources:

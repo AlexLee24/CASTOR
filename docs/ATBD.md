@@ -387,7 +387,7 @@ To ensure the detector operates within its linear regime, the saturation time li
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
 **4.3.5 Background-Limited (Optimal) Exposure Time**
-$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) overtakes the fixed per-frame readout noise, per pixel. Beyond this point, lengthening a single exposure yields rapidly diminishing SNR returns per unit of *total* integration time, so it becomes more efficient to add exposures than to keep extending one. It is derived from a standard-deviation ratio $k$ between the two noise sources:
+$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) reaches $k$ times the fixed per-frame readout noise, per pixel — at $k = 1$, the point where it just overtakes it. Beyond this point read noise costs less than the penalty $p$ that $k$ leaves (below), which bounds what lengthening a single exposure can still gain per unit of *total* integration time; once that is small, it becomes more efficient to add exposures than to keep extending one. $k$ is the standard-deviation ratio between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
 
