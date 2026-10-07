@@ -424,3 +424,13 @@ def test_an_unreadable_provenance_table_is_bad_input(run, tmp_path):
 
     assert result.exit_code == 3
     assert result.stderr.startswith("error: Cannot read provenance table")
+
+def test_a_provenance_table_that_is_not_utf8_is_bad_input(run, table_for_shipped):
+    """What `>` writes in Windows PowerShell 5.1: an error line, not a traceback."""
+    table_for_shipped.write_text(table_for_shipped.read_text(encoding="utf-8"), encoding="utf-16")
+
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 3
+    assert result.stderr.startswith("error: Cannot read provenance table")
+    assert "not UTF-8 text" in result.stderr

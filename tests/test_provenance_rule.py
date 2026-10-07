@@ -228,6 +228,16 @@ def test_a_missing_table_names_its_path(tmp_path):
     with pytest.raises(provenance.ProvenanceError, match="nowhere.json"):
         provenance.load_table(tmp_path / "nowhere.json")
 
+def test_a_table_that_is_not_utf8_is_an_error_not_a_traceback(tmp_path, table):
+    """Windows PowerShell 5.1 writes UTF-16 when the export is redirected with >.
+    A host catching ProvenanceError has to catch this too."""
+    path = tmp_path / "provenance.json"
+    path.write_text(json.dumps({key: list(record) for key, record in table.items()}),
+                    encoding="utf-16")
+
+    with pytest.raises(provenance.ProvenanceError, match="not UTF-8 text"):
+        provenance.load_table(path)
+
 def test_a_table_that_is_not_json_is_an_error_not_a_traceback(tmp_path):
     path = tmp_path / "provenance.json"
     path.write_text("{ not json", encoding="utf-8")

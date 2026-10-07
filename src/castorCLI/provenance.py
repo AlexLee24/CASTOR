@@ -72,7 +72,7 @@ MIN_NOTE_LENGTH = 10
 # ==========================================
 
 class ProvenanceError(ValueError):
-    """The table file itself is unusable — missing, unreadable, not a JSON object.
+    """The table file itself is unusable — missing, unreadable, not UTF-8, not a JSON object.
 
     Anything wrong *inside* a usable table is a Problem instead, so that a broken
     table reports every fault at once rather than the first one.
@@ -226,8 +226,8 @@ def summary(profiles: Mapping[str, Any], table: Mapping[str, Any]) -> dict[str, 
 def load_table(path: Path | str) -> dict[str, Any]:
     """Reads a provenance table kept as JSON, {path: [value, class, note]}.
 
-    Only the file's own shape is checked here: that it is one JSON object, naming
-    each path once. A path given twice would otherwise keep only its last record,
+    Only the file's own shape is checked here: that it is UTF-8 text holding one
+    JSON object, naming each path once. A path given twice would otherwise keep only its last record,
     and the first would vanish without ever being read. Whether each record is a
     well-formed triple is check()'s to report, alongside everything else.
     """
@@ -237,6 +237,11 @@ def load_table(path: Path | str) -> dict[str, Any]:
         raw = source.read_text(encoding="utf-8")
     except OSError as exc:
         raise ProvenanceError(f"Cannot read provenance table at {source}: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        # Windows PowerShell 5.1 writes UTF-16 when the export is redirected with >,
+        # so this is the likeliest unreadable table there is, not a corner case.
+        raise ProvenanceError(
+            f"Cannot read provenance table at {source}: it is not UTF-8 text ({exc})") from exc
 
     def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         seen: dict[str, Any] = {}

@@ -169,6 +169,8 @@ same `PROBLEM` lines:
 
 The file is read as written, not as loaded: loading coerces, and a record
 vouches for what the file says. A table that cannot be read is bad input, exit 3.
+That includes one that is not UTF-8 text, which is what `>` writes in Windows
+PowerShell 5.1 (UTF-16): the table is read as UTF-8, like the preset file.
 
 The rule is `castorCLI.provenance`, as functions over a file's `profiles` object
 exactly as JSON gives it, for a host that keeps its own preset file:
