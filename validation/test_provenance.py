@@ -12,10 +12,21 @@ import pytest
 
 import provenance
 from castorCLI import presets
+from castorCLI import provenance as rule
 
 PRESETS = json.loads(
     pathlib.Path(presets.DEFAULT_PATH).read_text(encoding="utf-8"))["profiles"]
 VALUES = provenance.walk(PRESETS)
+
+
+def test_the_shipped_file_passes_the_rule_hosts_run():
+    """The same check a host runs on its own preset file, run on this one.
+
+    The tests below say the same thing one assertion at a time, which is what
+    makes a failure easy to read; this one is what proves that castorCLI's rule
+    and this suite's have not drifted apart.
+    """
+    assert rule.check(PRESETS, provenance.PROVENANCE) == []
 
 
 def test_the_table_covers_the_file_exactly():

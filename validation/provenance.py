@@ -14,6 +14,10 @@ from. Values marked GUESS are not defects to be hidden — they are the honest
 state of the file, and the point of naming them is that nobody has to rediscover
 which ones they are.
 
+This file is the record and nothing else. The rule it is held to — walking a
+preset file, and what a table must say about it — is `castorCLI.provenance`, so
+that a host with a preset file of its own can hold it to the same rule.
+
 Sources, strongest first:
 
     MEASURED   derived from the observatory's own frames in this suite
@@ -21,7 +25,8 @@ Sources, strongest first:
     DERIVED    computed from a MEASURED or DOCUMENT value
     GUESS      no source. Believe nothing about it.
 """
-MEASURED, DOCUMENT, DERIVED, GUESS = "MEASURED", "DOCUMENT", "DERIVED", "GUESS"
+from castorCLI import provenance as _rule
+from castorCLI.provenance import DERIVED, DOCUMENT, GUESS, MEASURED, walk  # noqa: F401
 
 #: path -> (value, source, note)
 PROVENANCE = {
@@ -194,43 +199,6 @@ PROVENANCE = {
 }
 
 
-def walk(profiles):
-    """Every numeric leaf in a preset file, as dotted paths."""
-    out = {}
-    sections = (("telescopes", "telescope"), ("cameras", "camera"), ("filters", "optic_filter"))
-    for profile_id, profile in profiles.items():
-        environment = profile.get("environment") or {}
-        for key, value in environment.items():
-            if isinstance(value, dict):
-                for inner, v in value.items():
-                    out[f"{profile_id}.environment.{key}.{inner}"] = v
-            else:
-                out[f"{profile_id}.environment.{key}"] = value
-        if profile.get("median_seeing_fwhm") is not None:
-            out[f"{profile_id}.median_seeing_fwhm"] = profile["median_seeing_fwhm"]
-        for catalogue, section in sections:
-            for entry_id, entry in (profile.get(catalogue) or {}).items():
-                for key, value in entry[section].items():
-                    out[f"{profile_id}.{catalogue}.{entry_id}.{key}"] = value
-                if catalogue != "filters":
-                    continue
-                for key, value in (entry.get("environment") or {}).items():
-                    out[f"{profile_id}.{catalogue}.{entry_id}.environment.{key}"] = value
-                # telescope is keyed by which telescope the override belongs to
-                # (FilterEntry.telescope in castorCLI/presets.py) — one extra
-                # level deeper than environment, which is site-wide and needs no key.
-                for tel_key, tel_value in (entry.get("telescope") or {}).items():
-                    for key, value in tel_value.items():
-                        out[f"{profile_id}.{catalogue}.{entry_id}.telescope.{tel_key}.{key}"] = value
-    return out
-
-
 def summary(profiles):
     """How many values in this file have a source, by profile."""
-    counts = {}
-    for path in walk(profiles):
-        profile_id = path.split(".", 1)[0]
-        source = PROVENANCE.get(path, (None, "MISSING", ""))[1]
-        counts.setdefault(profile_id, {}).setdefault(source, 0)
-        counts[profile_id][source] += 1
-    return counts
+    return _rule.summary(profiles, PROVENANCE)
