@@ -217,6 +217,28 @@ def test_set_parses_json_values(run, lulin):
 
     assert json.loads(result.stdout)["request"]["target"]["morphology"]["type"] == "extended"
 
+def test_k_is_reached_with_set_and_echoed_both_ways(run, lulin):
+    """No flag is needed for the t_opt convention: --set reaches it, the request
+    echo shows what was asked and the response shows what was used."""
+    default = json.loads(run(*lulin, "--json").stdout)
+    doubled = json.loads(run(*lulin, "--set", "options.background_dominance_factor=2", "--json").stdout)
+
+    assert default["request"]["options"]["background_dominance_factor"] == 1.0
+    assert doubled["request"]["options"]["background_dominance_factor"] == 2.0
+    assert doubled["response"]["core"]["background_dominance_factor"] == 2.0
+    assert doubled["response"]["core"]["optimal_exposure_time"] == pytest.approx(
+        4.0 * default["response"]["core"]["optimal_exposure_time"], rel=1e-12
+    )
+
+def test_a_non_default_k_is_named_beside_the_time_it_changes(run, lulin):
+    """The default output is unchanged; off the default the reader is told which
+    k the background-limited time was solved for."""
+    assert "(k =" not in run(*lulin).stdout
+
+    stated = run(*lulin, "--set", "options.background_dominance_factor=3.1235")
+    line = next(row for row in stated.stdout.splitlines() if "Background-limited at" in row)
+    assert line.endswith("(k = 3.1235)")
+
 # ==========================================
 # Reading back what the form saved
 # ==========================================

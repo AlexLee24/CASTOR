@@ -82,6 +82,13 @@ changed:
 and is repeatable, which is what keeps the flag list short: the common fields get
 flags, everything else is reachable without one.
 
+`options.background_dominance_factor` is one of those: k, how far the background
+must outweigh read noise in the "Background-limited at" time (ATBD 4.3.5). Its
+default of 1.0 belongs to the engine, not to this tool, so it is not on the
+`assumed` list — but whenever k is anything else the result names it beside that
+time, because a request file can set it without the person reading the output
+ever having typed it.
+
 `--request` reads what the GUI's SAVE writes. A saved form holds more than a
 request does — the batch fields, both branches of every either/or — so the extras
 are dropped and named on stderr rather than rejected.
