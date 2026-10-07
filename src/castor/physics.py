@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
-from typing import TypeAlias
+from typing import NamedTuple, TypeAlias
 
 Numeric: TypeAlias = float | NDArray[np.float64]
 
@@ -25,6 +25,9 @@ __all__ = [
     "calculate_peak_pixel_rate",
 
     "calculate_background_flatness_variance",
+    "NoiseTerms",
+    "calculate_single_noise_components",
+    "calculate_total_noise_components",
     "calculate_single_snr",
     "calculate_total_snr",
     "solve_required_exposures",
@@ -608,6 +611,177 @@ def calculate_background_flatness_variance(
     background_electrons = sky_count_rate * exp_time
     return (background_flatness_fraction * background_electrons * num_pixels_aperture) ** 2.0
 
+class NoiseTerms(NamedTuple):
+    """
+    The signal behind one SNR and every variance term that divides it.
+
+    Each term is summed over the aperture rather than left per pixel, so the five
+    variances can be compared with one another and with the signal directly.
+    Returned by calculate_single_noise_components and
+    calculate_total_noise_components, which calculate_single_snr and
+    calculate_total_snr are built on: an SNR is `signal / sqrt(total_variance)`
+    of exactly these values.
+
+    Every field follows the shape of the inputs that formed it, so a term built
+    only from constants stays a scalar beside the arrays of a time series (read
+    noise is the usual one). np.broadcast_to lines them up.
+
+    Attributes
+    ----------
+    signal : Numeric
+        Source electrons in the aperture, Rate_src * t [e-].
+    source_variance : Numeric
+        Poisson variance of the source, Rate_src * t [e-²].
+    sky_variance : Numeric
+        Sky shot noise over the background pixels, N_bkg * Rate_sky * t [e-²].
+    dark_variance : Numeric
+        Dark-current shot noise, N_exp * N_bkg * R_dark * t_single [e-²].
+    readout_variance : Numeric
+        Read noise, N_exp * N_bkg * RON² [e-²].
+    flatness_variance : Numeric
+        Background flatness term, V_flat(t) of ATBD 4.3.1a [e-²].
+    total_variance : Numeric
+        The variance the SNR divides by [e-²]. It equals the sum of the five
+        terms above to rounding, but is evaluated in the order the SNR always has
+        been, so it, not that sum, is the one to take a square root of.
+    num_pixels_background : Numeric
+        N_bkg = N_pix + N_est, the pixel count each per-pixel term was
+        multiplied by [count].
+    """
+    signal: Numeric
+    source_variance: Numeric
+    sky_variance: Numeric
+    dark_variance: Numeric
+    readout_variance: Numeric
+    flatness_variance: Numeric
+    total_variance: Numeric
+    num_pixels_background: Numeric
+
+def calculate_single_noise_components(
+    source_count_rate: Numeric,
+    sky_count_rate: Numeric,
+    dark_current_rate: Numeric,
+    readout_noise: Numeric,
+    num_pixels_aperture: Numeric,
+    single_exp_time: Numeric,
+    num_pixels_sky_estimate: Numeric = 0.0,
+    background_flatness_fraction: Numeric = 0.0
+) -> NoiseTerms:
+    """
+    Calculate the signal and each noise variance term of a single exposure frame.
+
+    Corresponds to ATBD Sections 4.3.1 and 4.3.6.
+    These are the terms calculate_single_snr divides into one number. A caller
+    who needs to know why a frame has the SNR it has, or to combine frames some
+    other way, needs them separately, and rebuilding them from the count rates
+    would be the CCD equation implemented a second time.
+
+    Parameters
+    ----------
+    ... (Shared parameters matched with calculate_single_snr) ...
+
+    Returns
+    -------
+    NoiseTerms
+        Signal [e-] and variance terms [e-²] for one frame (N_exp = 1).
+    """
+    # Signal = Source rate * time
+    signal = source_count_rate * single_exp_time
+
+    # Noise Variance Components, per pixel except the source's own
+    source_variance = source_count_rate * single_exp_time
+    sky_variance_pixel = sky_count_rate * single_exp_time
+    dark_variance_pixel = dark_current_rate * single_exp_time
+    readout_variance_pixel = readout_noise ** 2.0
+
+    # Total Variance = Source + (N_pix + N_est) * (Sky + Dark + RON^2) + flatness.
+    # N_est rides on the same per-pixel variance as the aperture, because what
+    # the annulus measures is that same background. Flatness is not per-pixel
+    # variance at all -- see calculate_background_flatness_variance -- so it is
+    # added once, not multiplied by background_pixels.
+    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
+    flatness_variance = calculate_background_flatness_variance(
+        sky_count_rate, single_exp_time, num_pixels_aperture, background_flatness_fraction
+    )
+    # Summed as one expression, in the order it had before the terms were
+    # returned, so that every SNR stays the same to the last bit. Adding the
+    # aperture-summed terms below would round differently.
+    total_variance = (
+        source_variance
+        + background_pixels * (sky_variance_pixel + dark_variance_pixel + readout_variance_pixel)
+        + flatness_variance
+    )
+
+    return NoiseTerms(
+        signal=signal,
+        source_variance=source_variance,
+        sky_variance=background_pixels * sky_variance_pixel,
+        dark_variance=background_pixels * dark_variance_pixel,
+        readout_variance=background_pixels * readout_variance_pixel,
+        flatness_variance=flatness_variance,
+        total_variance=total_variance,
+        num_pixels_background=background_pixels,
+    )
+
+def calculate_total_noise_components(
+    source_count_rate: Numeric,
+    sky_count_rate: Numeric,
+    dark_current_rate: Numeric,
+    readout_noise: Numeric,
+    num_pixels_aperture: Numeric,
+    single_exp_time: Numeric,
+    total_exp_time: Numeric,
+    num_exposures: Numeric,
+    num_pixels_sky_estimate: Numeric = 0.0,
+    background_flatness_fraction: Numeric = 0.0
+) -> NoiseTerms:
+    """
+    Calculate the signal and each noise variance term of a stack of exposures.
+
+    Corresponds to ATBD Sections 4.3.1 and 4.3.6.
+    The stacked counterpart of calculate_single_noise_components, and what
+    calculate_total_snr divides into one number. Source and sky accumulate over
+    the total time; dark current and read noise are charged once per frame;
+    flatness is set by the stack's total background (ATBD 4.3.1a).
+
+    Parameters
+    ----------
+    ... (Shared parameters matched with calculate_total_snr) ...
+
+    Returns
+    -------
+    NoiseTerms
+        Signal [e-] and variance terms [e-²] for the whole stack.
+    """
+    signal = source_count_rate * total_exp_time
+
+    source_variance = source_count_rate * total_exp_time
+    sky_variance_pixel = sky_count_rate * total_exp_time
+
+    # Dark current and Readout Noise scale with the number of discrete frames
+    dark_variance_frame = dark_current_rate * single_exp_time
+    readout_variance_frame = readout_noise ** 2.0
+
+    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
+    flatness_variance = calculate_background_flatness_variance(
+        sky_count_rate, total_exp_time, num_pixels_aperture, background_flatness_fraction
+    )
+    # One expression in its original order, as in calculate_single_noise_components.
+    total_variance = source_variance + (background_pixels * sky_variance_pixel) + \
+                     (num_exposures * background_pixels * (dark_variance_frame + readout_variance_frame)) + \
+                     flatness_variance
+
+    return NoiseTerms(
+        signal=signal,
+        source_variance=source_variance,
+        sky_variance=background_pixels * sky_variance_pixel,
+        dark_variance=num_exposures * background_pixels * dark_variance_frame,
+        readout_variance=num_exposures * background_pixels * readout_variance_frame,
+        flatness_variance=flatness_variance,
+        total_variance=total_variance,
+        num_pixels_background=background_pixels,
+    )
+
 def calculate_single_snr(
     source_count_rate: Numeric,
     sky_count_rate: Numeric,
@@ -623,7 +797,8 @@ def calculate_single_snr(
 
     Corresponds to ATBD Section 4.3.1.
     Calculates the signal from the source against the noise contributions from
-    the source itself (Poisson noise), sky background, dark current, and readout noise.
+    the source itself (Poisson noise), sky background, dark current, and readout
+    noise. The terms themselves come from calculate_single_noise_components.
 
     Parameters
     ----------
@@ -653,31 +828,12 @@ def calculate_single_snr(
     Numeric
         Single exposure SNR [dimensionless].
     """
-    # Signal = Source rate * time
-    signal = source_count_rate * single_exp_time
-
-    # Noise Variance Components
-    source_variance = source_count_rate * single_exp_time
-    sky_variance = sky_count_rate * single_exp_time
-    dark_variance = dark_current_rate * single_exp_time
-    readout_variance = readout_noise ** 2.0
-
-    # Total Variance = Source + (N_pix + N_est) * (Sky + Dark + RON^2) + flatness.
-    # N_est rides on the same per-pixel variance as the aperture, because what
-    # the annulus measures is that same background. Flatness is not per-pixel
-    # variance at all -- see calculate_background_flatness_variance -- so it is
-    # added once, not multiplied by background_pixels.
-    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
-    flatness_variance = calculate_background_flatness_variance(
-        sky_count_rate, single_exp_time, num_pixels_aperture, background_flatness_fraction
+    terms = calculate_single_noise_components(
+        source_count_rate, sky_count_rate, dark_current_rate, readout_noise,
+        num_pixels_aperture, single_exp_time, num_pixels_sky_estimate,
+        background_flatness_fraction
     )
-    total_variance = (
-        source_variance
-        + background_pixels * (sky_variance + dark_variance + readout_variance)
-        + flatness_variance
-    )
-
-    return signal / np.sqrt(total_variance)
+    return terms.signal / np.sqrt(terms.total_variance)
 
 def calculate_total_snr(
     source_count_rate: Numeric,
@@ -696,7 +852,8 @@ def calculate_total_snr(
 
     Corresponds to ATBD Section 4.3.1.
     Aggregates the signal over the total exposure time and accounts for the
-    accumulation of read noise across multiple frames.
+    accumulation of read noise across multiple frames. The terms themselves come
+    from calculate_total_noise_components.
 
     Parameters
     ----------
@@ -723,24 +880,12 @@ def calculate_total_snr(
     Numeric
         Total stacked SNR [dimensionless].
     """
-    signal = source_count_rate * total_exp_time
-
-    source_variance = source_count_rate * total_exp_time
-    sky_variance_total = sky_count_rate * total_exp_time
-
-    # Dark current and Readout Noise scale with the number of discrete frames
-    dark_variance_frame = dark_current_rate * single_exp_time
-    readout_variance_frame = readout_noise ** 2.0
-
-    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
-    flatness_variance = calculate_background_flatness_variance(
-        sky_count_rate, total_exp_time, num_pixels_aperture, background_flatness_fraction
+    terms = calculate_total_noise_components(
+        source_count_rate, sky_count_rate, dark_current_rate, readout_noise,
+        num_pixels_aperture, single_exp_time, total_exp_time, num_exposures,
+        num_pixels_sky_estimate, background_flatness_fraction
     )
-    total_variance = source_variance + (background_pixels * sky_variance_total) + \
-                     (num_exposures * background_pixels * (dark_variance_frame + readout_variance_frame)) + \
-                     flatness_variance
-
-    return signal / np.sqrt(total_variance)
+    return terms.signal / np.sqrt(terms.total_variance)
 
 def solve_required_exposures(
     target_snr: Numeric,

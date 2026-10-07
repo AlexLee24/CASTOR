@@ -62,7 +62,7 @@ flowchart TD
 ##### A. Core Computational Engine
 
 * **Bidirectional Solvers:** Calculating Signal-to-Noise Ratio (SNR) from a given exposure time, and reverse-calculating required exposure times from a target SNR using an exact analytical quadratic solver.
-* **Metric Generation:** Computing total observation time, independent noise contributors (read noise, dark current), electron count rates (source/sky), pixel scale, and sensor saturation flags.
+* **Metric Generation:** Computing total integration time, each noise contributor separately (source, sky, dark current, read noise, background flatness), electron count rates (source/sky), pixel scale, and sensor saturation flags.
 
 ##### B. Data Contract & Batch Orchestration
 
@@ -317,9 +317,13 @@ Similar to the request structure, the `CastorResponse` model is designed to be h
 
 The response strictly avoids UI-specific formatting, presentation layers, or plotting objects, focusing purely on returning raw mathematical value and physical metrics. The output is logically grouped into the following categories:
 
-* **Core Solved Metrics**: The primary objective of the calculation, returning either the computed exposure time or the SNR, strictly depending on the mutually exclusive input strategy.
-* **Secondary Diagnostics**: Intermediate physical values computed during calculation, such as total noise electrons, source signal rate, and sky background rate per pixel. Exposing these allows the calling client to render detailed breakdown charts if required.
-* **System Metadata**: Standardized fields encompassing domain-specific warning messages and operational metrics like total observation time (including readout overhead).
+* **Core Solved Metrics** (`core`): The primary objective of the calculation, returning either the computed number of exposures or the SNR, strictly depending on the mutually exclusive input strategy, alongside the saturation limit, the background-limited exposure time and the total integration time ($t_{\text{single}} \cdot N_{\text{exp}}$; integration only, since readout overhead is not modelled — `validation/QUESTIONS.md` 11).
+* **Secondary Diagnostics** (`budget`, `diagnostics`): Intermediate physical values computed during calculation — the source, sky and peak-pixel count rates, and the optical and environmental values they were derived from, including the airmass and sky surface brightness actually used.
+* **Noise Budget** (`noise`): The signal and each variance term behind both SNRs (ATBD §4.3.6), for one frame and for the stack. `signal / sqrt(total_variance)` reproduces each SNR exactly, so a caller can chart the breakdown or combine frames without re-deriving the CCD equation from the rates.
+* **Ephemeris** (`ephemeris`): Where the target and the moon were — elevations, lunar phase angle and separation. The target elevation is not clamped, so a target below the horizon reads as such rather than only as a large airmass.
+* **System Metadata** (`flags`): Domain-specific warning messages and the saturation flag.
+
+The time-series response (`BatchObservationResponse`) carries the same categories as one list per timestamp. Its `diagnostics` hold only the two values that move during a series, the airmass and the sky surface brightness; the rest are fixed for the whole series. Every block is filled on every run, and blocks added later are appended after the existing ones, so a dump keeps its existing keys in their order.
 
 ## 6. Future Extensibility
 

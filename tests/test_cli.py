@@ -271,6 +271,48 @@ def test_json_stdout_is_only_json(run, lulin):
     """Anything else on stdout would break the caller that reaches for --json."""
     json.loads(run(*lulin, "--json").stdout)
 
+def test_json_has_the_keys_cli_md_names(run, lulin):
+    """docs/cli.md lists the top-level keys for a caller writing a strict parser."""
+    payload = json.loads(run(*lulin, "--json").stdout)
+
+    assert set(payload) == {"assumed", "ignored", "caveat", "request", "response"}
+
+def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
+    """--json is the whole response, so what the engine now reports about how it got
+    its answer arrives with it: the variance terms, the total time, the airmass
+    and sky it used, and where the target and moon were."""
+    response = json.loads(run(*lulin, "--json").stdout)["response"]
+
+    assert response["core"]["total_exp_time"] == 3000.0          # -n 10 --exp 300
+    assert response["diagnostics"]["airmass"] >= 1.0
+    assert 15.0 < response["diagnostics"]["sky_surface_brightness"] < 25.0
+    for block in ("single", "total"):
+        assert set(response["noise"][block]) == {
+            "exp_time", "num_exposures", "signal", "source_variance", "sky_variance",
+            "dark_variance", "readout_variance", "flatness_variance", "total_variance",
+            "num_pixels_background",
+        }
+    assert response["noise"]["total"]["num_exposures"] == 10
+    assert response["ephemeris"]["target_elevation_deg"] == pytest.approx(81.5, abs=0.5)   # WELL_PLACED
+    assert set(response["ephemeris"]) == {
+        "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+    }
+
+@pytest.mark.parametrize("question, rows", [
+    (["-n", "10"], ["Total SNR", "Single-frame SNR", "Total time", "Saturates after",
+                    "Background-limited at", "Total FWHM"]),
+    (["--snr", "50"], ["Total SNR", "Single-frame SNR", "Exposures needed", "Total time",
+                       "Saturates after", "Background-limited at", "Total FWHM"]),
+])
+def test_the_text_answer_keeps_its_rows(run, question, rows):
+    """The response grew; what calc prints did not. Its rows are the same ones, in
+    the same order, so nothing that reads stdout has to change."""
+    result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
+                 "--mag", "21", "--exp", "300", *question, "--time", WELL_PLACED)
+
+    printed = [line[2:24].strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    assert printed == rows
+
 # ==========================================
 # Discovery
 # ==========================================

@@ -59,7 +59,10 @@ at the cost of making invalidity look like faintness (`44ab4af`).
 - **Reproduce** ask the engine for a target well below the horizon at a fixed
   time; the returned airmass is a large positive number, not a rejection.
 - **Guard** reachability is not brightness. Do not read a large airmass as "hard
-  to observe" — check the target is actually up.
+  to observe" — check the target is actually up. The response now carries both
+  sides: `diagnostics.airmass` clamped, `ephemeris.target_elevation_deg` not, and
+  `test_a_target_below_the_horizon_says_so_beside_its_clamped_airmass` holds them
+  side by side. The clamp itself is unchanged; the engine still answers.
 
 ## Noise and calibration
 
