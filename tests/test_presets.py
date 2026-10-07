@@ -504,6 +504,13 @@ def test_an_unknown_qualified_name_lists_what_there_is(shipped, kwargs, expected
     with pytest.raises(presets.PresetNotFound, match=expected):
         shipped.resolve("lulin", **kwargs)
 
+@pytest.mark.parametrize("method", ["resolve", "labels", "caveats"])
+def test_an_unknown_site_is_refused_when_every_name_is_qualified(shipped, method):
+    """No name is then looked up in the site's own catalogue, so nothing on the way
+    checks that the site exists; each method still has to say so the same way."""
+    with pytest.raises(presets.PresetNotFound, match="Unknown profile 'nosuch'. Available: lulin, vlt, other"):
+        getattr(shipped, method)("nosuch", "lulin/LOT", "lulin/Sophia", "lulin/Sloan_r")
+
 def test_labels_name_borrowed_hardware(shipped):
     labels = shipped.labels("lulin", telescope="other/RedCat51")
 

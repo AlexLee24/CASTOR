@@ -315,6 +315,10 @@ class PresetFile(BaseModel):
         A caveat qualifies the numbers its profile supplies, and a camera nobody
         should plan with is no more trustworthy for being put under a measured sky.
         """
+        # Checked here as resolve() and labels() check it: with every name qualified,
+        # nothing on the way looks the site up, and an unknown one would surface as
+        # a bare KeyError rather than as the PresetNotFound listing what there is.
+        self.profile(profile_id)
         selection = self._selection(profile_id, telescope, camera, optic_filter)
         owners = dict.fromkeys(
             [profile_id, *(owner for owner, _, entry in selection.values() if entry is not None)])
