@@ -1,9 +1,11 @@
+import math
+
+import numpy as np
 import pytest
 from datetime import datetime, timezone
 
 # Assumes your module path is castor
-from castor import schema
-from castor import physics
+from castor import moon, physics, schema
 from castor.calculator import run_calculation
 
 # ==========================================
@@ -282,3 +284,149 @@ def test_a_response_stored_before_k_existed_still_reads(mock_moon, base_request)
     del stored["core"]["background_dominance_factor"]
 
     assert schema.ObservationResponse.model_validate(stored).core.background_dominance_factor == 1.0
+
+
+# ==========================================
+# What the response says about how it got there
+# ==========================================
+
+def _with_every_noise_term(request):
+    """A copy with N_est and the flatness term both switched on, so that no term in
+    the breakdown is zero by construction."""
+    request = request.model_copy(deep=True)
+    request.instrument.camera.background_flatness_fraction = 0.02
+    request.options.sky_annulus = schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0)
+    return request
+
+@pytest.mark.parametrize("options", [
+    schema.SolveForTime(aperture_factor=0.85, single_exp_time=120.0, target_snr=50.0),
+    schema.SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=7),
+])
+def test_each_snr_is_exactly_its_noise_blocks_signal_over_root_variance(mock_moon, base_request, options):
+    """The breakdown is the one the SNRs were divided from, not a re-derivation that
+    agrees to a tolerance: a caller combining frames from noise.* gets the engine's
+    own numbers back."""
+    base_request.options = options
+    response = run_calculation(_with_every_noise_term(base_request))
+    noise = response.noise
+
+    assert noise.single.signal / np.sqrt(noise.single.total_variance) == response.core.single_snr
+    assert noise.total.signal / np.sqrt(noise.total.total_variance) == response.core.total_snr
+    for block in (noise.single, noise.total):
+        assert min(block.source_variance, block.sky_variance, block.dark_variance,
+                   block.readout_variance, block.flatness_variance) > 0
+        summed = (block.source_variance + block.sky_variance + block.dark_variance
+                  + block.readout_variance + block.flatness_variance)
+        assert summed == pytest.approx(block.total_variance, rel=1e-12)
+        assert block.num_pixels_background == pytest.approx(
+            response.diagnostics.num_pixels_aperture + response.diagnostics.num_pixels_sky_estimate,
+            rel=1e-15)
+
+def test_total_time_is_the_frames_actually_counted(mock_moon, base_request):
+    """t_single × N, where N is the request's own count when solving for SNR and the
+    engine's answer when solving for time. The noise blocks are charged for the
+    same frames and seconds."""
+    solved = run_calculation(base_request)
+    frames = solved.core.required_exposures
+    assert solved.core.total_exp_time == 300.0 * frames
+    assert (solved.noise.total.exp_time, solved.noise.total.num_exposures) == (300.0 * frames, frames)
+    assert (solved.noise.single.exp_time, solved.noise.single.num_exposures) == (300.0, 1)
+
+    base_request.options = schema.SolveForSNR(aperture_factor=1.5, single_exp_time=300.0, num_exposures=5)
+    given = run_calculation(base_request)
+    assert given.core.total_exp_time == 1500.0
+    assert (given.noise.total.exp_time, given.noise.total.num_exposures) == (1500.0, 5)
+
+@pytest.mark.parametrize("zenith_deg", [0.0, 30.0, 60.0, 88.0, 89.0, 95.0, 125.0])
+def test_airmass_is_the_clamped_secant_the_extinction_used(monkeypatch, base_request, zenith_deg):
+    monkeypatch.setattr("castor.moon.get_moon_and_target_geometry",
+                        lambda *a, **k: (0.0, 90.0, 45.0, zenith_deg))
+    response = run_calculation(base_request)
+
+    assert response.diagnostics.airmass == pytest.approx(
+        1.0 / math.cos(math.radians(min(zenith_deg, 89.0))), rel=1e-12)
+    assert response.ephemeris.target_elevation_deg == pytest.approx(90.0 - zenith_deg)
+
+def test_a_target_below_the_horizon_says_so_beside_its_clamped_airmass(monkeypatch, base_request):
+    """The clamp keeps the maths finite by reporting an unobservable target as a
+    very faint one: 35° below the horizon comes back as airmass 57 (LESSONS.md).
+    The elevation is reported unclamped so a caller can tell the two apart."""
+    monkeypatch.setattr("castor.moon.get_moon_and_target_geometry",
+                        lambda *a, **k: (0.0, 90.0, 45.0, 125.0))
+    response = run_calculation(base_request)
+
+    assert response.ephemeris.target_elevation_deg == pytest.approx(-35.0)
+    assert response.diagnostics.airmass == pytest.approx(57.2987, rel=1e-5)
+    assert response.core.total_snr > 0   # still a number, which is the trap
+
+def test_the_sky_reported_is_mu_dark_when_nothing_is_layered_on(mock_moon, base_request):
+    """auto_calc_background off and no zodiacal_share: mu_sky is mu_dark, untouched."""
+    assert base_request.environment.zodiacal_share is None
+    response = run_calculation(base_request)
+    assert response.diagnostics.sky_surface_brightness == base_request.environment.mu_dark
+
+def test_the_sky_reported_is_the_one_the_moon_model_returned(mock_moon, base_request):
+    base_request.environment.auto_calc_background = True
+    response = run_calculation(base_request)
+    assert response.diagnostics.sky_surface_brightness == 21.0   # mock_moon's sky
+
+def test_the_sky_reported_includes_the_zodiacal_term(mock_moon, base_request):
+    """zodiacal_share completes mu_dark whether or not the moon is modelled, so the
+    sky the response reports is no longer mu_dark even with the moon off."""
+    base_request.environment.zodiacal_share = 0.35
+    response = run_calculation(base_request)
+
+    expected = moon.apply_zodiacal_baseline(
+        base_request.environment.mu_dark, base_request.target.ra, base_request.target.dec, 0.35)
+    assert response.diagnostics.sky_surface_brightness == pytest.approx(float(expected), rel=1e-12)
+    assert response.diagnostics.sky_surface_brightness < base_request.environment.mu_dark
+
+def test_the_ephemeris_is_the_geometry_the_calculation_used(mock_moon, base_request):
+    """mock_moon puts a full moon (alpha 0) 90° from the target, 45° up, and the
+    target 30° from the zenith. Reported even with the moon switched off."""
+    assert base_request.environment.auto_calc_background is False
+    ephemeris = run_calculation(base_request).ephemeris
+
+    assert ephemeris.moon_phase_angle_deg == 0.0
+    assert ephemeris.moon_separation_deg == 90.0
+    assert ephemeris.moon_elevation_deg == pytest.approx(45.0)
+    assert ephemeris.target_elevation_deg == pytest.approx(60.0)
+
+def test_the_ephemeris_matches_astropy_at_the_requested_instant(base_request):
+    """Deliberately unmocked, at a pinned time: the block carries astropy's own
+    numbers, not stand-ins, and they survive into a JSON dump."""
+    env, tgt = base_request.environment, base_request.target
+    env.observing_time_utc = datetime(2026, 1, 15, 16, 0, tzinfo=timezone.utc)
+    alpha, rho, z_moon, z_target = moon.get_moon_and_target_geometry(
+        tgt.ra, tgt.dec, "2026-01-15T16:00:00",
+        env.location.longitude_deg, env.location.latitude_deg, env.location.elevation_m)
+
+    response = run_calculation(base_request)
+
+    assert response.ephemeris.target_elevation_deg == pytest.approx(90.0 - float(z_target), abs=1e-9)
+    assert response.ephemeris.moon_elevation_deg == pytest.approx(90.0 - float(z_moon), abs=1e-9)
+    assert response.ephemeris.moon_phase_angle_deg == pytest.approx(float(alpha), abs=1e-9)
+    assert response.ephemeris.moon_separation_deg == pytest.approx(float(rho), abs=1e-9)
+    assert response.diagnostics.airmass == pytest.approx(
+        1.0 / math.cos(math.radians(min(float(z_target), 89.0))), rel=1e-12)
+    assert '"ephemeris"' in response.model_dump_json()
+
+def test_the_flatness_ceiling_can_be_read_off_the_single_frame(mock_moon, base_request):
+    """With f_flat set, a stack's SNR approaches signal / sqrt(flatness_variance) of
+    one frame and never passes it (ATBD 4.3.1a; validation/QUESTIONS.md 17). The
+    solver does not yet know that, but a caller can now read the ceiling."""
+    base_request.instrument.camera.background_flatness_fraction = 0.02
+    base_request.target.morphology = schema.ExtendedMorphology()
+    base_request.target.brightness = schema.ABMagnitude(target_mag=22.0)
+    base_request.options = schema.SolveForSNR(aperture_factor=3.0, single_exp_time=120.0, num_exposures=1)
+    single = run_calculation(base_request).noise.single
+    ceiling = single.signal / math.sqrt(single.flatness_variance)
+
+    snrs = []
+    for frames in (1, 10, 100, 10_000, 1_000_000):
+        base_request.options.num_exposures = frames
+        snrs.append(run_calculation(base_request).core.total_snr)
+
+    assert snrs == sorted(snrs)
+    assert all(snr < ceiling for snr in snrs)
+    assert snrs[-1] == pytest.approx(ceiling, rel=1e-2)

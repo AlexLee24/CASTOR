@@ -12,6 +12,8 @@ from castor.physics import (
     calculate_sky_background_rate,
     calculate_sky_estimate_pixels,
     calculate_background_flatness_variance,
+    calculate_single_noise_components,
+    calculate_total_noise_components,
     calculate_single_snr,
     calculate_total_snr,
     solve_required_exposures,
@@ -407,3 +409,189 @@ def test_dominance_factor_is_the_read_noise_penalty_it_leaves(penalty):
 def test_the_documented_five_percent_dominance_factor():
     """The worked example ATBD 4.3.5 quotes: k = 3.1235 leaves a 5% penalty."""
     assert np.sqrt(1.0 + 1.0 / 3.1235 ** 2) - 1.0 == pytest.approx(0.05, abs=1e-5)
+
+# ------------------------------------------
+# Noise budget (ATBD 4.3.6)
+# ------------------------------------------
+
+#: Every case a stack test below runs, from the textbook equation to one with both
+#: the sky estimate and the flatness term switched on.
+NOISE_CASES = [
+    dict(num_pixels_sky_estimate=0.0, background_flatness_fraction=0.0),
+    dict(num_pixels_sky_estimate=2.5, background_flatness_fraction=0.0),
+    dict(num_pixels_sky_estimate=0.0, background_flatness_fraction=0.02),
+    dict(num_pixels_sky_estimate=2.5, background_flatness_fraction=0.02),
+]
+
+def _single_snr_before_the_breakdown(source_count_rate, sky_count_rate, dark_current_rate,
+                                     readout_noise, num_pixels_aperture, single_exp_time,
+                                     num_pixels_sky_estimate=0.0, background_flatness_fraction=0.0):
+    """calculate_single_snr's body as it stood before the noise terms were returned
+    (8d72093), frozen here as the oracle the refactor is held to. Not a second
+    model: the test below asserts the live one equals it bit for bit."""
+    signal = source_count_rate * single_exp_time
+    source_variance = source_count_rate * single_exp_time
+    sky_variance = sky_count_rate * single_exp_time
+    dark_variance = dark_current_rate * single_exp_time
+    readout_variance = readout_noise ** 2.0
+    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
+    flatness_variance = calculate_background_flatness_variance(
+        sky_count_rate, single_exp_time, num_pixels_aperture, background_flatness_fraction
+    )
+    total_variance = (
+        source_variance
+        + background_pixels * (sky_variance + dark_variance + readout_variance)
+        + flatness_variance
+    )
+    return signal / np.sqrt(total_variance)
+
+def _total_snr_before_the_breakdown(source_count_rate, sky_count_rate, dark_current_rate,
+                                    readout_noise, num_pixels_aperture, single_exp_time,
+                                    total_exp_time, num_exposures,
+                                    num_pixels_sky_estimate=0.0, background_flatness_fraction=0.0):
+    """calculate_total_snr's body at 8d72093; see _single_snr_before_the_breakdown."""
+    signal = source_count_rate * total_exp_time
+    source_variance = source_count_rate * total_exp_time
+    sky_variance_total = sky_count_rate * total_exp_time
+    dark_variance_frame = dark_current_rate * single_exp_time
+    readout_variance_frame = readout_noise ** 2.0
+    background_pixels = num_pixels_aperture + num_pixels_sky_estimate
+    flatness_variance = calculate_background_flatness_variance(
+        sky_count_rate, total_exp_time, num_pixels_aperture, background_flatness_fraction
+    )
+    total_variance = source_variance + (background_pixels * sky_variance_total) + \
+                     (num_exposures * background_pixels * (dark_variance_frame + readout_variance_frame)) + \
+                     flatness_variance
+    return signal / np.sqrt(total_variance)
+
+@pytest.fixture
+def random_stage4_arrays():
+    """A spread of inputs wide enough that a reordered sum would round differently
+    somewhere in it: rates over seven decades, with and without N_est and f_flat."""
+    rng = np.random.default_rng(20261007)
+    n = 5000
+    return dict(
+        source_count_rate=10 ** rng.uniform(-2, 5, n),
+        sky_count_rate=10 ** rng.uniform(-2, 3, n),
+        dark_current_rate=10 ** rng.uniform(-5, 0, n),
+        readout_noise=rng.uniform(0, 20, n),
+        num_pixels_aperture=10 ** rng.uniform(-1, 4, n),
+        single_exp_time=10 ** rng.uniform(-1, 3.5, n),
+        num_pixels_sky_estimate=np.where(rng.random(n) < 0.3, 0.0, 10 ** rng.uniform(-1, 4, n)),
+        background_flatness_fraction=np.where(rng.random(n) < 0.3, 0.0, rng.uniform(0, 0.1, n)),
+    ), rng.integers(1, 200, n).astype(float)
+
+@pytest.mark.parametrize("extras", NOISE_CASES)
+def test_the_noise_terms_add_up_to_the_variance_the_snr_uses(dummy_stage4_params, extras):
+    """The five terms are the whole of the variance: nothing the SNR charges for is
+    missing from the breakdown, and nothing in the breakdown is charged twice."""
+    single = calculate_single_noise_components(**dummy_stage4_params, single_exp_time=60.0, **extras)
+    total = calculate_total_noise_components(
+        **dummy_stage4_params, single_exp_time=60.0, total_exp_time=600.0, num_exposures=10, **extras
+    )
+    for terms in (single, total):
+        summed = (terms.source_variance + terms.sky_variance + terms.dark_variance
+                  + terms.readout_variance + terms.flatness_variance)
+        npt.assert_allclose(summed, terms.total_variance, rtol=1e-12)
+
+@pytest.mark.parametrize("extras", NOISE_CASES)
+def test_an_snr_is_its_signal_over_the_root_of_its_total_variance(dummy_stage4_params, extras):
+    """Exactly, not approximately: total_variance is the number the SNR divides by,
+    so a caller reading the breakdown and the SNR side by side never sees them
+    disagree."""
+    single = calculate_single_noise_components(**dummy_stage4_params, single_exp_time=60.0, **extras)
+    assert calculate_single_snr(**dummy_stage4_params, single_exp_time=60.0, **extras) == \
+        single.signal / np.sqrt(single.total_variance)
+
+    stack = dict(single_exp_time=60.0, total_exp_time=600.0, num_exposures=10)
+    total = calculate_total_noise_components(**dummy_stage4_params, **stack, **extras)
+    assert calculate_total_snr(**dummy_stage4_params, **stack, **extras) == \
+        total.signal / np.sqrt(total.total_variance)
+
+def test_returning_the_terms_changed_no_snr_by_a_single_bit(random_stage4_arrays):
+    """Exposing the breakdown is not allowed to move any answer the engine has
+    already given. Held against the expressions as they stood before, over arrays
+    and scalars both, with == rather than a tolerance."""
+    inputs, frames = random_stage4_arrays
+
+    npt.assert_array_equal(calculate_single_snr(**inputs), _single_snr_before_the_breakdown(**inputs))
+
+    stack = dict(total_exp_time=inputs["single_exp_time"] * frames, num_exposures=frames)
+    npt.assert_array_equal(
+        calculate_total_snr(**inputs, **stack),
+        _total_snr_before_the_breakdown(**inputs, **stack),
+    )
+
+    for i in range(0, 5000, 97):
+        scalar = {k: float(v[i]) for k, v in inputs.items()}
+        assert calculate_single_snr(**scalar) == _single_snr_before_the_breakdown(**scalar)
+        scalar_stack = dict(total_exp_time=scalar["single_exp_time"] * int(frames[i]),
+                            num_exposures=int(frames[i]))
+        assert calculate_total_snr(**scalar, **scalar_stack) == \
+            _total_snr_before_the_breakdown(**scalar, **scalar_stack)
+
+def test_the_noise_terms_take_arrays(dummy_stage4_params):
+    """A time series hands in an array of rates beside constant detector numbers;
+    each term follows the shape of what formed it."""
+    params = dict(dummy_stage4_params, source_count_rate=np.array([10.0, 100.0, 1000.0]),
+                  sky_count_rate=np.array([5.0, 10.0, 20.0]))
+    terms = calculate_single_noise_components(**params, single_exp_time=60.0,
+                                              background_flatness_fraction=0.01)
+
+    assert np.shape(terms.signal) == (3,)
+    assert np.shape(terms.sky_variance) == (3,)
+    assert np.shape(terms.flatness_variance) == (3,)
+    assert np.ndim(terms.readout_variance) == 0       # RON is one number for the whole night
+    npt.assert_allclose(terms.signal, [600.0, 6000.0, 60000.0])
+    npt.assert_array_equal(calculate_single_snr(**params, single_exp_time=60.0,
+                                                background_flatness_fraction=0.01),
+                           terms.signal / np.sqrt(terms.total_variance))
+
+def test_no_flatness_fraction_means_no_flatness_variance(dummy_stage4_params):
+    single = calculate_single_noise_components(**dummy_stage4_params, single_exp_time=60.0)
+    total = calculate_total_noise_components(
+        **dummy_stage4_params, single_exp_time=60.0, total_exp_time=600.0, num_exposures=10
+    )
+    assert single.flatness_variance == 0.0
+    assert total.flatness_variance == 0.0
+
+def test_no_annulus_means_the_background_is_the_aperture(dummy_stage4_params):
+    """N_bkg = N_pix + N_est, and without an annulus N_est is zero."""
+    terms = calculate_single_noise_components(**dummy_stage4_params, single_exp_time=60.0)
+    assert terms.num_pixels_background == dummy_stage4_params["num_pixels_aperture"]
+
+    costed = calculate_single_noise_components(
+        **dummy_stage4_params, single_exp_time=60.0, num_pixels_sky_estimate=2.5
+    )
+    assert costed.num_pixels_background == dummy_stage4_params["num_pixels_aperture"] + 2.5
+
+def test_each_stacked_term_scales_with_what_it_is_charged_for(dummy_stage4_params):
+    """Doubling the frames at a fixed sub length doubles the total time. Dark and
+    read noise are charged per frame and the sky per second, so all three double;
+    the flatness term is set by the stack's total background, so it quadruples
+    (ATBD 4.3.1a). And splitting a fixed total into more frames moves only the
+    per-frame terms."""
+    kwargs = dict(**dummy_stage4_params, num_pixels_sky_estimate=1.5, background_flatness_fraction=0.02)
+    ten = calculate_total_noise_components(**kwargs, single_exp_time=60.0, total_exp_time=600.0, num_exposures=10)
+    twenty = calculate_total_noise_components(**kwargs, single_exp_time=60.0, total_exp_time=1200.0, num_exposures=20)
+
+    npt.assert_allclose(twenty.dark_variance / ten.dark_variance, 2.0, rtol=1e-12)
+    npt.assert_allclose(twenty.readout_variance / ten.readout_variance, 2.0, rtol=1e-12)
+    npt.assert_allclose(twenty.sky_variance / ten.sky_variance, 2.0, rtol=1e-12)
+    npt.assert_allclose(twenty.flatness_variance / ten.flatness_variance, 4.0, rtol=1e-12)
+
+    split = calculate_total_noise_components(**kwargs, single_exp_time=30.0, total_exp_time=600.0, num_exposures=20)
+    npt.assert_allclose(split.readout_variance / ten.readout_variance, 2.0, rtol=1e-12)
+    npt.assert_allclose(split.dark_variance, ten.dark_variance, rtol=1e-12)
+    npt.assert_allclose(split.sky_variance, ten.sky_variance, rtol=1e-12)
+    npt.assert_allclose(split.flatness_variance, ten.flatness_variance, rtol=1e-12)
+    assert split.signal == ten.signal
+
+def test_one_frame_of_a_stack_is_a_single_frame(dummy_stage4_params):
+    """The two functions describe the same physics; a stack of one must not differ
+    from the frame it is made of."""
+    kwargs = dict(**dummy_stage4_params, num_pixels_sky_estimate=1.5, background_flatness_fraction=0.02)
+    single = calculate_single_noise_components(**kwargs, single_exp_time=60.0)
+    stack = calculate_total_noise_components(**kwargs, single_exp_time=60.0, total_exp_time=60.0, num_exposures=1)
+    for field in single._fields:
+        npt.assert_allclose(getattr(stack, field), getattr(single, field), rtol=1e-12)

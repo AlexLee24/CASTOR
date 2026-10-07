@@ -42,6 +42,21 @@ def _unify_flux(
         case _:
             raise ValueError(f"Unknown brightness type: {type(brightness)}")
 
+def _noise_components(
+    terms: physics.NoiseTerms,
+    exp_time: float,
+    num_exposures: int
+) -> schema.NoiseComponents:
+    """
+    Packages one NoiseTerms into its response block. The two share their field
+    names, so nothing here renames or recomputes a term.
+    """
+    return schema.NoiseComponents(
+        exp_time=exp_time,
+        num_exposures=num_exposures,
+        **{field: float(value) for field, value in terms._asdict().items()}
+    )
+
 def run_calculation(request: schema.ObservationRequest) -> schema.ObservationResponse:
     """
     CASTOR core calculation pipeline.
@@ -167,6 +182,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
 
     match opt:
         case schema.SolveForSNR(num_exposures=n_exp):
+            num_exposures = n_exp
             total_exp_time = opt.single_exp_time * n_exp
             total_snr = float(physics.calculate_total_snr(
                 source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
@@ -178,6 +194,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         case schema.SolveForTime(target_snr=t_snr):
             req_exp_float = physics.solve_required_exposures(t_snr, single_snr)
             final_req_exposures = int(math.ceil(req_exp_float))
+            num_exposures = final_req_exposures
             total_exp_time = opt.single_exp_time * final_req_exposures
 
             total_snr = float(physics.calculate_total_snr(
@@ -188,6 +205,19 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             
         case _:
             raise ValueError("Unknown calculation option")
+
+    # The terms each SNR above was divided from, kept so a caller never has to
+    # rebuild the CCD equation from the rates. Same inputs as the two SNR calls,
+    # so signal / sqrt(total_variance) gives back each SNR exactly.
+    single_noise = physics.calculate_single_noise_components(
+        source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
+        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction
+    )
+    total_noise = physics.calculate_total_noise_components(
+        source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
+        n_pix, opt.single_exp_time, total_exp_time, num_exposures, n_est,
+        inst.camera.background_flatness_fraction
+    )
 
     t_sat = float(physics.calculate_saturation_time(
         inst.camera.full_well_capacity, peak_rate, sky_rate, inst.camera.dark_current_rate
@@ -212,7 +242,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             required_exposures=final_req_exposures,
             saturation_time_limit=t_sat,
             optimal_exposure_time=t_opt,
-            background_dominance_factor=opt.background_dominance_factor
+            background_dominance_factor=opt.background_dominance_factor,
+            total_exp_time=total_exp_time
         ),
         budget=schema.SignalNoiseBudget(
             source_count_rate=source_rate,
@@ -226,10 +257,24 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             total_throughput=total_throughput,
             enclosed_flux_fraction=f_enc,
             num_pixels_aperture=n_pix,
-            num_pixels_sky_estimate=n_est
+            num_pixels_sky_estimate=n_est,
+            airmass=airmass,
+            sky_surface_brightness=float(mu_sky)
         ),
         flags=schema.SystemFlags(
             is_saturated=bool(opt.single_exp_time > t_sat),
             warnings=warnings
+        ),
+        noise=schema.NoiseBudget(
+            single=_noise_components(single_noise, opt.single_exp_time, 1),
+            total=_noise_components(total_noise, total_exp_time, num_exposures)
+        ),
+        # The raw zenith angles, not z_target_safe: a target below the horizon must
+        # read as a negative elevation, which the clamped airmass cannot show.
+        ephemeris=schema.ObservationEphemeris(
+            target_elevation_deg=90.0 - float(z_target),
+            moon_elevation_deg=90.0 - float(z_moon),
+            moon_phase_angle_deg=float(alpha),
+            moon_separation_deg=float(rho)
         )
     )

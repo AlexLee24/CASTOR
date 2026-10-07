@@ -3,11 +3,19 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from castorCLI import presets
 from castorCLI.main import cli
 
 # ==========================================
 # Fixtures
 # ==========================================
+
+@pytest.fixture(autouse=True)
+def no_extra_presets(monkeypatch):
+    """Without --presets-file every command reads the search path, so a
+    CASTOR_PRESETS_PATH left set in the shell running the suite would quietly
+    change what each test here is looking at."""
+    monkeypatch.delenv(presets.PATH_VARIABLE, raising=False)
 
 @pytest.fixture
 def run():
@@ -293,6 +301,48 @@ def test_json_stdout_is_only_json(run, lulin):
     """Anything else on stdout would break the caller that reaches for --json."""
     json.loads(run(*lulin, "--json").stdout)
 
+def test_json_has_the_keys_cli_md_names(run, lulin):
+    """docs/cli.md lists the top-level keys for a caller writing a strict parser."""
+    payload = json.loads(run(*lulin, "--json").stdout)
+
+    assert set(payload) == {"assumed", "ignored", "caveat", "request", "response"}
+
+def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
+    """--json is the whole response, so what the engine now reports about how it got
+    its answer arrives with it: the variance terms, the total time, the airmass
+    and sky it used, and where the target and moon were."""
+    response = json.loads(run(*lulin, "--json").stdout)["response"]
+
+    assert response["core"]["total_exp_time"] == 3000.0          # -n 10 --exp 300
+    assert response["diagnostics"]["airmass"] >= 1.0
+    assert 15.0 < response["diagnostics"]["sky_surface_brightness"] < 25.0
+    for block in ("single", "total"):
+        assert set(response["noise"][block]) == {
+            "exp_time", "num_exposures", "signal", "source_variance", "sky_variance",
+            "dark_variance", "readout_variance", "flatness_variance", "total_variance",
+            "num_pixels_background",
+        }
+    assert response["noise"]["total"]["num_exposures"] == 10
+    assert response["ephemeris"]["target_elevation_deg"] == pytest.approx(81.5, abs=0.5)   # WELL_PLACED
+    assert set(response["ephemeris"]) == {
+        "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+    }
+
+@pytest.mark.parametrize("question, rows", [
+    (["-n", "10"], ["Total SNR", "Single-frame SNR", "Total time", "Saturates after",
+                    "Background-limited at", "Total FWHM"]),
+    (["--snr", "50"], ["Total SNR", "Single-frame SNR", "Exposures needed", "Total time",
+                       "Saturates after", "Background-limited at", "Total FWHM"]),
+])
+def test_the_text_answer_keeps_its_rows(run, question, rows):
+    """The response grew; what calc prints did not. Its rows are the same ones, in
+    the same order, so nothing that reads stdout has to change."""
+    result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
+                 "--mag", "21", "--exp", "300", *question, "--time", WELL_PLACED)
+
+    printed = [line[2:24].strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    assert printed == rows
+
 # ==========================================
 # Discovery
 # ==========================================
@@ -312,3 +362,147 @@ def test_schema_is_the_contract_itself(run):
 
     assert contract["title"] == "ObservationRequest"
     assert "instrument" in contract["properties"]
+
+# ==========================================
+# Several preset files
+# ==========================================
+
+SHIPPED = str(presets.DEFAULT_PATH)
+
+def test_one_presets_file_still_replaces_the_shipped_one(run, hardware_only_presets):
+    result = run("presets", "--presets-file", str(hardware_only_presets))
+
+    assert "bare_scope" in result.stdout and "lulin" not in result.stdout
+
+def test_presets_file_repeats_to_merge_in_order(run, hardware_only_presets):
+    result = run("presets", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets))
+
+    assert result.exit_code == 0
+    assert result.stdout.index("lulin") < result.stdout.index("bare_scope")
+
+def test_the_variable_adds_files_after_the_shipped_one(run, monkeypatch, hardware_only_presets):
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(hardware_only_presets))
+    result = run("presets")
+
+    assert result.exit_code == 0
+    assert result.stdout.index("lulin") < result.stdout.index("bare_scope")
+
+def test_naming_a_presets_file_sets_the_variable_aside(run, monkeypatch, tmp_path,
+                                                       hardware_only_presets):
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(tmp_path / "nowhere.json"))
+    result = run("presets", "--presets-file", str(hardware_only_presets))
+
+    assert result.exit_code == 0
+
+def test_a_missing_file_on_the_variable_is_bad_input(run, monkeypatch, tmp_path):
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(tmp_path / "nowhere.json"))
+    result = run("presets")
+
+    assert result.exit_code == 3
+    assert "nowhere.json" in result.stderr
+
+def test_a_profile_in_two_files_is_bad_input(run):
+    result = run("presets", "--presets-file", SHIPPED, "--presets-file", SHIPPED)
+
+    assert result.exit_code == 3
+    assert "'lulin' is defined in both" in result.stderr
+
+@pytest.fixture
+def misspelled_presets(tmp_path, hardware_only_presets):
+    broken = json.loads(hardware_only_presets.read_text())
+    telescope = broken["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]
+    telescope["focal_lenght"] = telescope.pop("focal_length")
+    path = tmp_path / "misspelled.json"
+    path.write_text(json.dumps(broken))
+    return path
+
+@pytest.mark.parametrize("from_variable", [False, True])
+def test_a_misspelled_field_names_the_file_it_is_in(run, monkeypatch, misspelled_presets,
+                                                    from_variable):
+    """The field's location starts at "profiles", which on its own does not say which
+    of the files read is the broken one."""
+    if from_variable:
+        monkeypatch.setenv(presets.PATH_VARIABLE, str(misspelled_presets))
+        result = run("presets")
+    else:
+        result = run("presets", "--presets-file", SHIPPED, "--presets-file", str(misspelled_presets))
+
+    assert result.exit_code == 3
+    assert "profiles.bare_scope.telescopes.T.telescope.focal_lenght" in result.stderr
+    assert f"(in {misspelled_presets})" in result.stderr
+
+def test_check_covers_every_merged_file(run, hardware_only_presets):
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets))
+
+    assert result.exit_code == 0
+    assert "43 resolvable configurations checked across 4 profiles" in result.stdout
+
+def test_check_finds_a_problem_in_a_later_file(run, tmp_path, hardware_only_presets):
+    broken = json.loads(hardware_only_presets.read_text())
+    broken["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]["secondary_mirror_diameter"] = 1.0
+    path = tmp_path / "broken.json"
+    path.write_text(json.dumps(broken))
+
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(path))
+
+    assert result.exit_code == 3
+    assert "PROBLEM  bare_scope/T/C/F: secondary is not smaller" in result.stderr
+
+# ==========================================
+# Hardware named from another profile
+# ==========================================
+
+def test_calc_takes_a_telescope_from_another_profile(run, lulin):
+    """Lulin's sky and location, with the RedCat from the "other" profile, which
+    keeps its own throughput rather than Sloan r''s figure measured on LOT."""
+    result = run(*lulin, "--telescope", "other/RedCat51", "--json")
+    request = json.loads(result.stdout)["request"]
+
+    assert result.exit_code == 0
+    assert request["environment"]["location"]["elevation_m"] == 2862.0
+    assert request["environment"]["mu_dark"] == 21.26
+    assert request["instrument"]["telescope"]["primary_mirror_diameter"] == 0.051
+    assert request["instrument"]["telescope"]["optical_throughput"] == 0.9
+
+def test_the_header_names_the_borrowed_telescope(run, lulin):
+    result = run(*lulin, "--telescope", "other/RedCat51")
+
+    assert "Lulin Observatory · William Optics RedCat 51 · Sophia · Sloan r'" in result.stdout
+
+def test_a_hardware_family_runs_under_a_site(run, lulin, hardware_only_presets):
+    """What a file of hardware families is for: someone's own rig under a real
+    site's sky. On its own such a profile still exits 3 for want of a location."""
+    result = run(*lulin, "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--telescope", "bare_scope/T", "--camera", "bare_scope/C",
+                 "--filter", "bare_scope/F", "--json")
+    request = json.loads(result.stdout)["request"]
+
+    assert result.exit_code == 0
+    assert request["environment"]["location"]["latitude_deg"] == 23.47
+    assert request["environment"]["mu_dark"] == 21.5   # site-wide: F brings no Lulin band sky
+    assert request["instrument"]["camera"]["readout_noise"] == 5.0
+    assert request["instrument"]["optic_filter"]["central_wavelength"] == 550.0
+
+def test_an_unknown_qualified_name_lists_what_there_is(run, lulin):
+    result = run(*lulin, "--telescope", "other/RedCat99")
+
+    assert result.exit_code == 3
+    assert "Available: RedCat51, RedCat71" in result.stderr
+
+def test_borrowed_hardware_brings_its_profiles_caveat(run, lulin):
+    result = run(*lulin, "--camera", "vlt/FORS2_MIT")
+
+    assert "CAVEAT: vlt: Demonstration only" in result.stderr
+
+def test_json_carries_a_borrowed_caveat(run, lulin):
+    payload = json.loads(run(*lulin, "--camera", "vlt/FORS2_MIT", "--json").stdout)
+
+    assert payload["caveat"] == "vlt: " + presets.load().profile("vlt").caveat
+
+def test_a_sites_own_caveat_reads_as_it_always_has(run):
+    caveat = presets.load().profile("vlt").caveat
+    args = ["calc", "--site", "vlt", "--ra", "113.65", "--dec", "-31.89",
+            "--mag", "18", "--exp", "30", "-n", "1", "--seeing", "0.8", "--time", WELL_PLACED]
+
+    assert f"\nCAVEAT: {caveat}\n" in run(*args).stderr
+    assert json.loads(run(*args, "--json").stdout)["caveat"] == caveat

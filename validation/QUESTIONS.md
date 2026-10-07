@@ -362,6 +362,10 @@ and both prototypes reported it: 2005 as two named modes, 40 s and 2 s; 2011 as 
 readout-frequency table per camera. Neither the schema nor `presets.json` has a
 place to put it. This is a feature the ancestor had and the refactor dropped.
 
+The response now reports `core.total_exp_time`, t_single × N. That is integration
+time, not elapsed time: it is the quantity this item would add overhead to, not
+an answer to it.
+
 ## 12. `background_dominance_factor` has no source — DECIDE
 
 The optimal single exposure time uses a default of 1.0, the crossover where
@@ -627,6 +631,11 @@ asymptotic ceiling below 20, so no number of frames can satisfy the request.
 when `target_snr >= S/F`. The response schema, CLI and GUI then need a way to
 represent that result rather than a finite exposure count. The strict xfail in
 `test_solve_time_floor.py` pins the present contradiction.
+
+**Visible meanwhile.** The response's noise budget makes the ceiling readable
+without the fix: `noise.single.signal / sqrt(noise.single.flatness_variance)` is
+S/F (ATBD 4.3.6), and a caller can compare it with `target_snr` before trusting
+`required_exposures`.
 
 ---
 
