@@ -39,7 +39,7 @@ if str(_SRC_DIR) not in sys.path:
 
 from castor import schema  # noqa: E402
 from castor.calculator import run_calculation  # noqa: E402
-from castorCLI import presets  # noqa: E402
+from castorCLI import presets, provenance  # noqa: E402
 
 # A result that saturates is still a computed result, so it leaves by the front door
 # rather than as an error — but not with the exit code of an unremarkable success.
@@ -362,18 +362,14 @@ def list_presets(presets_file, as_json, bands) -> None:
                     click.echo(f"      {filter_id:<12} overrides  " + " · ".join(overrides))
         click.echo("")
 
-@cli.command(name="check")
-@click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
-def check_presets(presets_file) -> None:
-    """Verify a preset file beyond what loading it proves.
+def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
+    """Everything `castor check` verifies about a loaded preset file.
 
-    Loading only proves the shapes are right. This runs every combination the file
-    offers through the engine and reports what a user would actually get — which is
-    where the interesting failures live. A filter that overrides a telescope the
-    profile does not list, for instance, loads perfectly and then silently applies
-    nothing; the only way to see it is to resolve the combination and look.
+    Returns how many complete configurations were resolved, and one line per
+    problem found, as `castor check` prints them. An empty list is a clean file.
+    A host that writes its own preset file can call this on it directly rather
+    than through the command line.
     """
-    catalogue = _load_presets(presets_file)
     problems: list[str] = []
     checked = 0
 
@@ -414,10 +410,47 @@ def check_presets(presets_file) -> None:
                         problems.append(
                             f"{where}: extinction_coeff {environment['extinction_coeff']:g} is not physical")
 
+    return checked, problems
+
+@cli.command(name="check")
+@click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
+@click.option("--provenance", "provenance_file", type=click.Path(path_type=Path),
+              help="Also hold every number in the file to this provenance table, "
+                   "JSON of {path: [value, class, note]}.")
+def check_presets(presets_file, provenance_file) -> None:
+    """Verify a preset file beyond what loading it proves.
+
+    Loading only proves the shapes are right. This runs every combination the file
+    offers through the engine and reports what a user would actually get — which is
+    where the interesting failures live. A filter that overrides a telescope the
+    profile does not list, for instance, loads perfectly and then silently applies
+    nothing; the only way to see it is to resolve the combination and look.
+
+    With --provenance, every number in the file must also have a record in that
+    table saying where it came from, and every record a number.
+    """
+    catalogue = _load_presets(presets_file)
+    checked, problems = check_file(catalogue)
+
+    held = None
+    if provenance_file is not None:
+        try:
+            table = provenance.load_table(provenance_file)
+        except provenance.ProvenanceError as exc:
+            raise SystemExit(_fail(exc))
+        # The file as written, not the loaded catalogue: a record vouches for the
+        # number the file holds, and loading coerces.
+        source = presets_file if presets_file is not None else presets.DEFAULT_PATH
+        profiles = json.loads(Path(source).read_text(encoding="utf-8")).get("profiles", {})
+        held = len(provenance.walk(profiles))
+        problems += [str(problem) for problem in provenance.check(profiles, table)]
+
     click.echo(f"{checked} resolvable configurations checked across {len(catalogue.profiles)} profiles")
     for profile_id, profile in catalogue.profiles.items():
         if profile.caveat:
             click.echo(f"  {profile_id}: carries a caveat — {profile.caveat}")
+    if held is not None:
+        click.echo(f"{held} values checked against {provenance_file}")
     if problems:
         for problem in problems:
             click.echo(f"  PROBLEM  {problem}", err=True)

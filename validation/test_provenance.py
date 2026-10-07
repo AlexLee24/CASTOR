@@ -7,12 +7,16 @@ right — because there is no way to tell the difference.
 """
 import json
 import pathlib
+import subprocess
+import sys
 
 import pytest
+from click.testing import CliRunner
 
 import provenance
 from castorCLI import presets
 from castorCLI import provenance as rule
+from castorCLI.main import cli
 
 PRESETS = json.loads(
     pathlib.Path(presets.DEFAULT_PATH).read_text(encoding="utf-8"))["profiles"]
@@ -27,6 +31,21 @@ def test_the_shipped_file_passes_the_rule_hosts_run():
     and this suite's have not drifted apart.
     """
     assert rule.check(PRESETS, provenance.PROVENANCE) == []
+
+
+def test_the_exported_record_passes_castor_check(tmp_path):
+    """Run as a script, provenance.py prints the record as the JSON table
+    `castor check --provenance` reads. The shipped pair has to pass there too,
+    which also proves the export loses nothing on the way through JSON."""
+    exported = subprocess.run([sys.executable, provenance.__file__],
+                              capture_output=True, text=True, check=True).stdout
+    path = tmp_path / "provenance.json"
+    path.write_text(exported, encoding="utf-8")
+
+    assert rule.load_table(path) == provenance.PROVENANCE
+    result = CliRunner().invoke(cli, ["check", "--provenance", str(path)])
+    assert result.exit_code == 0, result.stderr
+    assert f"{len(VALUES)} values checked against" in result.stdout
 
 
 def test_the_table_covers_the_file_exactly():

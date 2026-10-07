@@ -16,7 +16,11 @@ which ones they are.
 
 This file is the record and nothing else. The rule it is held to — walking a
 preset file, and what a table must say about it — is `castorCLI.provenance`, so
-that a host with a preset file of its own can hold it to the same rule.
+that a host with a preset file of its own can hold it to the same rule. Run as a
+script, this file prints the record as the JSON table `castor check` takes:
+
+    uv run python validation/provenance.py > provenance.json
+    uv run castor check --provenance provenance.json
 
 Sources, strongest first:
 
@@ -25,6 +29,9 @@ Sources, strongest first:
     DERIVED    computed from a MEASURED or DOCUMENT value
     GUESS      no source. Believe nothing about it.
 """
+import json
+import sys
+
 from castorCLI import provenance as _rule
 from castorCLI.provenance import DERIVED, DOCUMENT, GUESS, MEASURED, walk  # noqa: F401
 
@@ -202,3 +209,8 @@ PROVENANCE = {
 def summary(profiles):
     """How many values in this file have a source, by profile."""
     return _rule.summary(profiles, PROVENANCE)
+
+
+if __name__ == "__main__":
+    json.dump({path: list(record) for path, record in PROVENANCE.items()}, sys.stdout, indent=2)
+    sys.stdout.write("\n")

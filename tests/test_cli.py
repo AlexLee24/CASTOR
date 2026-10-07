@@ -3,7 +3,8 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from castorCLI.main import cli
+from castorCLI import presets, provenance
+from castorCLI.main import check_file, cli
 
 # ==========================================
 # Fixtures
@@ -290,3 +291,136 @@ def test_schema_is_the_contract_itself(run):
 
     assert contract["title"] == "ObservationRequest"
     assert "instrument" in contract["properties"]
+
+# ==========================================
+# Checking a preset file
+# ==========================================
+
+def _shipped_profiles():
+    return json.loads(presets.DEFAULT_PATH.read_text(encoding="utf-8"))["profiles"]
+
+@pytest.fixture
+def overridden_nothing(tmp_path):
+    """Loads perfectly, and a band's throughput applies to nothing: the filter
+    names a telescope its profile does not list."""
+    path = tmp_path / "overridden_nothing.json"
+    path.write_text(json.dumps({
+        "profiles": {
+            "bare_scope": {
+                "telescopes": {"T": {"telescope": {
+                    "primary_mirror_diameter": 1.0, "secondary_mirror_diameter": 0.2,
+                    "focal_length": 8.0, "optical_throughput": 0.5}}},
+                "cameras": {"C": {"camera": {
+                    "pixel_pitch": 10.0, "quantum_efficiency": 0.8, "dark_current_rate": 0.01,
+                    "readout_noise": 5.0, "full_well_capacity": 100000}}},
+                "filters": {"F": {
+                    "optic_filter": {"central_wavelength": 550.0, "filter_bandwidth": 100.0,
+                                     "filter_transmission": 0.9},
+                    "telescope": {"X": {"optical_throughput": 0.4}}}},
+            }
+        }
+    }), encoding="utf-8")
+    return path
+
+@pytest.fixture
+def table_for_shipped(tmp_path):
+    """A provenance table that covers the shipped file exactly.
+
+    Built from the file rather than taken from validation/provenance.py, which is
+    the shipped file's real record but is not part of this suite: what is under
+    test here is the command, not the record.
+    """
+    path = tmp_path / "provenance.json"
+    path.write_text(json.dumps({
+        key: [value, provenance.GUESS, "fixture: no source claimed"]
+        for key, value in provenance.walk(_shipped_profiles()).items()
+    }), encoding="utf-8")
+    return path
+
+def test_check_passes_the_shipped_file(run):
+    result = run("check")
+
+    assert result.exit_code == 0
+    assert result.stdout.splitlines()[0].endswith("resolvable configurations checked across 3 profiles")
+    assert result.stdout.splitlines()[-1] == "no problems found"
+    assert result.stderr == ""
+
+def test_check_finds_what_loading_cannot(run, overridden_nothing):
+    result = run("check", "--presets-file", str(overridden_nothing))
+
+    assert result.exit_code == 3
+    assert ("  PROBLEM  bare_scope: filter 'F' overrides telescope 'X', which this profile "
+            "does not list — it applies to nothing") in result.stderr.splitlines()
+
+def test_check_file_is_the_command_without_the_printing(run, overridden_nothing):
+    """What a host calls on its own file instead of shelling out."""
+    checked, problems = check_file(presets.load())
+    assert problems == []
+    assert run("check").stdout.startswith(f"{checked} resolvable configurations checked")
+
+    checked, problems = check_file(presets.load(overridden_nothing))
+    assert checked == 1
+    assert problems == ["bare_scope: filter 'F' overrides telescope 'X', which this profile "
+                        "does not list — it applies to nothing"]
+
+def test_check_holds_the_file_to_a_provenance_table(run, table_for_shipped):
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 0
+    held = len(provenance.walk(_shipped_profiles()))
+    assert f"{held} values checked against {table_for_shipped}" in result.stdout
+    assert result.stdout.splitlines()[-1] == "no problems found"
+
+def test_check_without_a_table_says_nothing_about_provenance(run):
+    """The flag is opt-in: a run without it prints exactly what it always has."""
+    assert "values checked against" not in run("check").stdout
+
+def test_a_bad_provenance_table_fails_the_check(run, table_for_shipped):
+    table = json.loads(table_for_shipped.read_text(encoding="utf-8"))
+    del table["lulin.cameras.Sophia.readout_noise"]
+    table["lulin.environment.mu_dark"][2] = "guessed"
+    table_for_shipped.write_text(json.dumps(table), encoding="utf-8")
+
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 3
+    problems = [line for line in result.stderr.splitlines() if line.startswith("  PROBLEM  ")]
+    assert [line.split(":")[0] for line in problems] == [
+        "  PROBLEM  lulin.cameras.Sophia.readout_noise",
+        "  PROBLEM  lulin.environment.mu_dark",
+    ]
+    assert "no problems found" not in result.stdout
+
+def test_provenance_problems_follow_the_files_own(run, overridden_nothing, tmp_path):
+    table = tmp_path / "provenance.json"
+    table.write_text("{}", encoding="utf-8")
+
+    result = run("check", "--presets-file", str(overridden_nothing), "--provenance", str(table))
+
+    problems = [line for line in result.stderr.splitlines() if line.startswith("  PROBLEM  ")]
+    assert result.exit_code == 3
+    assert problems[0].startswith("  PROBLEM  bare_scope: filter 'F'")
+    assert problems[1].startswith("  PROBLEM  bare_scope.telescopes.T.primary_mirror_diameter:")
+
+def test_provenance_vouches_for_the_file_as_written(run, overridden_nothing, tmp_path):
+    """Loading coerces a quoted number to a float; the record must match what the
+    file actually says, so the check reads the file, not the loaded catalogue."""
+    data = json.loads(overridden_nothing.read_text(encoding="utf-8"))
+    data["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]["focal_length"] = "8.0"
+    overridden_nothing.write_text(json.dumps(data), encoding="utf-8")
+    table = tmp_path / "provenance.json"
+    table.write_text(json.dumps({
+        key: [8.0 if key.endswith("focal_length") else value, provenance.DOCUMENT, "fixture datasheet"]
+        for key, value in provenance.walk(data["profiles"]).items()
+    }), encoding="utf-8")
+
+    result = run("check", "--presets-file", str(overridden_nothing), "--provenance", str(table))
+
+    assert ("  PROBLEM  bare_scope.telescopes.T.focal_length: the file holds '8.0' "
+            "but its record vouches for 8.0") in result.stderr.splitlines()
+
+def test_an_unreadable_provenance_table_is_bad_input(run, tmp_path):
+    result = run("check", "--provenance", str(tmp_path / "nowhere.json"))
+
+    assert result.exit_code == 3
+    assert result.stderr.startswith("error: Cannot read provenance table")
