@@ -111,7 +111,9 @@ def test_every_shipped_configuration_is_sent_as_the_cli_resolves_it(shipped):
     """Each site, then each filter under each of its telescopes, then each camera.
 
     Walking them in sequence is the point: each selection lands on whatever the one
-    before it left, which is where a band's correction outstaying its filter shows."""
+    before it left, which is where a band's correction outstaying its filter shows —
+    and a new telescope arrives under the filter the last one was left with, whose
+    throughput measured on it must come along."""
     steps, expected = [], []
     for site, profile in shipped.profiles.items():
         steps.append(select("profile", site))
@@ -119,7 +121,7 @@ def test_every_shipped_configuration_is_sent_as_the_cli_resolves_it(shipped):
         telescope = optic_filter = None
         for telescope in profile.telescopes:
             steps.append(select("telescope", telescope))
-            expected.append(None)
+            expected.append(shipped.resolve(site, telescope, None, optic_filter))
             for optic_filter in profile.filters:
                 steps.append(select("filter", optic_filter))
                 expected.append(shipped.resolve(site, telescope, None, optic_filter))

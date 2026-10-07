@@ -1085,6 +1085,14 @@
             if (entry && entry.environment) { layBandSky(entry.environment); }
         }
 
+        applyRig(profile, entry);
+    }
+
+    /* The selected telescope's own numbers, then whatever the chosen filter (entry)
+       measured on that telescope. Run when either of the two changes: the measurement
+       belongs to the pair, so a new telescope under the same filter needs it as much
+       as a new filter on the same telescope does. */
+    function applyRig(profile, entry) {
         var telescopeId = el('select-telescope').value;
         var rig = (profile.telescopes || {})[telescopeId];
         if (rig) {
@@ -1166,6 +1174,10 @@
                 if (preset) {
                     applyFragment(section, preset[key], true);
                     if (kind === 'filters') { applyBand(preset); }
+                    // The telescope's slice only: the filter's sky stays as it is.
+                    if (kind === 'telescopes') {
+                        applyRig(profiles()[profileSelect.value], catalogue('filters')[el('select-filter').value]);
+                    }
                     collapseDetails(panel);
                 } else {
                     revealDetails(panel);
