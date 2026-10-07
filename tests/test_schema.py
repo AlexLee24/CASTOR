@@ -11,7 +11,9 @@ from castor.schema import (
     VegaMagnitude,
     SolveForSNR,
     SolveForTime,
-    SkyAnnulus
+    SkyAnnulus,
+    ObservationResponse,
+    NoiseComponents,
 )
 
 # ==========================================
@@ -182,3 +184,41 @@ class TestSkyAnnulus:
         response reports N_est, so a caller who left it out can see that they did."""
         opts = SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=1)
         assert opts.sky_annulus is None
+
+
+# ==========================================
+# Test focus 5: what a response promises to carry
+# ==========================================
+class TestResponseContract:
+    def test_the_noise_budget_and_pointing_are_part_of_the_contract(self):
+        """Required, not optional: the calculator fills them on every run, so a
+        caller generated from the JSON Schema need not guard against their absence."""
+        contract = ObservationResponse.model_json_schema()
+        defs = contract["$defs"]
+
+        assert {"noise", "ephemeris"} <= set(contract["required"])
+        assert "total_exp_time" in defs["CoreResult"]["required"]
+        assert {"airmass", "sky_surface_brightness"} <= set(defs["PhysicalDiagnostics"]["required"])
+        assert set(defs["NoiseBudget"]["required"]) == {"single", "total"}
+        assert set(defs["ObservationEphemeris"]["required"]) == {
+            "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+        }
+
+    def test_every_noise_term_says_its_unit(self):
+        """A variance in e-² and a signal in e- sit side by side; the description is
+        the only place a caller can tell which is which."""
+        for name, field in NoiseComponents.model_fields.items():
+            assert field.description and "[" in field.description, name
+
+    def test_existing_keys_keep_their_place_in_a_dump(self):
+        """The new blocks are appended, so a consumer that diffed or indexed the old
+        key order still finds core, budget, diagnostics and flags where they were."""
+        assert list(ObservationResponse.model_fields)[:4] == ["core", "budget", "diagnostics", "flags"]
+
+    def test_a_noise_block_refuses_unknown_terms(self):
+        terms = dict(exp_time=60.0, num_exposures=1, signal=1.0, source_variance=1.0,
+                     sky_variance=1.0, dark_variance=1.0, readout_variance=1.0,
+                     flatness_variance=0.0, total_variance=4.0, num_pixels_background=3.0)
+        NoiseComponents(**terms)
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            NoiseComponents(**terms, scintillation_variance=1.0)

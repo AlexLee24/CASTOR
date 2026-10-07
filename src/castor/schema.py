@@ -333,6 +333,14 @@ class CoreResult(StrictModel):
             "current shot noise overtakes readout noise. (ATBD: t_opt) [s]"
         )
     )
+    total_exp_time: float = Field(
+        ...,
+        description=(
+            "Integration time across all exposures, t_single × N_exp: num_exposures in 'solve_snr' "
+            "mode, required_exposures in 'solve_time'. Integration only — readout overhead is not "
+            "modelled (validation/QUESTIONS.md 11). (ATBD: t_total) [s]"
+        )
+    )
 
 class SignalNoiseBudget(StrictModel):
     source_count_rate: float = Field(
@@ -377,6 +385,105 @@ class PhysicalDiagnostics(StrictModel):
         ..., 
         description="Pixel-equivalent noise cost of estimating the sky in the annulus; zero when no annulus was given. (ATBD: N_est) [count]"
     )
+    airmass: float = Field(
+        ...,
+        description=(
+            "Airmass the target's extinction was computed at: sec(z), with the zenith angle clamped "
+            "to at most 89° to keep it finite. A target below the horizon therefore reads as about "
+            "57, not as an error — ephemeris.target_elevation_deg is the unclamped check. "
+            "(ATBD: X) [dimensionless]"
+        )
+    )
+    sky_surface_brightness: float = Field(
+        ...,
+        description=(
+            "Total sky surface brightness the sky count rate was computed from: mu_dark, completed "
+            "by its zodiacal term when zodiacal_share is set, plus the moon when "
+            "auto_calc_background is True. Converted to flux as an AB magnitude, although the "
+            "lunar term is Krisciunas & Schaefer's Johnson V. (ATBD: mu_sky) [mag/arcsec²]"
+        )
+    )
+
+class NoiseComponents(StrictModel):
+    """The signal behind one SNR and every variance term that divides it, each summed over the aperture."""
+    exp_time: PositiveFloat = Field(
+        ...,
+        description="Integration time these terms accumulated over: t_single in `single`, t_total in `total`. [s]"
+    )
+    num_exposures: PositiveInt = Field(
+        ...,
+        description="Frames the per-frame terms (dark current, read noise) were charged for: 1 in `single`, N_exp in `total`. (ATBD: N_exp) [count]"
+    )
+    signal: float = Field(
+        ...,
+        description="Source electrons in the aperture, Rate_src · t. [e-]"
+    )
+    source_variance: float = Field(
+        ...,
+        description="Poisson variance of the source, Rate_src · t. [e-²]"
+    )
+    sky_variance: float = Field(
+        ...,
+        description="Sky shot noise over the background pixels, N_bkg · Rate_sky · t. [e-²]"
+    )
+    dark_variance: float = Field(
+        ...,
+        description="Dark-current shot noise, N_exp · N_bkg · R_dark · t_single. [e-²]"
+    )
+    readout_variance: float = Field(
+        ...,
+        description="Read noise, N_exp · N_bkg · RON². [e-²]"
+    )
+    flatness_variance: float = Field(
+        ...,
+        description="Correlated flat-field/background residual; zero unless background_flatness_fraction is set. (ATBD: V_flat) [e-²]"
+    )
+    total_variance: float = Field(
+        ...,
+        description=(
+            "The variance the SNR divides by: signal / sqrt(total_variance) is the SNR exactly. Equal "
+            "to the sum of the five terms above to rounding, not bit for bit. [e-²]"
+        )
+    )
+    num_pixels_background: float = Field(
+        ...,
+        description="Pixel count the per-pixel terms were multiplied by, N_pix + N_est. (ATBD: N_bkg) [count]"
+    )
+
+class NoiseBudget(StrictModel):
+    single: NoiseComponents = Field(
+        ...,
+        description="One frame of t_single. Its signal / sqrt(total_variance) is core.single_snr."
+    )
+    total: NoiseComponents = Field(
+        ...,
+        description="The whole stack. Its signal / sqrt(total_variance) is core.total_snr."
+    )
+
+class ObservationEphemeris(StrictModel):
+    """Where the target and the moon were, as the calculation saw them.
+
+    Reported whether or not auto_calc_background layered the moon onto the sky:
+    the geometry is computed either way.
+    """
+    target_elevation_deg: float = Field(
+        ...,
+        description=(
+            "Target's altitude above the horizon, in degrees. Negative when the target is below the "
+            "horizon: not clamped, unlike the zenith angle behind diagnostics.airmass."
+        )
+    )
+    moon_elevation_deg: float = Field(
+        ..., description="Moon's altitude above the horizon, in degrees."
+    )
+    moon_phase_angle_deg: float = Field(
+        ...,
+        description="Lunar phase angle, 0 at full moon and 180 at new moon. (Krisciunas & Schaefer 1991: alpha) [deg]"
+    )
+    moon_separation_deg: float = Field(
+        ...,
+        description="Angular distance between the target and the moon. (Krisciunas & Schaefer 1991: rho) [deg]"
+    )
 
 class SystemFlags(StrictModel):
     is_saturated: bool = Field(
@@ -404,6 +511,16 @@ class ObservationResponse(StrictModel):
     flags: SystemFlags = Field(
         ..., 
         description="System safety flags and boundary warnings."
+    )
+    # Appended after flags rather than grouped with budget, so that every key a
+    # response carried before keeps its place in a dump.
+    noise: NoiseBudget = Field(
+        ...,
+        description="Signal and every variance term behind single_snr and total_snr. (ATBD 4.3.6)"
+    )
+    ephemeris: ObservationEphemeris = Field(
+        ...,
+        description="Target and moon geometry at observing_time_utc, as the calculation used it."
     )
 
 class TimeSeriesEnvironment(StrictModel):
