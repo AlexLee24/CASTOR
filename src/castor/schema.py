@@ -618,6 +618,91 @@ class BatchCoreResult(StrictModel):
         )
     )
     saturation_time_limit: list[float] = Field(..., description="Saturation time limit array [s].")
+    optimal_exposure_time: list[float] = Field(
+        ...,
+        description=(
+            "Background-limited single exposure time at each timestamp; it moves with the sky. "
+            "(ATBD: t_opt) [s]"
+        )
+    )
+    total_exp_time: list[float] = Field(
+        ...,
+        description=(
+            "Integration time t_single × N at each timestamp: N is num_exposures in 'solve_snr' mode, "
+            "the same at every step, and required_exposures in 'solve_time'. Integration only — "
+            "readout overhead is not modelled (validation/QUESTIONS.md 11). (ATBD: t_total) [s]"
+        )
+    )
+
+class BatchSignalNoiseBudget(StrictModel):
+    source_count_rate: list[float] = Field(
+        ..., description="Source photoelectron count rate within the aperture at each timestamp. (ATBD: Rate_src) [e-/s]"
+    )
+    sky_count_rate: list[float] = Field(
+        ..., description="Sky photoelectron count rate per pixel at each timestamp. (ATBD: Rate_sky) [e-/s/pix]"
+    )
+    peak_pixel_rate: list[float] = Field(
+        ..., description="Peak photoelectron count rate on the central pixel at each timestamp. (ATBD: Rate_peak) [e-/s/pix]"
+    )
+
+class BatchPhysicalDiagnostics(StrictModel):
+    """The Stage 2 values that move during a time series.
+
+    Only these two: seeing, tracking, the optics and the aperture are fixed for the
+    whole series, so FWHM_tot, A_eff, S_pix, f_enc, N_pix and N_est are each one
+    number, the same as a single request's at any of these timestamps.
+    """
+    airmass: list[float] = Field(
+        ...,
+        description=(
+            "Airmass the target's extinction was computed at, at each timestamp: sec(z) with the "
+            "zenith angle clamped to at most 89°. ephemeris.target_elevation_deg is the unclamped "
+            "check. (ATBD: X) [dimensionless]"
+        )
+    )
+    sky_surface_brightness: list[float] = Field(
+        ...,
+        description=(
+            "Total sky surface brightness each sky count rate was computed from: mu_dark, completed "
+            "by its zodiacal term when zodiacal_share is set, plus the moon, which a time series "
+            "always layers on. (ATBD: mu_sky) [mag/arcsec²]"
+        )
+    )
+
+class BatchNoiseComponents(StrictModel):
+    """NoiseComponents at each timestamp; every list is as long as timestamps_iso."""
+    exp_time: list[float] = Field(
+        ..., description="Integration time the terms accumulated over: t_single in `single`, t_total in `total`. [s]"
+    )
+    num_exposures: list[float] = Field(
+        ...,
+        description=(
+            "Frames the per-frame terms were charged for: 1 in `single`, N_exp in `total`. A float "
+            "list, like required_exposures. (ATBD: N_exp) [count]"
+        )
+    )
+    signal: list[float] = Field(..., description="Source electrons in the aperture, Rate_src · t. [e-]")
+    source_variance: list[float] = Field(..., description="Poisson variance of the source, Rate_src · t. [e-²]")
+    sky_variance: list[float] = Field(..., description="Sky shot noise over the background pixels, N_bkg · Rate_sky · t. [e-²]")
+    dark_variance: list[float] = Field(..., description="Dark-current shot noise, N_exp · N_bkg · R_dark · t_single. [e-²]")
+    readout_variance: list[float] = Field(..., description="Read noise, N_exp · N_bkg · RON². [e-²]")
+    flatness_variance: list[float] = Field(
+        ..., description="Correlated flat-field/background residual; zero unless background_flatness_fraction is set. (ATBD: V_flat) [e-²]"
+    )
+    total_variance: list[float] = Field(
+        ..., description="The variance each SNR divides by: signal / sqrt(total_variance) is that SNR exactly. [e-²]"
+    )
+    num_pixels_background: list[float] = Field(
+        ..., description="Pixel count the per-pixel terms were multiplied by, N_pix + N_est; the same at every step. (ATBD: N_bkg) [count]"
+    )
+
+class BatchNoiseBudget(StrictModel):
+    single: BatchNoiseComponents = Field(
+        ..., description="One frame of t_single at each timestamp. Its signal / sqrt(total_variance) is core.single_snr."
+    )
+    total: BatchNoiseComponents = Field(
+        ..., description="The whole stack at each timestamp. Its signal / sqrt(total_variance) is core.total_snr."
+    )
 
 class BatchEphemeris(StrictModel):
     target_elevation_deg: list[float] = Field(
@@ -639,8 +724,26 @@ class BatchEphemeris(StrictModel):
             "0 to -18 is twilight; below -18 is astronomical night."
         )
     )
+    moon_phase_angle_deg: list[float] = Field(
+        ...,
+        description="Lunar phase angle at each timestamp, 0 at full moon and 180 at new moon. (Krisciunas & Schaefer 1991: alpha) [deg]"
+    )
+    moon_separation_deg: list[float] = Field(
+        ...,
+        description="Angular distance between the target and the moon at each timestamp. (Krisciunas & Schaefer 1991: rho) [deg]"
+    )
 
 class BatchObservationResponse(StrictModel):
     core: BatchCoreResult = Field(..., description="Vectorized calculation results over time.")
     ephemeris: BatchEphemeris = Field(..., description="Target/moon geometry over the time series, for visibility plots.")
     flags: SystemFlags = Field(..., description="System safety flags and boundary warnings.")
+    # Appended, as in ObservationResponse, so existing keys keep their place.
+    budget: BatchSignalNoiseBudget = Field(
+        ..., description="Photoelectron count rates at each timestamp. (ATBD Stage 3)"
+    )
+    diagnostics: BatchPhysicalDiagnostics = Field(
+        ..., description="The airmass and sky each timestamp was computed with. (ATBD Stage 2)"
+    )
+    noise: BatchNoiseBudget = Field(
+        ..., description="Signal and every variance term behind single_snr and total_snr at each timestamp. (ATBD 4.3.6)"
+    )

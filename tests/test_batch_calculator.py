@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from castor import schema
 from castor.batch_calculator import run_batch_calculation, _expand_time_series
+from castor.calculator import run_calculation
 
 # ==========================================
 # Fixtures: prepare fake batch test data and interceptors
@@ -172,3 +173,138 @@ def test_batch_pipeline_real_astropy_path(batch_base_request):
     assert len(response.core.timestamps_iso) == 13
     assert len(response.core.total_snr) == 13
     assert all(snr > 0 for snr in response.core.total_snr)
+
+
+# ==========================================
+# Per-timestamp data: what each step was computed from
+# ==========================================
+
+def _per_step_arrays(response):
+    """Every list the batch response carries, by dotted name."""
+    arrays = {}
+    for block in ("core", "budget", "diagnostics", "ephemeris"):
+        for name, value in getattr(response, block).model_dump().items():
+            if isinstance(value, list):
+                arrays[f"{block}.{name}"] = value
+    for which in ("single", "total"):
+        for name, value in getattr(response.noise, which).model_dump().items():
+            arrays[f"noise.{which}.{name}"] = value
+    return arrays
+
+def test_every_per_step_array_is_as_long_as_the_series(mock_moon_batch, batch_base_request):
+    """Including the terms built only from constants, such as read noise, which
+    physics hands back as a single number."""
+    response = run_batch_calculation(batch_base_request)
+    arrays = _per_step_arrays(response)
+
+    assert {len(values) for values in arrays.values()} == {13}
+    assert len(set(arrays["noise.total.readout_variance"])) == 1
+    assert len(set(arrays["noise.single.num_pixels_background"])) == 1
+
+def test_a_single_point_series_is_still_a_series(mock_moon_batch, batch_base_request):
+    batch_base_request.environment.end_time_utc = batch_base_request.environment.start_time_utc
+    arrays = _per_step_arrays(run_batch_calculation(batch_base_request))
+    assert {len(values) for values in arrays.values()} == {1}
+
+@pytest.mark.parametrize("options", [
+    schema.BatchSolveForTime(aperture_factor=0.85, single_exp_time=120.0, target_snr=50.0),
+    schema.BatchSolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=7),
+])
+def test_each_steps_snr_is_exactly_its_noise_over_root_variance(mock_moon_batch, batch_base_request, options):
+    batch_base_request.options = options
+    batch_base_request.options.sky_annulus = schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0)
+    batch_base_request.instrument.camera.background_flatness_fraction = 0.02
+    response = run_batch_calculation(batch_base_request)
+    single, total = response.noise.single, response.noise.total
+
+    for i in range(len(response.core.timestamps_iso)):
+        assert single.signal[i] / np.sqrt(single.total_variance[i]) == response.core.single_snr[i]
+        assert total.signal[i] / np.sqrt(total.total_variance[i]) == response.core.total_snr[i]
+
+def test_total_time_follows_the_frames_at_each_step(mock_moon_batch, batch_base_request):
+    """In solve_time the frame count moves with the sky, and the total time and the
+    stacked noise terms move with it."""
+    response = run_batch_calculation(batch_base_request)
+    frames = response.core.required_exposures
+
+    assert response.core.total_exp_time == [300.0 * n for n in frames]
+    assert response.noise.total.num_exposures == frames
+    assert response.noise.total.exp_time == response.core.total_exp_time
+    assert set(response.noise.single.exp_time) == {300.0}
+    assert set(response.noise.single.num_exposures) == {1.0}
+
+    batch_base_request.options = schema.BatchSolveForSNR(aperture_factor=1.5, single_exp_time=300.0, num_exposures=5)
+    given = run_batch_calculation(batch_base_request)
+    assert set(given.core.total_exp_time) == {1500.0}
+    assert set(given.noise.total.num_exposures) == {5.0}
+
+def test_each_step_reports_the_airmass_sky_and_moon_it_used(mock_moon_batch, batch_base_request):
+    """mock_moon_batch walks the target from 30 to 60 degrees from the zenith under a
+    full moon 90 degrees away, with the sky held at 21.0."""
+    response = run_batch_calculation(batch_base_request)
+    zenith = np.linspace(30.0, 60.0, 13)
+
+    np.testing.assert_allclose(response.diagnostics.airmass, 1.0 / np.cos(np.radians(zenith)), rtol=1e-12)
+    assert set(response.diagnostics.sky_surface_brightness) == {21.0}
+    assert set(response.ephemeris.moon_phase_angle_deg) == {0.0}
+    assert set(response.ephemeris.moon_separation_deg) == {90.0}
+
+def test_the_optimal_exposure_moves_with_the_sky(mock_moon_batch, batch_base_request):
+    camera = batch_base_request.instrument.camera
+    response = run_batch_calculation(batch_base_request)
+
+    expected = [camera.readout_noise ** 2 / (sky + camera.dark_current_rate)
+                for sky in response.budget.sky_count_rate]
+    np.testing.assert_allclose(response.core.optimal_exposure_time, expected, rtol=1e-12)
+
+def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
+    """The same physics in two orchestrators drifts unless a test holds them
+    together (LESSONS.md). Unmocked, at one pinned instant, with the moon on in
+    both, everything the two responses share must agree.
+
+    throughput_correction stays at 1.0 here: the batch calculator does not apply
+    it (the single one does), which is a separate fix this test does not cover."""
+    assert batch_base_request.instrument.throughput_correction == 1.0
+    batch_base_request.instrument.camera.background_flatness_fraction = 0.02
+    batch_base_request.options = schema.BatchSolveForTime(
+        aperture_factor=0.85, single_exp_time=120.0, target_snr=40.0,
+        sky_annulus=schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0))
+    env = batch_base_request.environment
+    env.end_time_utc = env.start_time_utc
+    batch = run_batch_calculation(batch_base_request)
+
+    single = run_calculation(schema.ObservationRequest(
+        instrument=batch_base_request.instrument,
+        target=batch_base_request.target,
+        environment=schema.EnvironmentCondition(
+            location=env.location, observing_time_utc=env.start_time_utc, auto_calc_background=True,
+            mu_dark=env.mu_dark, zodiacal_share=env.zodiacal_share, extinction_coeff=env.extinction_coeff,
+            seeing_fwhm=env.seeing_fwhm, diffraction_fwhm=env.diffraction_fwhm,
+            optical_fwhm=env.optical_fwhm, tracking_fwhm=env.tracking_fwhm),
+        options=schema.SolveForTime(**batch_base_request.options.model_dump(exclude={"type"})),
+    ))
+
+    pairs = {
+        "core.single_snr": (batch.core.single_snr, single.core.single_snr),
+        "core.total_snr": (batch.core.total_snr, single.core.total_snr),
+        "core.required_exposures": (batch.core.required_exposures, single.core.required_exposures),
+        "core.optimal_exposure_time": (batch.core.optimal_exposure_time, single.core.optimal_exposure_time),
+        "core.total_exp_time": (batch.core.total_exp_time, single.core.total_exp_time),
+        "diagnostics.airmass": (batch.diagnostics.airmass, single.diagnostics.airmass),
+        "diagnostics.sky_surface_brightness": (batch.diagnostics.sky_surface_brightness,
+                                               single.diagnostics.sky_surface_brightness),
+        "ephemeris.target_elevation_deg": (batch.ephemeris.target_elevation_deg,
+                                           single.ephemeris.target_elevation_deg),
+        "ephemeris.moon_phase_angle_deg": (batch.ephemeris.moon_phase_angle_deg,
+                                           single.ephemeris.moon_phase_angle_deg),
+        "ephemeris.moon_separation_deg": (batch.ephemeris.moon_separation_deg,
+                                          single.ephemeris.moon_separation_deg),
+    }
+    for name in ("source_count_rate", "sky_count_rate", "peak_pixel_rate"):
+        pairs[f"budget.{name}"] = (getattr(batch.budget, name), getattr(single.budget, name))
+    for which in ("single", "total"):
+        for name, value in getattr(single.noise, which).model_dump().items():
+            pairs[f"noise.{which}.{name}"] = (getattr(getattr(batch.noise, which), name), value)
+
+    for name, (series, value) in pairs.items():
+        assert series == [pytest.approx(value, rel=1e-9, abs=1e-9)], name
