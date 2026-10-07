@@ -20,7 +20,11 @@ that a host with a preset file of its own can hold it to the same rule. Run as a
 script, this file prints the record as the JSON table `castor check` takes:
 
     uv run python validation/provenance.py > provenance.json
-    uv run castor check --provenance provenance.json
+    uv run castor check --presets-file src/castorGUI/data/presets.json --provenance provenance.json
+
+The record covers the shipped file alone, so the command names it. Left to the
+search path, `check` would also read the files on CASTOR_PRESETS_PATH and hold
+their numbers to this record, which says nothing about them.
 
 Sources, strongest first:
 

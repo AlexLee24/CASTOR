@@ -188,7 +188,7 @@ with every borrowed rig); the rules that govern those are pinned by tests in
 
 ```bash
 uv run python validation/provenance.py > provenance.json   # the shipped file's record
-uv run castor check --provenance provenance.json
+uv run castor check --presets-file src/castorGUI/data/presets.json --provenance provenance.json
 ```
 
 With a provenance table, `check` also holds the file to the rule
@@ -231,8 +231,8 @@ castor check --presets-file my_rigs.json --provenance my_rigs.provenance.json
 ```
 
 Without `--presets-file`, `check` reads `CASTOR_PRESETS_PATH`'s files too, and
-the shipped record says nothing about them; with that variable set, name the
-shipped file to check it against its record alone.
+the shipped record says nothing about them, which is why the first example names
+the shipped file: left out, that command fails wherever the variable is set.
 
 The rule is `castorCLI.provenance`, as functions over a file's `profiles` object
 exactly as JSON gives it, for a host that keeps its own preset file:
