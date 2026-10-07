@@ -11,7 +11,9 @@ from castor.schema import (
     VegaMagnitude,
     SolveForSNR,
     SolveForTime,
-    SkyAnnulus
+    SkyAnnulus,
+    BatchSolveForSNR,
+    BatchSolveForTime
 )
 
 # ==========================================
@@ -182,3 +184,42 @@ class TestSkyAnnulus:
         response reports N_est, so a caller who left it out can see that they did."""
         opts = SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=1)
         assert opts.sky_annulus is None
+
+
+# ==========================================
+# Test focus 5: the background-dominance factor k
+# ==========================================
+class TestBackgroundDominanceFactor:
+    @pytest.mark.parametrize("options", [SolveForSNR, SolveForTime])
+    def test_omitting_k_reads_as_the_crossover(self, options):
+        """Both goals inherit it, and leaving it out means what every request before
+        the field existed meant: t_opt at k = 1, the crossover."""
+        goal = {"num_exposures": 1} if options is SolveForSNR else {"target_snr": 10.0}
+        opts = options(aperture_factor=0.85, single_exp_time=120.0, **goal)
+        assert opts.background_dominance_factor == 1.0
+
+    @pytest.mark.parametrize("k", [0.0, -1.0])
+    def test_a_non_positive_k_is_refused(self, k):
+        """k = 0 asks for a zero-length frame and a negative one for a negative
+        length; both would come back as a number rather than an error."""
+        with pytest.raises(ValidationError, match="greater than 0"):
+            SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=1,
+                        background_dominance_factor=k)
+
+    def test_a_misspelled_k_is_refused_not_defaulted(self):
+        """With a default in place, a typo that strict mode let through would read
+        as k = 1 and look exactly like the value the caller asked for."""
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            SolveForSNR(aperture_factor=0.85, single_exp_time=120.0, num_exposures=1,
+                        background_dominance=3.0)
+
+    @pytest.mark.parametrize("options,goal", [
+        (BatchSolveForSNR, {"num_exposures": 1}),
+        (BatchSolveForTime, {"target_snr": 10.0}),
+    ])
+    def test_the_batch_contract_does_not_take_k(self, options, goal):
+        """The batch path computes no t_opt, so it has nothing to apply k to. Accepting
+        it there would be a parameter taken and discarded."""
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            options(aperture_factor=0.85, single_exp_time=120.0,
+                    background_dominance_factor=3.0, **goal)

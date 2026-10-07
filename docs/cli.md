@@ -113,7 +113,7 @@ Thermal electron generation rate per pixel in e-/s/pix. (ATBD: R_dark)
 Electronic noise introduced during the readout phase in e-/pix. (ATBD: RON)
 ```
 
-Forty-four fields carry a description and twenty-six of those name their
+Fifty-three fields carry a description and thirty-one of those name their
 [ATBD](ATBD.md) symbol, so a caller never has to guess whether `pixel_pitch` is
 metres or micrometres — the class of mistake that produces a plausible wrong
 answer rather than an error. With the `assumed` list beside it, that is the whole

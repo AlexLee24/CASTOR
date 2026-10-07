@@ -35,7 +35,7 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 9 | Zodiacal light is not modelled | BUILD | Partly closed |
 | 10 | Galactic background is not modelled | BUILD | Partly closed |
 | 11 | Readout overhead is not modelled | BUILD | — |
-| 12 | `background_dominance_factor` has no source | DECIDE | docstring only |
+| 12 | `background_dominance_factor` has no source | DECIDE | Narrowed — schema default, ATBD 4.3.5 |
 | 13 | SOPHIA's QE is one flat number | BUILD | `GUESS` row |
 | 14 | The VLT profile is mostly invention | DECIDE | 12 `GUESS` rows |
 | 15 | FORS2's throughput is a fudge that works in one band | BUILD | strict xfail, `test_eso.py` |
@@ -367,9 +367,22 @@ place to put it. This is a feature the ancestor had and the refactor dropped.
 The optimal single exposure time uses a default of 1.0, the crossover where
 background shot noise just overtakes read noise, and `physics.py` says so in its
 own docstring: "Provisional default — not yet backed by a specific reference
-guideline, revisit before relying on it for real observation planning." That
-warning has never been anywhere but the docstring. Either find a reference, or
-decide the crossover is the right convention and say so in the ATBD.
+guideline, revisit before relying on it for real observation planning." Either
+find a reference, or decide the crossover is the right convention and say so in
+the ATBD.
+
+**Narrowed.** For a long time that warning was nowhere but the docstring, and
+1.0 was the only value a request could get. k is now a request option,
+`options.background_dominance_factor`, echoed back as
+`core.background_dominance_factor`; the schema and ATBD 4.3.5 both call the
+default provisional, and 4.3.5 states what each k costs — at t_opt, read noise
+raises the per-pixel noise by p = √(1 + 1/k²) − 1, 41% at the default and 5% at
+k = 3.1235. A caller with a convention of its own can now state it.
+
+**What is left** is the question as asked: the *default* still has no source.
+Choosing one is choosing a penalty on behalf of every caller who does not set k,
+and it moves every such caller's `optimal_exposure_time`, so it should arrive
+with the reference that justifies it.
 
 ## 13. SOPHIA's quantum efficiency is one flat number — BUILD
 

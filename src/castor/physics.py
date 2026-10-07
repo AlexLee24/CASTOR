@@ -841,7 +841,9 @@ def calculate_optimal_exposure_time(
         single exposure (more saturation / tracking / cosmic-ray risk).
         Provisional default — not yet backed by a specific reference
         guideline, revisit before relying on it for real observation
-        planning.
+        planning. `run_calculation` passes the request's
+        `options.background_dominance_factor`, whose default is this same
+        1.0; ATBD 4.3.5 gives the read-noise penalty each k leaves.
 
     Returns
     -------

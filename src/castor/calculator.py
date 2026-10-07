@@ -193,10 +193,12 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         inst.camera.full_well_capacity, peak_rate, sky_rate, inst.camera.dark_current_rate
     ))
 
-    # background_dominance_factor keeps its default value of 1.0; see the docstring of
-    # calculate_optimal_exposure_time for details.
+    # k is the caller's choice of how far background must outweigh read noise. It
+    # moves t_opt and nothing else: SNR is computed at the single_exp_time asked for,
+    # not at t_opt. Omitted, it is 1.0, the crossover — see ATBD 4.3.5.
     t_opt = float(physics.calculate_optimal_exposure_time(
-        sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise
+        sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
+        background_dominance_factor=opt.background_dominance_factor
     ))
 
     warnings = []
@@ -209,7 +211,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             single_snr=single_snr,
             required_exposures=final_req_exposures,
             saturation_time_limit=t_sat,
-            optimal_exposure_time=t_opt
+            optimal_exposure_time=t_opt,
+            background_dominance_factor=opt.background_dominance_factor
         ),
         budget=schema.SignalNoiseBudget(
             source_count_rate=source_rate,

@@ -268,6 +268,21 @@ class BaseOptions(StrictModel):
         None,
         description="Annulus the sky is estimated in. Omit to assume the sky is known exactly, which no real reduction achieves."
     )
+    # Optional for the same reason as sky_annulus: omitting it has a defined
+    # meaning, the crossover that every CASTOR release before this field existed
+    # computed t_opt at. It is a planning convention, not a measurement, and it
+    # moves optimal_exposure_time alone; the response echoes it back.
+    background_dominance_factor: PositiveFloat = Field(
+        1.0,
+        description=(
+            "Ratio of (sky + dark) shot-noise sigma to readout-noise sigma per pixel that "
+            "optimal_exposure_time is solved for: t_opt = (k * RON)² / (Rate_sky + R_dark). "
+            "1.0 is the crossover, at which read noise still raises the per-pixel noise 41% above "
+            "the background's own; a larger k trades a longer frame for a smaller penalty (ATBD 4.3.5). "
+            "Changes optimal_exposure_time only. Default 1.0 is provisional — see "
+            "validation/QUESTIONS.md 12. (ATBD: k)"
+        )
+    )
 
 class SolveForSNR(BaseOptions):
     type: Literal["solve_snr"] = "solve_snr"
@@ -330,7 +345,19 @@ class CoreResult(StrictModel):
         ...,
         description=(
             "Background-limited single exposure time in seconds — the point at which sky + dark "
-            "current shot noise overtakes readout noise. (ATBD: t_opt) [s]"
+            "current shot noise reaches background_dominance_factor times the readout noise "
+            "(at the default 1.0, just overtakes it). (ATBD: t_opt) [s]"
+        )
+    )
+    # Defaulted, unlike its neighbours, so that a response stored before this field
+    # existed still validates — and reads as what it was: every one of them was
+    # computed at 1.0.
+    background_dominance_factor: float = Field(
+        1.0,
+        description=(
+            "The k that optimal_exposure_time was solved for, echoed from "
+            "options.background_dominance_factor so that a response read without its request "
+            "still says which convention its t_opt follows. (ATBD: k) [dimensionless]"
         )
     )
 
