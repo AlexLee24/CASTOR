@@ -7,15 +7,50 @@ right — because there is no way to tell the difference.
 """
 import json
 import pathlib
+import subprocess
+import sys
 
 import pytest
+from click.testing import CliRunner
 
 import provenance
 from castorCLI import presets
+from castorCLI import provenance as rule
+from castorCLI.main import cli
 
 PRESETS = json.loads(
     pathlib.Path(presets.DEFAULT_PATH).read_text(encoding="utf-8"))["profiles"]
 VALUES = provenance.walk(PRESETS)
+
+
+def test_the_shipped_file_passes_the_rule_hosts_run():
+    """The same check a host runs on its own preset file, run on this one.
+
+    The tests below say the same thing one assertion at a time, which is what
+    makes a failure easy to read; this one is what proves that castorCLI's rule
+    and this suite's have not drifted apart.
+    """
+    assert rule.check(PRESETS, provenance.PROVENANCE) == []
+
+
+def test_the_exported_record_passes_castor_check(tmp_path):
+    """Run as a script, provenance.py prints the record as the JSON table
+    `castor check --provenance` reads. The shipped pair has to pass there too,
+    which also proves the export loses nothing on the way through JSON.
+
+    The shipped file is named rather than left to the search path: the record
+    is about that file alone, and files on CASTOR_PRESETS_PATH in the shell
+    running this would otherwise be held to it too."""
+    exported = subprocess.run([sys.executable, provenance.__file__],
+                              capture_output=True, text=True, check=True).stdout
+    path = tmp_path / "provenance.json"
+    path.write_text(exported, encoding="utf-8")
+
+    assert rule.load_table(path) == provenance.PROVENANCE
+    result = CliRunner().invoke(
+        cli, ["check", "--presets-file", str(presets.DEFAULT_PATH), "--provenance", str(path)])
+    assert result.exit_code == 0, result.stderr
+    assert f"{len(VALUES)} values checked against" in result.stdout
 
 
 def test_the_table_covers_the_file_exactly():

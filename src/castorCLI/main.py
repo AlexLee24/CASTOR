@@ -26,6 +26,7 @@ is what makes that work without installing anything.
 """
 import json
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,7 +40,7 @@ if str(_SRC_DIR) not in sys.path:
 
 from castor import schema  # noqa: E402
 from castor.calculator import run_calculation  # noqa: E402
-from castorCLI import presets  # noqa: E402
+from castorCLI import presets, provenance  # noqa: E402
 
 # A result that saturates is still a computed result, so it leaves by the front door
 # rather than as an error — but not with the exit code of an unremarkable success.
@@ -387,18 +388,15 @@ def list_presets(presets_file, as_json, bands) -> None:
                     click.echo(f"      {filter_id:<12} overrides  " + " · ".join(overrides))
         click.echo("")
 
-@cli.command(name="check")
-@click.option("--presets-file", type=click.Path(path_type=Path), multiple=True, help=PRESETS_FILE_HELP)
-def check_presets(presets_file) -> None:
-    """Verify a preset file beyond what loading it proves.
+def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
+    """Everything `castor check` verifies about a loaded preset file, or several
+    merged by presets.load().
 
-    Loading only proves the shapes are right. This runs every combination the file
-    offers through the engine and reports what a user would actually get — which is
-    where the interesting failures live. A filter that overrides a telescope the
-    profile does not list, for instance, loads perfectly and then silently applies
-    nothing; the only way to see it is to resolve the combination and look.
+    Returns how many complete configurations were resolved, and one line per
+    problem found, as `castor check` prints them. An empty list is a clean file.
+    A host that writes its own preset file can call this on it directly rather
+    than through the command line.
     """
-    catalogue = _load_presets(presets_file)
     problems: list[str] = []
     checked = 0
 
@@ -439,10 +437,51 @@ def check_presets(presets_file) -> None:
                         problems.append(
                             f"{where}: extinction_coeff {environment['extinction_coeff']:g} is not physical")
 
+    return checked, problems
+
+@cli.command(name="check")
+@click.option("--presets-file", type=click.Path(path_type=Path), multiple=True, help=PRESETS_FILE_HELP)
+@click.option("--provenance", "provenance_file", type=click.Path(path_type=Path),
+              help="Also hold every number in the files read to this provenance table, "
+                   "JSON of {path: [value, class, note]}.")
+def check_presets(presets_file, provenance_file) -> None:
+    """Verify a preset file beyond what loading it proves.
+
+    Loading only proves the shapes are right. This runs every combination the file
+    offers through the engine and reports what a user would actually get — which is
+    where the interesting failures live. A filter that overrides a telescope the
+    profile does not list, for instance, loads perfectly and then silently applies
+    nothing; the only way to see it is to resolve the combination and look.
+
+    With --provenance, every number in the file must also have a record in that
+    table saying where it came from, and every record a number. Given several
+    files, one table covers them all; to hold each to its own, check each alone.
+    """
+    catalogue = _load_presets(presets_file)
+    checked, problems = check_file(catalogue)
+
+    held = None
+    if provenance_file is not None:
+        try:
+            table = provenance.load_table(provenance_file)
+        except provenance.ProvenanceError as exc:
+            raise SystemExit(_fail(exc))
+        # The files as written, not the loaded catalogue: a record vouches for the
+        # number a file holds, and loading coerces. The same files, merged the same
+        # way, so one table covers them all. Profile ids are unique across files, so
+        # each path still names one number in one file; and hardware named
+        # PROFILE/KEY is borrowed when a configuration is chosen, not copied into a
+        # file, so its numbers are walked once, under the profile that owns them.
+        profiles = _written_profiles(presets_file)
+        held = len(provenance.walk(profiles))
+        problems += [str(problem) for problem in provenance.check(profiles, table)]
+
     click.echo(f"{checked} resolvable configurations checked across {len(catalogue.profiles)} profiles")
     for profile_id, profile in catalogue.profiles.items():
         if profile.caveat:
             click.echo(f"  {profile_id}: carries a caveat — {profile.caveat}")
+    if held is not None:
+        click.echo(f"{held} values checked against {provenance_file}")
     if problems:
         for problem in problems:
             click.echo(f"  PROBLEM  {problem}", err=True)
@@ -510,14 +549,29 @@ def _drop_path(data: dict, loc: tuple) -> str | None:
         return ".".join(trail + [str(leaf)])
     return None
 
-def _load_presets(presets_file: tuple[Path, ...] | Path | None) -> presets.PresetFile:
-    """Reads the files --presets-file names or, when it names none, the search path.
+def _preset_files(presets_file: tuple[Path, ...] | Path | None) -> tuple[Path, ...]:
+    """The files --presets-file names or, when it names none, the search path.
 
     One path or None is still accepted, as before the option could be repeated.
     """
     files = (presets_file,) if isinstance(presets_file, (str, Path)) else tuple(presets_file or ())
+    return files or tuple(presets.search_path())
+
+def _load_presets(presets_file: tuple[Path, ...] | Path | None) -> presets.PresetFile:
+    """Reads and merges the files _preset_files() names."""
+    return _read_presets(presets.load, presets_file)
+
+def _written_profiles(presets_file: tuple[Path, ...] | Path | None) -> dict[str, Any]:
+    """The same files' profiles as written, merged as _load_presets() merges them.
+
+    What a provenance record vouches for: presets.document() keeps every number
+    exactly as its file spells it, where load() would coerce it.
+    """
+    return _read_presets(presets.document, presets_file)["profiles"]
+
+def _read_presets(reader: Callable[..., Any], presets_file: tuple[Path, ...] | Path | None) -> Any:
     try:
-        return presets.load(*(files or presets.search_path()))
+        return reader(*_preset_files(presets_file))
     except (presets.PresetError, ValidationError) as exc:
         message = _format_errors(exc) if isinstance(exc, ValidationError) else str(exc)
         raise SystemExit(_fail(message))

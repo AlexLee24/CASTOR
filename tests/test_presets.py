@@ -109,6 +109,16 @@ def test_malformed_json_is_not_a_traceback(tmp_path):
     with pytest.raises(presets.PresetError, match="not valid JSON"):
         presets.load(path)
 
+def test_a_file_that_is_not_utf8_is_not_a_traceback(tmp_path):
+    """What `>` writes in Windows PowerShell 5.1: UTF-16, which is still valid JSON."""
+    path = tmp_path / "presets.json"
+    path.write_text(json.dumps({"profiles": {}}), encoding="utf-16")
+
+    with pytest.raises(presets.PresetError, match="not UTF-8 text"):
+        presets.load(path)
+    with pytest.raises(presets.PresetError, match="not UTF-8 text"):
+        presets.document(path)
+
 # ==========================================
 # Resolution
 # ==========================================

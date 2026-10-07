@@ -68,6 +68,19 @@ def test_a_missing_file_on_the_variable_says_which(monkeypatch, tmp_path):
     assert status == 500
     assert "nowhere.json" in document["error"]
 
+def test_a_file_on_the_variable_that_is_not_utf8_says_so(monkeypatch, tmp_path):
+    """A file written on another host, say by `>` in Windows PowerShell 5.1:
+    an error the browser can show, not an exception out of the route."""
+    path = tmp_path / "utf16.json"
+    path.write_text(json.dumps({"profiles": {}}), encoding="utf-16")
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(path))
+
+    status, document = served()
+
+    assert status == 500
+    assert "not UTF-8 text" in document["error"]
+    assert "utf16.json" in document["error"]
+
 def test_a_malformed_file_on_the_variable_names_the_field(monkeypatch, tmp_path):
     path = tmp_path / "typo.json"
     path.write_text(json.dumps({"profiles": {"rig": {"telescopes": {"T": {"telescope": {
