@@ -210,6 +210,20 @@ def test_summary_counts_each_profile_by_class(profiles, table):
         "family": {provenance.DOCUMENT: 4, "MISSING": 1},
     }
 
+def test_summary_keeps_a_profile_id_with_a_dot_in_it_whole():
+    """A profile id is any JSON key. Reading it back off the path up to the first
+    dot would merge these two under "owl", a profile that does not exist."""
+    profiles = {"owl.home": {"median_seeing_fwhm": 1.2},
+                "owl.away": {"median_seeing_fwhm": 1.5}}
+    table = {"owl.home.median_seeing_fwhm": (1.2, provenance.MEASURED, "142 frames, FWHM median"),
+             "owl.away.median_seeing_fwhm": (1.5, provenance.GUESS, "no seeing monitor there")}
+    assert provenance.check(profiles, table) == []
+
+    assert provenance.summary(profiles, table) == {
+        "owl.home": {provenance.MEASURED: 1},
+        "owl.away": {provenance.GUESS: 1},
+    }
+
 # ==========================================
 # Tables kept as JSON
 # ==========================================

@@ -212,11 +212,13 @@ def summary(profiles: Mapping[str, Any], table: Mapping[str, Any]) -> dict[str, 
     record counts as "MISSING". Meant for a table check() has passed.
     """
     counts = {}
-    for path in walk(profiles):
-        profile_id = path.split(".", 1)[0]
-        source = table.get(path, (None, "MISSING", ""))[1]
-        counts.setdefault(profile_id, {}).setdefault(source, 0)
-        counts[profile_id][source] += 1
+    # One profile at a time, rather than reading the id back off each path: an id
+    # is any JSON key, and one with a dot in it would be split in the wrong place.
+    for profile_id, profile in profiles.items():
+        for path in walk({profile_id: profile}):
+            source = table.get(path, (None, "MISSING", ""))[1]
+            counts.setdefault(profile_id, {}).setdefault(source, 0)
+            counts[profile_id][source] += 1
     return counts
 
 # ==========================================
