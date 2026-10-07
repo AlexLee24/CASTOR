@@ -18,22 +18,31 @@ This module deliberately lives outside src/castor/. Hardware presets are out of
 scope for the engine by design (docs/architecture.md §1.3, "No Hardware Databases"),
 and Kinder sources its presets from a database rather than from this file — a core
 module shaped around this JSON would be dead weight there.
+
+The shipped file need not be the only one. A host can generate profiles of its own
+(OWL does, from its hardware catalogue) and read them beside this repository's
+sites: load() merges several files in the order given, and search_path() is the
+list a host reads when its caller names none. docs/presets.md has the rules.
 """
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from castor import schema
 
 __all__ = [
     "DEFAULT_PATH",
+    "PATH_VARIABLE",
     "PresetError",
     "PresetNotFound",
     "PresetFile",
     "Profile",
+    "document",
     "load",
+    "search_path",
 ]
 
 # presets.json is not moved next to this module. Kinder vendors the repository and
@@ -41,6 +50,11 @@ __all__ = [
 # whole src/castorGUI/data directory into the desktop app; the reader moving is no
 # reason for the data to move.
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "castorGUI" / "data" / "presets.json"
+
+#: Further preset files a host reads after the shipped one, separated by os.pathsep
+#: the way PATH is. Read by search_path(), and only there: load() never consults the
+#: environment on its own, so a library caller gets the files it named and no others.
+PATH_VARIABLE = "CASTOR_PRESETS_PATH"
 
 # ==========================================
 # Errors
@@ -281,38 +295,120 @@ class PresetFile(BaseModel):
 # Loading and selection
 # ==========================================
 
-def load(path: Path | str | None = None) -> PresetFile:
-    """Reads and validates a preset file, defaulting to the one this repository ships."""
-    source = Path(path) if path is not None else DEFAULT_PATH
+def load(*paths: Path | str | None) -> PresetFile:
+    """Reads, validates and merges preset files, defaulting to the one this repository ships.
 
+    With no path it reads DEFAULT_PATH alone, as it always has, and None counts as
+    no path — it is what callers of the single optional argument this used to take
+    pass for "the default". It does not read PATH_VARIABLE: a host that wants the
+    environment's files too asks for them, with load(*search_path()).
+
+    Several files merge in the order given, one profile at a time:
+
+      * profiles keep the order they are listed in, file by file, so the first
+        file's first profile is still the one a host opens on;
+      * a profile id defined in two files is an error naming both, never a quiet
+        override, because whichever one lost would stay in a file looking used;
+      * everything outside "profiles", each file's "_comment" block among it, is
+        ignored, as it always was.
+
+    Every rule a single file is held to applies to each profile in each file.
+    """
+    return _merge(_sources(paths))[0]
+
+def search_path(default: Path | str = DEFAULT_PATH) -> list[Path]:
+    """The preset files a host reads when its caller names none.
+
+    The shipped file first, so its first profile stays the default, then each file
+    PATH_VARIABLE lists, in order; empty entries are skipped, as in PATH. With the
+    variable unset this is the shipped file alone, and every host that reads it
+    behaves exactly as it did before the variable existed.
+
+    `default` is for a host whose copy of the shipped file is not at DEFAULT_PATH.
+    castorGUI's desktop build is one: PyInstaller unpacks the data directory beside
+    the frozen modules rather than inside castorGUI/, so DEFAULT_PATH, worked out
+    from this module's own location, names nothing there (see _asset_root in
+    castorGUI/server.py).
+    """
+    extra = os.environ.get(PATH_VARIABLE, "")
+    return [Path(default), *(Path(entry) for entry in extra.split(os.pathsep) if entry)]
+
+def document(*paths: Path | str | None) -> dict[str, Any]:
+    """The merged files as written, for a host that hands them on to a browser.
+
+    load() parses; this keeps every profile exactly as its file holds it — no
+    defaults filled in, no nulls added, key order intact — because the browser
+    reads the document itself and applies the first entry it finds. Keys outside
+    "profiles" come from the first file, so one file comes back the way json.loads
+    would return it.
+
+    All the same, it is validated exactly as load() validates. The browser skips a
+    field it does not recognise without a word (docs/LESSONS.md, "The same physics
+    implemented twice will drift, silently"), so a file the CLI would refuse must
+    not reach it either.
+    """
+    return _merge(_sources(paths))[1]
+
+def _sources(paths: tuple[Path | str | None, ...]) -> list[Path]:
+    return [Path(path) for path in paths if path is not None] or [DEFAULT_PATH]
+
+def _read(source: Path) -> Any:
     try:
         raw = source.read_text(encoding="utf-8")
     except OSError as exc:
         raise PresetError(f"Cannot read presets at {source}: {exc}") from exc
 
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError as exc:
         raise PresetError(f"{source} is not valid JSON: {exc}") from exc
 
-    presets = PresetFile.model_validate(data)
+def _merge(sources: list[Path]) -> tuple[PresetFile, dict[str, Any]]:
+    """Reads each file once and merges them in order, both parsed and as written."""
+    parsed: dict[str, Profile] = {}
+    written: dict[str, Any] = {}
+    origin: dict[str, Path] = {}
+    head: dict[str, Any] = {}
 
+    for index, source in enumerate(sources):
+        data = _read(source)
+        try:
+            part = PresetFile.model_validate(data)
+        except ValidationError as exc:
+            # Its location starts at "profiles", which does not say which file.
+            exc.add_note(f"in {source}")
+            raise
+        if index == 0:
+            head = data
+
+        for profile_id, profile in part.profiles.items():
+            if profile_id in origin:
+                raise PresetError(
+                    f"Profile {profile_id!r} is defined in both {origin[profile_id]} and "
+                    f"{source}. One of the two would never be read, so rename one of them."
+                )
+            _check_profile(source, profile_id, profile)
+            origin[profile_id] = source
+            parsed[profile_id] = profile
+            written[profile_id] = data["profiles"][profile_id]
+
+    return PresetFile(profiles=parsed), {**head, "profiles": written}
+
+def _check_profile(source: Path, profile_id: str, profile: Profile) -> None:
+    """What a profile's shape cannot say about itself, checked once it is read."""
     # A filter may correct the sky it looks through, but only where there is a sky
     # to correct. Silently dropping the value would leave a number in the file that
     # looks applied and never is, which is the kind of thing this suite exists to
     # stop, so it is an error at load rather than a surprise at resolve.
-    for profile_id, profile in presets.profiles.items():
-        if profile.environment is not None:
-            continue
-        for filter_id, entry in profile.filters.items():
-            if entry.environment is not None:
-                raise PresetError(
-                    f"{source}: profile {profile_id!r} has no environment of its own, "
-                    f"so filter {filter_id!r} cannot override one. A profile without "
-                    f"an environment block is a hardware family, not a site."
-                )
-
-    return presets
+    if profile.environment is not None:
+        return
+    for filter_id, entry in profile.filters.items():
+        if entry.environment is not None:
+            raise PresetError(
+                f"{source}: profile {profile_id!r} has no environment of its own, "
+                f"so filter {filter_id!r} cannot override one. A profile without "
+                f"an environment block is a hardware family, not a site."
+            )
 
 def _overlay(target: dict[str, Any] | None, override: BaseModel | None) -> None:
     """Write a band's values over a section already resolved, in place.

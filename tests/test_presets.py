@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 from pydantic import ValidationError
@@ -313,3 +314,121 @@ def test_a_misspelled_band_override_is_an_error(tmp_path):
 
     with pytest.raises(ValidationError):
         presets.load(path)
+
+
+# ==========================================
+# Several files
+# ==========================================
+
+def _write(path, profiles, comment=None):
+    document = {"profiles": profiles}
+    if comment is not None:
+        document = {"_comment": comment, **document}
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+def _shipped_as_written():
+    return json.loads(presets.DEFAULT_PATH.read_text(encoding="utf-8"))
+
+@pytest.fixture
+def backyard(tmp_path):
+    """A second file of the kind a host generates for itself: one hardware family,
+    no site, and a comment block of its own."""
+    return _write(tmp_path / "backyard.json", {"backyard": {
+        "name": "Backyard rig",
+        "telescopes": {"C8": {"name": "C8", "telescope": {
+            "primary_mirror_diameter": 0.203, "secondary_mirror_diameter": 0.07,
+            "focal_length": 2.032, "optical_throughput": 0.8}}},
+    }}, comment=["generated somewhere else"])
+
+def test_one_file_reads_exactly_as_it_always_has(shipped):
+    """None is what callers of the old single optional argument passed for the default."""
+    assert presets.load(presets.DEFAULT_PATH) == shipped
+    assert presets.load(None) == shipped
+
+def test_files_merge_in_the_order_given(backyard):
+    """The first file's first profile is the one a host opens on, so order is kept
+    across files exactly as it is kept within one."""
+    assert list(presets.load(presets.DEFAULT_PATH, backyard).profiles) == [
+        "lulin", "vlt", "other", "backyard"]
+    assert list(presets.load(backyard, presets.DEFAULT_PATH).profiles) == [
+        "backyard", "lulin", "vlt", "other"]
+
+def test_a_merged_profile_is_the_one_its_file_holds(shipped, backyard):
+    merged = presets.load(presets.DEFAULT_PATH, backyard)
+
+    assert merged.profile("lulin") == shipped.profile("lulin")
+    assert merged.resolve("backyard")["instrument"]["telescope"]["primary_mirror_diameter"] == 0.203
+
+def test_a_profile_defined_twice_is_an_error_naming_both_files(tmp_path, backyard):
+    """Never a quiet override: whichever one lost would sit in its file looking used."""
+    again = _write(tmp_path / "again.json", {"backyard": {"name": "Another rig"}})
+
+    with pytest.raises(presets.PresetError, match="'backyard' is defined in both") as caught:
+        presets.load(backyard, again)
+    assert str(backyard) in str(caught.value) and str(again) in str(caught.value)
+
+def test_reading_one_file_twice_is_that_same_error():
+    with pytest.raises(presets.PresetError, match="'lulin' is defined in both"):
+        presets.load(presets.DEFAULT_PATH, presets.DEFAULT_PATH)
+
+def test_the_hardware_family_rule_holds_in_every_file_and_names_it(tmp_path):
+    rig = _write(tmp_path / "rig.json", {"rig": {"filters": {"F": {
+        "optic_filter": {"central_wavelength": 500.0, "filter_bandwidth": 100.0,
+                         "filter_transmission": 0.9},
+        "environment": {"mu_dark": 21.0}}}}})
+
+    with pytest.raises(presets.PresetError, match=r"rig\.json: profile 'rig'.*hardware family"):
+        presets.load(presets.DEFAULT_PATH, rig)
+
+def test_a_malformed_file_among_several_says_which_one(tmp_path):
+    """The error's location starts at "profiles", which on its own names no file."""
+    broken = _write(tmp_path / "broken.json", {"x": {"telescopes": {"t": {"telescope": {
+        "primary_mirror_diameter": 1.0, "secondary_mirror_diameter": 0.3,
+        "focal_length": 8.0, "optical_thruput": 0.8}}}}})
+
+    with pytest.raises(ValidationError) as caught:
+        presets.load(presets.DEFAULT_PATH, broken)
+    assert f"in {broken}" in caught.value.__notes__
+
+def test_load_reads_no_environment_on_its_own(monkeypatch, tmp_path):
+    """A library caller gets the files it named and no others; honouring the
+    variable is a host's choice, made through search_path()."""
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(tmp_path / "nowhere.json"))
+
+    assert list(presets.load().profiles) == ["lulin", "vlt", "other"]
+
+def test_the_search_path_is_the_shipped_file_alone_by_default(monkeypatch):
+    monkeypatch.delenv(presets.PATH_VARIABLE, raising=False)
+
+    assert presets.search_path() == [presets.DEFAULT_PATH]
+
+def test_the_search_path_appends_the_variables_files_in_order(monkeypatch, tmp_path):
+    first, second = tmp_path / "first.json", tmp_path / "second.json"
+    monkeypatch.setenv(presets.PATH_VARIABLE, os.pathsep.join([str(first), "", str(second)]))
+
+    assert presets.search_path() == [presets.DEFAULT_PATH, first, second]
+
+def test_the_search_path_starts_from_a_hosts_own_copy(monkeypatch, tmp_path):
+    """The desktop build's copy of the shipped file is not at DEFAULT_PATH."""
+    monkeypatch.delenv(presets.PATH_VARIABLE, raising=False)
+
+    assert presets.search_path(tmp_path / "presets.json") == [tmp_path / "presets.json"]
+
+def test_one_file_is_handed_on_exactly_as_written():
+    """What the browser has always been served: the parsed file, comment and all."""
+    assert json.dumps(presets.document()) == json.dumps(_shipped_as_written())
+
+def test_a_merged_document_holds_each_profile_as_written(backyard):
+    """No defaults filled in and no nulls added, unlike a dump of what load() parsed."""
+    merged = presets.document(presets.DEFAULT_PATH, backyard)
+    written = json.loads(backyard.read_text(encoding="utf-8"))
+
+    assert merged["_comment"] == _shipped_as_written()["_comment"]
+    assert list(merged["profiles"]) == ["lulin", "vlt", "other", "backyard"]
+    assert merged["profiles"]["backyard"] == written["profiles"]["backyard"]
+    assert merged["profiles"]["lulin"] == _shipped_as_written()["profiles"]["lulin"]
+
+def test_a_merged_document_is_held_to_the_same_rules(backyard):
+    with pytest.raises(presets.PresetError, match="defined in both"):
+        presets.document(backyard, backyard)
