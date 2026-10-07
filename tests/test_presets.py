@@ -432,3 +432,115 @@ def test_a_merged_document_holds_each_profile_as_written(backyard):
 def test_a_merged_document_is_held_to_the_same_rules(backyard):
     with pytest.raises(presets.PresetError, match="defined in both"):
         presets.document(backyard, backyard)
+
+# ==========================================
+# Hardware named from another profile
+# ==========================================
+
+def test_a_qualified_name_puts_another_profiles_hardware_under_this_sky(shipped):
+    """Lulin's sky, location and camera, with a telescope from the "other" profile."""
+    fragment = shipped.resolve("lulin", telescope="other/RedCat51")
+    redcat = shipped.profile("other").telescopes["RedCat51"].telescope
+
+    assert fragment["environment"]["location"]["elevation_m"] == 2862.0
+    assert fragment["environment"]["mu_dark"] == 21.26           # Sloan r', still Lulin's
+    assert fragment["instrument"]["camera"]["readout_noise"] == 7.9  # Sophia, still the default
+    assert fragment["instrument"]["telescope"] == redcat.model_dump()
+
+def test_a_borrowed_telescope_takes_no_throughput_measured_on_another(shipped):
+    """Sloan r' carries LOT's and SLT's measured throughput. Neither says anything
+    about a RedCat, so the RedCat keeps its own number rather than inheriting one
+    measured on a different telescope — the bug the telescope keying exists to stop."""
+    fragment = shipped.resolve("lulin", telescope="other/RedCat51", optic_filter="Sloan_r")
+
+    assert fragment["instrument"]["telescope"]["optical_throughput"] == 0.9
+
+def test_qualifying_with_the_sites_own_profile_is_the_plain_name(shipped):
+    plain = dict(telescope="SLT", optic_filter="Sloan_g")
+    spelled_out = dict(telescope="lulin/SLT", optic_filter="lulin/Sloan_g")
+
+    assert shipped.resolve("lulin", **spelled_out) == shipped.resolve("lulin", **plain)
+    assert shipped.labels("lulin", **spelled_out) == shipped.labels("lulin", **plain)
+
+def test_a_borrowed_filter_leaves_its_own_sky_behind(shipped):
+    """Sloan r' carries Lulin's sky through r'. Under Paranal's sky that would be a
+    number measured somewhere else, so VLT's own site values stand."""
+    fragment = shipped.resolve("vlt", optic_filter="lulin/Sloan_r")
+    paranal = shipped.profile("vlt").environment
+
+    assert fragment["environment"]["mu_dark"] == paranal.mu_dark
+    assert "zodiacal_share" not in fragment["environment"]
+    assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8
+
+def test_a_borrowed_filter_keeps_its_throughput_for_its_own_telescope(shipped):
+    """Telescope and filter both from Lulin: the r' throughput measured on LOT is
+    exactly the one that belongs to this pairing, wherever the sky is."""
+    with_lot = shipped.resolve("vlt", telescope="lulin/LOT", optic_filter="lulin/Sloan_r")
+    with_vlt = shipped.resolve("vlt", optic_filter="lulin/Sloan_r")
+
+    assert with_lot["instrument"]["telescope"]["optical_throughput"] == 0.568
+    assert with_vlt["instrument"]["telescope"]["optical_throughput"] == (
+        shipped.profile("vlt").telescopes["VLT"].telescope.optical_throughput)
+
+def test_a_hardware_family_still_cannot_gain_a_sky(shipped):
+    """Borrowing a site's filter does not bring the site along."""
+    catalogue = presets.PresetFile(profiles={
+        **shipped.profiles,
+        "bare": presets.Profile(name="Bare Telescope"),
+    })
+
+    fragment = catalogue.resolve("bare", optic_filter="lulin/Sloan_r")
+
+    assert "environment" not in fragment
+    assert fragment["instrument"]["optic_filter"]["central_wavelength"] == 627.8
+
+@pytest.mark.parametrize("kwargs, expected", [
+    ({"telescope": "othr/RedCat51"}, "Unknown profile 'othr'. Available: lulin, vlt, other"),
+    ({"telescope": "other/RedCat99"}, "for profile 'other'. Available: RedCat51, RedCat71"),
+    ({"camera": "vlt/Sophia"}, "for profile 'vlt'. Available: FORS2_MIT"),
+    ({"optic_filter": "other/Sloan_r"}, r"for profile 'other'. Available: \(none\)"),
+])
+def test_an_unknown_qualified_name_lists_what_there_is(shipped, kwargs, expected):
+    with pytest.raises(presets.PresetNotFound, match=expected):
+        shipped.resolve("lulin", **kwargs)
+
+def test_labels_name_borrowed_hardware(shipped):
+    labels = shipped.labels("lulin", telescope="other/RedCat51")
+
+    assert labels["profile"] == "Lulin Observatory"
+    assert labels["telescope"] == "William Optics RedCat 51"
+
+def test_a_borrowed_entry_with_no_name_is_labelled_by_where_it_came_from(shipped):
+    catalogue = presets.PresetFile(profiles={
+        **shipped.profiles,
+        "rig": presets.Profile(telescopes={"C8": presets.TelescopeEntry(
+            telescope=schema.TelescopeSchema(
+                primary_mirror_diameter=0.203, secondary_mirror_diameter=0.07,
+                focal_length=2.032, optical_throughput=0.8))}),
+    })
+
+    assert catalogue.labels("lulin", telescope="rig/C8")["telescope"] == "rig/C8"
+    assert catalogue.labels("rig")["telescope"] == "C8"
+
+def test_borrowed_hardware_brings_its_profiles_caveat(shipped):
+    """VLT's instrument values are mostly guesses, and say so. Mounting its camera
+    under Lulin's measured sky does not make them any less of one."""
+    vlt = shipped.profile("vlt").caveat
+
+    assert shipped.caveats("lulin") == {}
+    assert shipped.caveats("vlt") == {"vlt": vlt}
+    assert shipped.caveats("lulin", camera="vlt/FORS2_MIT") == {"vlt": vlt}
+    assert shipped.caveats("vlt", telescope="lulin/LOT") == {"vlt": vlt}
+
+@pytest.mark.parametrize("profiles", [
+    {"a/b": {"name": "slash in the profile id"}},
+    {"rig": {"telescopes": {"C8/f10": {"telescope": {
+        "primary_mirror_diameter": 0.203, "secondary_mirror_diameter": 0.07,
+        "focal_length": 2.032, "optical_throughput": 0.8}}}}},
+])
+def test_a_name_holding_the_qualifier_is_refused(tmp_path, profiles):
+    """It could not be told from a qualified name, so it could never be asked for."""
+    path = _write(tmp_path / "slash.json", profiles)
+
+    with pytest.raises(presets.PresetError, match="separates a profile from a key"):
+        presets.load(path)
