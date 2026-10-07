@@ -116,11 +116,17 @@ def _parse_set(item: str) -> tuple[str, Any]:
 
 def _format_errors(exc: ValidationError) -> str:
     """The same flattening server.py returns over HTTP, so a field named by the API
-    is named identically here."""
-    return "; ".join(
+    is named identically here.
+
+    Notes added to the error follow it in parentheses. presets.load() adds one naming
+    the file a preset error came from, since a location starting at "profiles" says
+    nothing about which of several files holds it; a request's errors carry none.
+    """
+    message = "; ".join(
         "{}: {}".format(".".join(str(part) for part in err["loc"]), err["msg"])
         for err in exc.errors()
     ) or "Invalid input"
+    return message + "".join(f" ({note})" for note in getattr(exc, "__notes__", ()))
 
 def _header(labels: dict[str, str] | None, request: schema.ObservationRequest) -> list[str]:
     configuration = " · ".join(labels.values()) if labels else "custom configuration"

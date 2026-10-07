@@ -129,7 +129,11 @@ def _validation_error_response(exc: ValidationError, status_code: int = 400) -> 
         "{}: {}".format(".".join(str(part) for part in err["loc"]), err["msg"])
         for err in exc.errors()
     ]
-    return JSONResponse({"error": "; ".join(messages) or "Invalid input"}, status_code=status_code)
+    # A preset file's error carries a note naming the file (castorCLI.presets.load);
+    # a request's carries none, so its message is unchanged.
+    notes = "".join(f" ({note})" for note in getattr(exc, "__notes__", ()))
+    return JSONResponse({"error": ("; ".join(messages) or "Invalid input") + notes},
+                        status_code=status_code)
 
 
 @app.post("/api/exposure_time_calculator")

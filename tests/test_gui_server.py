@@ -79,3 +79,5 @@ def test_a_malformed_file_on_the_variable_names_the_field(monkeypatch, tmp_path)
 
     assert status == 500
     assert "optical_thruput" in document["error"]
+    # Its location starts at "profiles", which does not say which file holds it.
+    assert f"(in {path})" in document["error"]

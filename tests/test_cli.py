@@ -343,6 +343,30 @@ def test_a_profile_in_two_files_is_bad_input(run):
     assert result.exit_code == 3
     assert "'lulin' is defined in both" in result.stderr
 
+@pytest.fixture
+def misspelled_presets(tmp_path, hardware_only_presets):
+    broken = json.loads(hardware_only_presets.read_text())
+    telescope = broken["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]
+    telescope["focal_lenght"] = telescope.pop("focal_length")
+    path = tmp_path / "misspelled.json"
+    path.write_text(json.dumps(broken))
+    return path
+
+@pytest.mark.parametrize("from_variable", [False, True])
+def test_a_misspelled_field_names_the_file_it_is_in(run, monkeypatch, misspelled_presets,
+                                                    from_variable):
+    """The field's location starts at "profiles", which on its own does not say which
+    of the files read is the broken one."""
+    if from_variable:
+        monkeypatch.setenv(presets.PATH_VARIABLE, str(misspelled_presets))
+        result = run("presets")
+    else:
+        result = run("presets", "--presets-file", SHIPPED, "--presets-file", str(misspelled_presets))
+
+    assert result.exit_code == 3
+    assert "profiles.bare_scope.telescopes.T.telescope.focal_lenght" in result.stderr
+    assert f"(in {misspelled_presets})" in result.stderr
+
 def test_check_covers_every_merged_file(run, hardware_only_presets):
     result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets))
 

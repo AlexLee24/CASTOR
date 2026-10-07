@@ -110,8 +110,9 @@ castor presets --presets-file a.json --presets-file b.json # a.json's, then b.js
 ```
 
 A profile defined in two files, a file that cannot be read, or one that breaks
-any rule a single file is held to is bad input (exit 3). The merge rules are in
-[Presets](presets.md#several-files).
+any rule a single file is held to is bad input (exit 3), and the message names
+the file — a misspelled field ends `(in my_rigs.json)`, since its location starts
+at `profiles`. The merge rules are in [Presets](presets.md#several-files).
 
 `--telescope`, `--camera` and `--filter` take `PROFILE/KEY` to use an entry from
 a profile other than the site's — someone's own refractor under Lulin's sky:
