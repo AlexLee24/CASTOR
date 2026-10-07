@@ -108,7 +108,7 @@ src/castorGUI/
 
 * **`etc.css`:** Scoped tokens with `var(--kw-*, fallback)`.
 
-* **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server.
+* **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server. Its presets route serves `castorCLI.presets.document()` over the shipped file and any on `CASTOR_PRESETS_PATH` ([Presets](presets.md#several-files)): as written and in order, but validated first, since the form applies the fields it recognises and skips the rest without a word. With the variable unset it serves the shipped file exactly as before.
 
 * **`presets.json`:** Fragments shaped like `castor.schema` itself, so a preset is a literal subset of a saved request. Telescopes, cameras and filters are all listed per site. Key order is significant — the first entry in each catalogue is the default applied on load — which is why Kinder's presets route serves the file as raw bytes rather than through `jsonify`, whose key sorting would scramble it. Kinder serving it verbatim also makes its shape a contract rather than an internal detail.
 
@@ -129,6 +129,8 @@ The mounted and standalone deployments are the same files, differing only in wha
 ### 3.4 Presets Describe, They Don't Presume
 
 A preset fills in what it actually knows, and no more. A site sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Each hardware selector writes only its own slice, so changing camera neither resets the telescope nor rewrites an `mu_dark` the observer tuned for the night. And `median_seeing_fwhm` is displayed but never applied: seeing describes the night being planned, not the site, and it is the field an observer is most likely to have set deliberately.
+
+What a filter's band correction writes into the sky (`mu_dark`, `zodiacal_share`, extinction) belongs to that filter, so it leaves when another filter or profile is chosen — including a hardware family, which then runs under the last site's own sky, as `castor calc` does with that site and the family's hardware ([Presets](presets.md#in-the-browser)). Only a value still as the band left it is taken back; one typed over, or loaded, is the reader's. `tests/test_gui_form.py` runs `etc.js` under Node and holds the request it sends to `castorCLI.presets` for every shipped configuration — the second copy of the rules, given the first copy's test.
 
 ## 4. Data Flow
 
@@ -167,4 +169,5 @@ sequenceDiagram
 
 * **Desktop build:** Wrapping the same frontend in a native window (`pywebview` is already declared for this) rather than maintaining a second, separately-written desktop UI.
 * **Completing the Kinder mount:** Kinder's `exposure_time_calculator.html` still carries its own forked copy of the form. Switching it to `{% include %}` this frontend is what ends the duplication; the routes and the vendored engine are already in place.
-* **Preset source swap:** Serving profiles from Kinder's hardware database while keeping `presets.json` as the standalone fallback. Note the current direction is the reverse — Kinder reads this file.
+* **Preset source swap:** Serving profiles from Kinder's hardware database while keeping `presets.json` as the standalone fallback. Note the current direction is the reverse — Kinder reads this file, and only this file: its route serves `presets.json` as raw bytes. Of the two hosts, only `server.py` also reads files named on `CASTOR_PRESETS_PATH` after it; for Kinder to do the same, its route would serve `castorCLI.presets.document(*castorCLI.presets.search_path(…))`, still without `jsonify`'s key sorting. Such files' profiles are listed in the site selector, and a hardware family among them runs under the last site's sky rather than being one ([Presets](presets.md#in-the-browser)).
+* **Hardware from another profile:** The CLI can put one profile's telescope, camera or filter under another's sky (`PROFILE/KEY`); the selectors here stay within the chosen profile. Offering it would mean `etc.js` mirroring the rules for which band values follow a borrowed filter too — one more rule held in two places ([Lessons](LESSONS.md#the-same-physics-implemented-twice-will-drift-silently)) — so it waits for a reason worth that.
