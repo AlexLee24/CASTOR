@@ -220,21 +220,15 @@ class EnvironmentCondition(StrictModel):
         description="Atmospheric attenuation per unit airmass in mag/airmass. (ATBD: k_ext)"
     )
     
-    seeing_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Atmospheric seeing FWHM in arcseconds. (ATBD: FWHM_See)"
-    )
-    diffraction_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Diffraction limit FWHM in arcseconds. (ATBD: FWHM_Dif)"
-    )
-    optical_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Optical aberrations FWHM in arcseconds. (ATBD: FWHM_Opt)"
-    )
-    tracking_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Tracking error FWHM in arcseconds. (ATBD: FWHM_Trk)"
+    total_fwhm: PositiveFloat = Field(
+        ...,
+        allow_inf_nan=False,
+        description=(
+            "Expected or measured stellar image FWHM in arcseconds for this setup and "
+            "observing conditions, including atmospheric and instrumental spreading. "
+            "Supplied by the caller; no further seeing, diffraction, optical or tracking "
+            "terms are added. (ATBD: FWHM_tot, Section 4.1.2)"
+        )
     )
 
 class SkyAnnulus(StrictModel):
@@ -309,7 +303,7 @@ class ObservationRequest(StrictModel):
     )
     environment: EnvironmentCondition = Field(
         ..., 
-        description="Environmental parameters including observer location, time, atmospheric conditions, and seeing FWHM. (Ref: ATBD Section 3.3)"
+        description="Environmental parameters including observer location, time, atmospheric conditions, and total image FWHM. (Ref: ATBD Section 3.3)"
     )
     options: CalculationOptions = Field(
         ..., 
@@ -376,7 +370,7 @@ class SignalNoiseBudget(StrictModel):
 class PhysicalDiagnostics(StrictModel):
     total_fwhm: float = Field(
         ..., 
-        description="Total spatial spreading incorporating seeing, diffraction, optical, and tracking errors. (ATBD: FWHM_tot) [arcsec]"
+        description="Caller-supplied stellar image FWHM used in this calculation. (ATBD: FWHM_tot) [arcsec]"
     )
     effective_area: float = Field(
         ..., 
@@ -468,10 +462,14 @@ class TimeSeriesEnvironment(StrictModel):
         description="Atmospheric attenuation per unit airmass in mag/airmass."
     )
 
-    seeing_fwhm: PositiveFloat = Field(..., description="Atmospheric seeing FWHM in arcseconds.")
-    diffraction_fwhm: PositiveFloat = Field(..., description="Diffraction limit FWHM in arcseconds.")
-    optical_fwhm: PositiveFloat = Field(..., description="Optical aberrations FWHM in arcseconds.")
-    tracking_fwhm: PositiveFloat = Field(..., description="Tracking error FWHM in arcseconds.")
+    total_fwhm: PositiveFloat = Field(
+        ...,
+        allow_inf_nan=False,
+        description=(
+            "Stellar image FWHM in arcseconds, held constant across the time series. "
+            "Same definition as EnvironmentCondition.total_fwhm. (ATBD: FWHM_tot)"
+        )
+    )
 
 class BatchBaseOptions(StrictModel):
     aperture_factor: PositiveFloat = Field(

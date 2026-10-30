@@ -29,7 +29,7 @@ OPTICS_AND_DETECTOR = 0.771 * 0.781          # optical_throughput * quantum_effi
 PIXEL_SCALE = 206264.80624709636 * 15e-6 / 24.75
 
 #: The FWHM CASTOR is given for these cases, in arcsec: 0.8" seeing (ESO's
-#: turbulence category 50) in quadrature with the preset's 0.2" diffraction,
+#: turbulence category 50) in quadrature with this comparison's 0.2" diffraction,
 #: 0.1" optical and 0.1" tracking terms. ESO does not take a FWHM, it derives
 #: one — see `_eso_image_quality`.
 PRESET_FWHM = np.sqrt(0.8 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2)
@@ -402,8 +402,8 @@ def test_our_aperture_and_esos_are_two_points_on_one_curve():
 def test_our_image_quality_ignores_wavelength_and_airmass():
     """ESO's PSF narrows in the red and widens with airmass; ours does neither.
 
-    A quadrature sum of fixed inputs cannot: `seeing_fwhm` arrives already
-    decided. Documented rather than fixed — it is an input, and the caller is
+    `total_fwhm` arrives already decided and is held fixed. Documented rather
+    than fixed — it is an input, and the caller is
     the one who knows what it should be for their band and altitude.
     """
     zenith = _eso_image_quality(eso_etc.CAPTURED[("v_HIGH+114", 20, 1.0, 0)])

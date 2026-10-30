@@ -53,10 +53,7 @@ def base_request(telescope: str, camera: str, filter_id: str):
     data["environment"].update({
         "observing_time_utc": OBSERVING_TIME,
         "auto_calc_background": False,
-        "seeing_fwhm": 1.4,
-        "diffraction_fwhm": 0.2,
-        "optical_fwhm": 0.1,
-        "tracking_fwhm": 0.1,
+        "total_fwhm": (1.4 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5,
     })
     data["options"] = {
         "type": "solve_snr",
@@ -225,7 +222,7 @@ def make_figure(table):
     ax.tick_params(axis="x", rotation=35)
     ax.legend(frameon=False, fontsize=8)
 
-    fig.suptitle("Lulin forward-performance atlas · 1.4 arcsec seeing · near zenith · 120 s frames",
+    fig.suptitle("Lulin forward-performance atlas · 1.4 arcsec seeing + instrument terms · near zenith · 120 s frames",
                  fontsize=15, fontweight="bold")
     FIGURE.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURE, dpi=180, facecolor="white")
@@ -254,7 +251,7 @@ exposure solver audited in the solve-for-time section.
 
 ## Standard scene
 
-Point source, AB magnitudes, g'/r'/i', 120 s sub-exposures, 1.4 arcsec seeing,
+Point source, AB magnitudes, g'/r'/i', 120 s sub-exposures, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms),
 0.85xFWHM aperture, 3–5xFWHM median sky annulus, fixed target near zenith at
 Lulin, no lunar term, and each filter's current preset sky and throughput.
 
@@ -278,7 +275,7 @@ limit. Dark current is negligible in these particular 120 s cases.
 
 These are conditional model predictions, not measured limiting magnitudes or
 uncertainty intervals. They use the current top-hat filters, one pointing, one
-seeing value and the site-wide 0.17 extinction fallback. Readout overhead is
+image FWHM and the site-wide 0.17 extinction fallback. Readout overhead is
 not modelled. Saturation uses the preset physical full well; LOT frames in the
 end-to-end night actually hit their 16-bit ADC ceiling near 60,292 e-, so the
 bright boundary in the CSV is optimistic for that operating mode.

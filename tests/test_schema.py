@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from castor.schema import (
     TargetProfile,
     EnvironmentCondition,
+    TimeSeriesEnvironment,
     ObservationRequest,
     ABMagnitude,
     VegaMagnitude,
@@ -43,10 +44,7 @@ def valid_environment_payload():
         "auto_calc_background": False,
         "mu_dark": 21.5,
         "extinction_coeff": 0.15,
-        "seeing_fwhm": 1.2,
-        "diffraction_fwhm": 0.5,
-        "optical_fwhm": 0.3,
-        "tracking_fwhm": 0.2
+        "total_fwhm": (1.2 ** 2 + 0.5 ** 2 + 0.3 ** 2 + 0.2 ** 2) ** 0.5
     }
 
 
@@ -155,6 +153,47 @@ class TestStrictModelDefenses:
         
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             TargetProfile(**payload)
+
+
+@pytest.fixture(params=[EnvironmentCondition, TimeSeriesEnvironment])
+def image_environment(request, valid_environment_payload):
+    """Both request families share the same caller-supplied image-width contract."""
+    payload = valid_environment_payload.copy()
+    if request.param is TimeSeriesEnvironment:
+        payload["start_time_utc"] = payload.pop("observing_time_utc")
+        payload["end_time_utc"] = "2026-07-22T13:00:00Z"
+        payload["time_step_minutes"] = 10
+        del payload["auto_calc_background"]
+    return request.param, payload
+
+
+class TestImageFWHM:
+    def test_total_is_required(self, image_environment):
+        model, payload = image_environment
+        del payload["total_fwhm"]
+        with pytest.raises(ValidationError) as exc:
+            model.model_validate(payload)
+        assert any(error["loc"] == ("total_fwhm",) and error["type"] == "missing"
+                   for error in exc.value.errors())
+
+    @pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), -float("inf")])
+    def test_non_physical_width_is_rejected(self, image_environment, value):
+        model, payload = image_environment
+        payload["total_fwhm"] = value
+        with pytest.raises(ValidationError):
+            model.model_validate(payload)
+
+    @pytest.mark.parametrize("field", [
+        "seeing_fwhm", "diffraction_fwhm", "optical_fwhm", "tracking_fwhm"
+    ])
+    def test_components_are_not_part_of_the_contract(self, image_environment, field):
+        """Even beside a valid total, components must not be silently accepted."""
+        model, payload = image_environment
+        payload[field] = 0.2
+        with pytest.raises(ValidationError) as exc:
+            model.model_validate(payload)
+        assert any(error["loc"] == (field,) and error["type"] == "extra_forbidden"
+                   for error in exc.value.errors())
 
 
 # ==========================================

@@ -90,7 +90,7 @@ usually one line. Everything the CLI filled in for you is reported on stderr, so
 "the tool chose this" never gets mistaken for "the observer meant this".
 
 ```bash
-castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --fwhm 1.5 --exp 300 -n 10
 ```
 
 From a development checkout, prefix it with `uv run`.

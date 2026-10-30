@@ -143,7 +143,7 @@ class FilterEntry(_NamedEntry):
 class SiteEnvironment(BaseModel):
     """The slice of EnvironmentCondition that belongs to a place rather than a night.
 
-    Not EnvironmentCondition itself: the time, the seeing and the FWHM budget are
+    Not EnvironmentCondition itself: the time and the stellar image FWHM are
     properties of the observation being planned, and a site cannot supply them.
     """
     location: schema.ObservatoryLocation

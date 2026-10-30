@@ -2,7 +2,7 @@
 castor — a command line over the exposure time calculator.
 
     python src/castorCLI/main.py calc --site lulin --ra 113.65 --dec 31.89 \
-        --mag 18 --exp 300 -n 10
+        --mag 18 --fwhm 1.5 --exp 300 -n 10
 
 Written for callers who should not be inventing physics, which in practice means
 agents at least as much as people. An ObservationRequest carries around thirty
@@ -26,6 +26,7 @@ is what makes that work without installing anything.
 """
 import copy
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,9 +62,6 @@ ASSUMPTIONS: tuple[tuple[str, Any, str], ...] = (
     ("options.sky_annulus.outer_factor", 5.0, "wide enough that the sky estimate is not the dominant noise"),
     ("options.sky_annulus.estimator", "median", "what photometry pipelines almost always use, and it costs pi/2"),
     ("environment.auto_calc_background", True, "layers the real moon over the site's dark sky"),
-    ("environment.diffraction_fwhm", 0.2, "form default — really depends on aperture and band"),
-    ("environment.optical_fwhm", 0.1, "form default — really a property of these optics"),
-    ("environment.tracking_fwhm", 0.1, "form default — really a property of this mount"),
 )
 
 # ==========================================
@@ -122,6 +120,27 @@ def _format_errors(exc: ValidationError) -> str:
         "{}: {}".format(".".join(str(part) for part in err["loc"]), err["msg"])
         for err in exc.errors()
     ) or "Invalid input"
+
+def _fwhm_hint(data: dict, site: str | None, catalogue: presets.PresetFile | None) -> str:
+    """What to add when a request arrives without total_fwhm.
+
+    The site median was once the fallback and is no longer applied, so a caller used
+    to omitting the width needs telling which flag replaced it. A file saved under the
+    old four-component contract already says what its width was; the combination is
+    offered rather than applied, because the engine does not convert legacy requests.
+    """
+    old = [_get_path(data, f"environment.{name}_fwhm")
+           for name in ("seeing", "diffraction", "optical", "tracking")]
+    if all(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in old):
+        total = math.sqrt(sum(v * v for v in old))
+        return (f" (this request has the old four FWHM components, which combine in "
+                f"quadrature to {total:.4g}\"; pass --fwhm {total:.4g} to keep that width)")
+
+    hint = " (pass --fwhm, the expected stellar image FWHM in arcsec"
+    median = catalogue.profile(site).median_seeing_fwhm if (catalogue and site) else None
+    if median is not None:
+        hint += f"; {site}'s median seeing of {median:g}\" is a reference, not a default"
+    return hint + ")"
 
 def _mark_modified(labels: dict[str, str], preset_instrument: dict[str, Any],
                    request: schema.ObservationRequest) -> dict[str, str]:
@@ -245,7 +264,7 @@ def cli() -> None:
 @click.option("--exp", type=float, help="Single exposure time, seconds.")
 @click.option("-n", "--exposures", type=int, help="Number of frames; solves for SNR.")
 @click.option("--snr", type=float, help="Target SNR; solves for the number of frames.")
-@click.option("--seeing", type=float, help='Seeing FWHM, arcsec (default: the site median, if it has one).')
+@click.option("--fwhm", type=float, help="Total stellar image FWHM, arcsec; required unless the request or --set supplies it.")
 @click.option("--time", "at_time", help="Observation time, ISO 8601 UTC (default: now).")
 @click.option("--request", "request_file", type=click.Path(path_type=Path),
               help="Saved request to start from; '-' reads stdin. The web form's SAVE writes this shape.")
@@ -254,7 +273,7 @@ def cli() -> None:
 @click.option("--presets-file", type=click.Path(path_type=Path), help="Alternative presets.json.")
 @click.option("--json", "as_json", is_flag=True, help="Emit request, response and assumptions as JSON.")
 def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, snr,
-         seeing, at_time, request_file, overrides, presets_file, as_json) -> None:
+         fwhm, at_time, request_file, overrides, presets_file, as_json) -> None:
     """Run one exposure time calculation.
 
     Layered in this order, each winning over the last: --request file, --site preset,
@@ -299,7 +318,7 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
         ("options.single_exp_time", exp),
         ("options.num_exposures", exposures),
         ("options.target_snr", snr),
-        ("environment.seeing_fwhm", seeing),
+        ("environment.total_fwhm", fwhm),
         ("environment.observing_time_utc", at_time),
     ):
         if value is not None:
@@ -308,7 +327,7 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
     for item in overrides:
         _set_path(data, *_parse_set(item))
 
-    assumed = _apply_conventions(data, site, catalogue)
+    assumed = _apply_conventions(data)
 
     if _get_path(data, "options.type") is MISSING:
         raise click.UsageError(
@@ -316,10 +335,14 @@ def calc(site, telescope, camera, optic_filter, ra, dec, mag, exp, exposures, sn
             "or --snr for the frames needed to reach it."
         )
 
+    # Worked out before validating, which may prune the old FWHM fields as extras.
+    fwhm_hint = _fwhm_hint(data, site, catalogue)
     try:
         request, ignored = _validate(data, tolerate_extras=request_file is not None)
     except ValidationError as exc:
-        raise SystemExit(_fail(_format_errors(exc)))
+        missing_fwhm = any(err["loc"] == ("environment", "total_fwhm") and err["type"] == "missing"
+                           for err in exc.errors())
+        raise SystemExit(_fail(_format_errors(exc) + (fwhm_hint if missing_fwhm else "")))
 
     response = run_calculation(request)
 
@@ -374,7 +397,7 @@ def list_presets(presets_file, as_json, bands) -> None:
                 )
             )
         if profile.median_seeing_fwhm is not None:
-            click.echo(f'    median seeing {profile.median_seeing_fwhm:g}" — used only if --seeing is omitted')
+            click.echo(f'    median seeing {profile.median_seeing_fwhm:g}" — reference only, not image FWHM')
 
         for kind, entries in (("telescopes", profile.telescopes),
                               ("cameras", profile.cameras),
@@ -546,8 +569,7 @@ def _read_request(path: Path) -> dict:
         raise SystemExit(_fail(f"{path} should hold a request object."))
     return data
 
-def _apply_conventions(data: dict, site: str | None, catalogue: presets.PresetFile | None
-                       ) -> list[tuple[str, Any, str]]:
+def _apply_conventions(data: dict) -> list[tuple[str, Any, str]]:
     """Fills the gaps this tool is allowed to fill, and records every one of them."""
     assumed: list[tuple[str, Any, str]] = []
 
@@ -556,16 +578,6 @@ def _apply_conventions(data: dict, site: str | None, catalogue: presets.PresetFi
         _set_path(data, "environment.observing_time_utc", now.isoformat())
         assumed.append(("environment.observing_time_utc", now.isoformat(),
                         "now — the moon and the airmass both move"))
-
-    # Seeing belongs to the night, not the site, which is why a preset never applies
-    # it. Falling back to the site's published median is still a stated figure rather
-    # than an invented one, so it is allowed here as long as it is reported.
-    if _get_path(data, "environment.seeing_fwhm") is MISSING and catalogue is not None and site is not None:
-        median = catalogue.profile(site).median_seeing_fwhm
-        if median is not None:
-            _set_path(data, "environment.seeing_fwhm", median)
-            assumed.append(("environment.seeing_fwhm", median,
-                            f"{site}'s published median, not tonight's seeing"))
 
     for path, value, why in ASSUMPTIONS:
         if _get_path(data, path) is MISSING:

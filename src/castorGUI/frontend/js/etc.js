@@ -136,10 +136,7 @@
                 mu_dark: env.mu_dark,
                 zodiacal_share: env.zodiacal_share,
                 extinction_coeff: env.extinction_coeff,
-                seeing_fwhm: env.seeing_fwhm,
-                diffraction_fwhm: env.diffraction_fwhm,
-                optical_fwhm: env.optical_fwhm,
-                tracking_fwhm: env.tracking_fwhm
+                total_fwhm: env.total_fwhm
             },
             options: base.options
         };
@@ -1258,9 +1255,26 @@
         }
     }
 
-    function setDialogError(message) {
+    function setDialogError(message, isWarning) {
         el('json-dialog-error-text').textContent = message;
         el('json-dialog-error').hidden = !message;
+        el('json-dialog-error').classList.toggle('etc-alert-error', !isWarning);
+        el('json-dialog-error').classList.toggle('etc-alert-warning', Boolean(isWarning));
+    }
+
+    var LEGACY_FWHM_FIELDS = ['seeing_fwhm', 'diffraction_fwhm', 'optical_fwhm', 'tracking_fwhm'];
+
+    /* A file saved under the four-component contract already states its width: the
+       engine used to take the quadrature sum, so doing the same here loses nothing.
+       Returns the total, or undefined when the file does not hold all four. */
+    function combineLegacyFwhm(data) {
+        var sum = 0;
+        for (var i = 0; i < LEGACY_FWHM_FIELDS.length; i++) {
+            var part = lookup(data, 'environment.' + LEGACY_FWHM_FIELDS[i]);
+            if (typeof part !== 'number' || !(part > 0)) { return undefined; }
+            sum += part * part;
+        }
+        return Math.sqrt(sum);
     }
 
     /* Every branch's value is kept, not just the ones the current discriminators
@@ -1295,6 +1309,25 @@
         }
         if (data === null || typeof data !== 'object' || Array.isArray(data)) {
             setDialogError('Expected a JSON object like the one SAVE produces.');
+            return;
+        }
+        // LOAD normally retains fields missing from an older file. Doing that for
+        // FWHM would replace its old four-component budget with the current form's
+        // unrelated total, so the new field is required before changing anything.
+        if (lookup(data, 'environment.total_fwhm') === undefined ||
+                lookup(data, 'environment.total_fwhm') === null) {
+            var total = combineLegacyFwhm(data);
+            if (total === undefined) {
+                setDialogError('environment.total_fwhm is required (image FWHM in arcsec).');
+                return;
+            }
+            // Rewritten in the box rather than applied, so the converted width is seen
+            // before it is used, the same as anything else this dialog loads.
+            data.environment.total_fwhm = Number(total.toPrecision(6));
+            LEGACY_FWHM_FIELDS.forEach(function (name) { delete data.environment[name]; });
+            el('json-dialog-text').value = JSON.stringify(data, null, 2);
+            setDialogError('This file has the old four FWHM components. They combine in quadrature to ' +
+                Number(total.toPrecision(4)) + '", now written above as environment.total_fwhm. Import again to apply.', true);
             return;
         }
         applyLoaded(data);

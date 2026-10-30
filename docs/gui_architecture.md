@@ -65,7 +65,9 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 * **Domain-Driven Form:** Four freely-switchable tabs — Instrument, Target, Environment, Options — mirroring the engine's four request pillars. Every `<input name="...">` is a dotted path matching `castor.schema`'s nested shape, so the request payload is built by walking the form rather than by naming each field twice.
 * **Observing Setup:** Four selectors from [`data/presets.json`](../src/castorGUI/data/presets.json) — site, telescope, camera, filter. A site owns all three hardware catalogues, since an observatory has the instruments it has and its filter wheel holds what it holds; that is why the site selector comes first and what makes it narrow the other three. Selecting it also fills in the site's coordinates, `mu_dark` and extinction, which is the cross-tab fill-in those live together for. Within a site the three stay independent of one another, because cameras do get moved between telescopes. The calculator opens on the first entry in each catalogue rather than on Custom, so it starts from a real, named configuration instead of anonymous numbers.
 * **Progressive disclosure:** Each selector owns the collapsed `<details>` directly beneath it, holding exactly the fields that selector writes; a summary line below them states what was applied (aperture, focal length, f/ratio, pixel pitch, QE, read noise). Once a telescope has been chosen by name its individual numbers are something to check on demand, not to read past every time. Setting a selector to Custom opens its own panel and only its own, since those fields are then the only way to say anything. The fields stay in the DOM and in the payload while closed — `<details>` hides, it does not disable.
-* **Save / Load:** Serializing the form to/from JSON.
+* **Image FWHM:** One field named `environment.total_fwhm`, using the engine's definition in [ATBD §4.1.2](ATBD.md#412-spatial-resolution). No component estimator is offered by this form.
+* **Moonlight:** `environment.auto_calc_background` is a checkbox on the `mu_dark` label row, because it changes what that number means: off, the whole sky; on, the baseline with moonlight layered over it. A time sweep always includes moonlight, so while sweeping the checkbox is replaced by a note and its value is kept for when the sweep is off.
+* **Save / Load:** Serializing the form to/from JSON. LOAD requires `environment.total_fwhm` before applying any fields, so a file using the former component contract cannot silently retain the current form's unrelated width. Such a file is rewritten in the dialog with the quadrature sum of its four components, the width the old engine computed, and applied only when Import is pressed again.
 
 ##### B. Calculation & Results Display
 
@@ -81,7 +83,7 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 
 #### Out of Scope for CASTOR GUI
 
-* **No Independent Calculations:** Every number displayed comes from an engine call. No formulas from `physics.py` or `moon.py` are duplicated here.
+* **No Independent Result Calculations:** The observation model stays in the engine; input preparation is the client's responsibility (§3.1).
 * **No Relaxed Validation:** Invalid input is rejected by the same `StrictModel` rules the engine enforces on any other caller.
 * **No Auth, No Multi-User State:** Accounts and sessions are the host's responsibility.
 * **No Backend of Its Own:** [`server.py`](../src/castorGUI/server.py) exists so the frontend can be developed and verified against a real HTTP host. It is a reference implementation of the route contract, not a production server — in production those routes are Kinder's.
@@ -118,7 +120,12 @@ src/castorGUI/
 
 ### 3.1 Thin Client Over the Engine
 
-No physics, no independent validation. Every result traces to a single `run_calculation()` / `run_batch_calculation()` call, so the GUI and the engine can never silently disagree about a number.
+Count rates, noise, SNR, saturation and derived diagnostics come from a
+`run_calculation()` / `run_batch_calculation()` call, with validation owned by
+the schema. Preparing a required input belongs to the client: a frontend may
+choose to collect or estimate a total FWHM before building its request, without
+making component fields part of the engine contract. The shipped form's choice
+is documented under Request Building (§1.3).
 
 ### 3.2 Same Contract as Any External Caller
 
@@ -130,7 +137,7 @@ The mounted and standalone deployments are the same files, differing only in wha
 
 ### 3.4 Presets Describe, They Don't Presume
 
-A preset fills in what it actually knows, and no more. A site sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Each hardware selector writes only its own slice, so changing camera neither resets the telescope nor rewrites an `mu_dark` the observer tuned for the night. And `median_seeing_fwhm` is displayed but never applied: seeing describes the night being planned, not the site, and it is the field an observer is most likely to have set deliberately.
+A preset fills in what it actually knows, and no more. A site sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Each hardware selector writes only its own slice, so changing camera neither resets the telescope nor rewrites an `mu_dark` the observer tuned for the night. `median_seeing_fwhm` is displayed as reference information and never applied to the image FWHM field; a site median alone cannot specify that observation's stellar width.
 
 ## 4. Data Flow
 

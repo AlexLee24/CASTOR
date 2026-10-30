@@ -215,6 +215,53 @@
     color: var(--etc-text-muted);
     font-size: 12px;
 }
+/* A label that shares its line with a small control acting on the same field.
+   Where both do not fit, the control drops below rather than squeezing the label. */
+.castor-etc .etc-field-label-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px var(--etc-gap-field);
+    margin-bottom: 4px;
+}
+.castor-etc .etc-field-label-row .etc-field-label { margin-bottom: 0; white-space: nowrap; }
+.castor-etc .etc-check,
+.castor-etc .etc-check-note {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+    color: var(--etc-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.castor-etc .etc-check { cursor: pointer; user-select: none; }
+/* Drawn rather than native: the browser's own box is solid white on this dark
+   surface and outshouts the label beside it. Same frame and accent as the inputs. */
+.castor-etc .etc-check input {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    border: 1.5px solid var(--etc-border-color);
+    border-radius: 4px;
+    background: transparent center / 10px 10px no-repeat;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.castor-etc .etc-check:hover input { border-color: var(--etc-text-muted); }
+.castor-etc .etc-check input:checked {
+    border-color: var(--etc-accent);
+    background-color: var(--etc-accent);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2 4.2 7.4 8 3' fill='none' stroke='%2314141E' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.castor-etc .etc-check input:focus-visible { outline: 2px solid var(--etc-accent-hover); outline-offset: 2px; }
+.castor-etc .etc-check:has(input:checked) { color: var(--etc-text-main); }
+.castor-etc .etc-check[hidden],
+.castor-etc .etc-check-note[hidden] { display: none; }
 .castor-etc .etc-field-row {
     display: grid;
     grid-template-columns: 1fr 1fr;

@@ -29,10 +29,7 @@ def _slt_r_request(target_snr: float) -> schema.ObservationRequest:
     data["environment"].update({
         "observing_time_utc": "2026-01-15T16:00:00Z",
         "auto_calc_background": False,
-        "seeing_fwhm": 1.4,
-        "diffraction_fwhm": 0.2,
-        "optical_fwhm": 0.1,
-        "tracking_fwhm": 0.1,
+        "total_fwhm": (1.4 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5,
     })
     data["options"] = {
         "type": "solve_time",
@@ -87,10 +84,7 @@ def test_no_flatness_floor_leaves_the_ceiling_open():
     data["environment"].update({
         "observing_time_utc": "2026-01-15T16:00:00Z",
         "auto_calc_background": False,
-        "seeing_fwhm": 1.4,
-        "diffraction_fwhm": 0.2,
-        "optical_fwhm": 0.1,
-        "tracking_fwhm": 0.1,
+        "total_fwhm": (1.4 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5,
     })
     data["options"] = {
         "type": "solve_time",

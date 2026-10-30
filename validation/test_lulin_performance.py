@@ -40,10 +40,7 @@ def _request(telescope, band, magnitude, frame_count):
     data["environment"].update({
         "observing_time_utc": OBSERVING_TIME,
         "auto_calc_background": False,
-        "seeing_fwhm": 1.4,
-        "diffraction_fwhm": 0.2,
-        "optical_fwhm": 0.1,
-        "tracking_fwhm": 0.1,
+        "total_fwhm": (1.4 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5,
     })
     data["options"] = {
         "type": "solve_snr",

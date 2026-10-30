@@ -37,9 +37,9 @@ family only and touches nothing outside `instrument` — deliberately, because
 inventing a location for a telescope model would silently produce wrong airmass
 and moon geometry rather than an error.
 
-**`median_seeing_fwhm` is displayed and never applied.** Seeing is a condition of
-the night being planned, not a property of the site, and it is the field an
-observer is most likely to have set deliberately.
+**`median_seeing_fwhm` is displayed and never applied.** It is a reference for
+the site's atmosphere, not a total stellar image width for the planned
+observation (see [ATBD §4.1.2](ATBD.md#412-spatial-resolution)).
 
 **`caveat` is free text shown beside the profile's name** by every host. A
 profile whose numbers are not good enough to plan real observations with says so

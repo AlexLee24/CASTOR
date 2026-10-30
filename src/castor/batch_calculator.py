@@ -74,7 +74,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     photon_energy = float(physics.calculate_photon_energy(inst.optic_filter.central_wavelength))
     total_throughput = float(physics.calculate_total_throughput(inst.telescope.optical_throughput, inst.optic_filter.filter_transmission, inst.camera.quantum_efficiency))
     pixel_scale = float(physics.calculate_pixel_scale(inst.camera.pixel_pitch, inst.telescope.focal_length))
-    total_fwhm = float(physics.calculate_total_fwhm(env.seeing_fwhm, env.diffraction_fwhm, env.optical_fwhm, env.tracking_fwhm))
+    total_fwhm = env.total_fwhm
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)
 

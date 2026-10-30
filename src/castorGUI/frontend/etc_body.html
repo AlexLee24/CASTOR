@@ -210,8 +210,7 @@
                     <div class="etc-tabpanel" data-panel="target" role="tabpanel" hidden>
                         <h3 class="etc-section-title">Coordinates (J2000, decimal degrees)</h3>
                         <!-- One coordinate, not two settings: a pair that is always read
-                             and edited together sits on one row, like the FWHM pairs on the
-                             Environment tab. -->
+                             and edited together sits on one row. -->
                         <!-- The default target is SN 2025wny ("SN Winny"), image A: the
                              strongly lensed superluminous supernova at z=2.01 that Lulin's
                              own LOT resolved into its separate lensed images on 2025-09-29
@@ -352,73 +351,17 @@
 
                     <!-- ══ Environment ══ -->
                     <div class="etc-tabpanel" data-panel="environment" role="tabpanel" hidden>
-                        <h3 class="etc-section-title">Spatial Spreading (FWHM, arcsec)</h3>
-                        <!-- Seeing is the one component anyone actually sets per run — it
-                             describes the night, and nothing else on the page fills it in for
-                             you (see specs-card's "reference only, not applied" note on the
-                             site's median seeing). Diffraction/optical/tracking are fixed
-                             telescope characteristics no preset ever touches; asking every
-                             user to type all four the way the schema needs them internally
-                             mistook the engine's shape for the form's. They stay real,
-                             required inputs — just folded, like Photometry below. -->
+                        <h3 class="etc-section-title">Atmosphere &amp; Sky</h3>
+                        <!-- A measured stellar width already contains atmospheric and
+                             instrumental spreading. Send that total directly; a site's
+                             median seeing alone cannot supply it. -->
                         <label class="etc-field">
-                            <span class="etc-field-label">Seeing</span>
+                            <span class="etc-field-label">Image FWHM</span>
                             <span class="etc-input-wrap">
-                                <input type="number" name="environment.seeing_fwhm" value="1.5" step="any" min="0.001" required>
+                                <input type="number" name="environment.total_fwhm" value="1.5" step="any" min="0.001" required>
+                                <span class="etc-unit">arcsec</span>
                             </span>
                         </label>
-                        <details class="etc-details" data-details="fwhm">
-                            <summary class="etc-details-summary">Advanced — PSF components (diffraction, optical, tracking)</summary>
-                            <div class="etc-details-body">
-                                <div class="etc-field-row">
-                                    <label class="etc-field">
-                                        <span class="etc-field-label">Diffraction</span>
-                                        <span class="etc-input-wrap">
-                                            <input type="number" name="environment.diffraction_fwhm" value="0.2" step="any" min="0.001" required>
-                                        </span>
-                                    </label>
-                                    <label class="etc-field">
-                                        <span class="etc-field-label">Optical</span>
-                                        <span class="etc-input-wrap">
-                                            <input type="number" name="environment.optical_fwhm" value="0.1" step="any" min="0.001" required>
-                                        </span>
-                                    </label>
-                                </div>
-                                <label class="etc-field">
-                                    <span class="etc-field-label">Tracking</span>
-                                    <span class="etc-input-wrap">
-                                        <input type="number" name="environment.tracking_fwhm" value="0.1" step="any" min="0.001" required>
-                                    </span>
-                                </label>
-                            </div>
-                        </details>
-
-                        <hr class="etc-divider">
-
-                        <h3 class="etc-section-title">Atmosphere &amp; Background</h3>
-                        <!-- Renamed from "Auto sky background", which claimed too much: it
-                             reads as though the sky brightness gets derived for you and the
-                             field below stops mattering. Nothing is derived - mu_dark is
-                             required either way and is always the baseline. All this adds is
-                             moonlight. -->
-                        <label class="etc-switch-row" title="Adds scattered moonlight (Krisciunas &amp; Schaefer 1991) on top of the mu_dark baseline below, from the Moon's phase, its separation from the target, and both altitudes at the observing time you set. mu_dark is never derived: with this off the sky is exactly mu_dark, and with it on and the Moon below the horizon it adds nothing. Single-instant results only - a time sweep always includes moonlight, whatever this is set to.">
-                            <input type="checkbox" class="etc-switch-input" name="environment.auto_calc_background">
-                            <span class="etc-switch" aria-hidden="true"></span>
-                            <span class="etc-switch-label">Add moonlight to sky background</span>
-                        </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Dark Sky Brightness (mu_dark, baseline)</span>
-                            <span class="etc-input-wrap">
-                                <input type="number" name="environment.mu_dark" value="21.0" step="any" required>
-                                <span class="etc-unit">mag/arcsec&sup2;</span>
-                            </span>
-                        </label>
-                        <!-- Not a field anyone fills in - it is a preset-only pass-through. A
-                             handful of Lulin's filters carry it (see presets.json's comment on
-                             the split it depends on) and applyFragment fills it same as any
-                             other; PayloadBuilder skips it whenever it's left empty, which is
-                             every profile that has never had this measured. -->
-                        <input type="number" name="environment.zodiacal_share" step="any" min="0" max="0.999" hidden>
                         <label class="etc-field">
                             <span class="etc-field-label">Extinction Coefficient</span>
                             <span class="etc-input-wrap">
@@ -426,6 +369,33 @@
                                 <span class="etc-unit">mag/airmass</span>
                             </span>
                         </label>
+                        <!-- The moonlight checkbox sits on mu_dark's label row because it
+                             changes what that number means: off, it is the whole sky; on,
+                             moonlight is layered over it. Nothing is derived either way -
+                             mu_dark is required and always the baseline. -->
+                        <div class="etc-field">
+                            <div class="etc-field-label-row">
+                                <label class="etc-field-label" for="input-mu-dark">Dark Sky Brightness (mu_dark)</label>
+                                <label class="etc-check" data-when="single" title="Adds scattered moonlight (Krisciunas &amp; Schaefer 1991) on top of mu_dark, from the Moon's phase, its separation from the target, and both altitudes at the observing time you set. Off, the sky is exactly mu_dark; on with the Moon below the horizon, it adds nothing.">
+                                    <input type="checkbox" name="environment.auto_calc_background">
+                                    <span>Add moonlight</span>
+                                </label>
+                                <!-- A time sweep always layers moonlight, so the checkbox would
+                                     be a control that does nothing. Its value is kept for when
+                                     the sweep is switched off. -->
+                                <span class="etc-check-note" data-when="batch" hidden title="A time sweep always includes moonlight; the checkbox returns when the sweep is off.">Moonlight included</span>
+                            </div>
+                            <span class="etc-input-wrap">
+                                <input type="number" id="input-mu-dark" name="environment.mu_dark" value="21.0" step="any" required>
+                                <span class="etc-unit">mag/arcsec&sup2;</span>
+                            </span>
+                        </div>
+                        <!-- Not a field anyone fills in - it is a preset-only pass-through. A
+                             handful of Lulin's filters carry it (see presets.json's comment on
+                             the split it depends on) and applyFragment fills it same as any
+                             other; PayloadBuilder skips it whenever it's left empty, which is
+                             every profile that has never had this measured. -->
+                        <input type="number" name="environment.zodiacal_share" step="any" min="0" max="0.999" hidden>
 
                         <hr class="etc-divider">
 

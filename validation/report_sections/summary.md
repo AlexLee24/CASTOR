@@ -50,7 +50,7 @@ all surface. `test_solve_time_floor.py` is a passing regression.
 SLT carries a measured 2% correlated background residual. Sophia currently
 carries zero, meaning unmeasured rather than absent, so the long-integration
 LOT/SLT gap is partly a model-completeness gap. The atlas is also conditional
-on one pointing, 1.4 arcsec seeing, 120 s frames, the top-hat passbands and the
+on one pointing, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms), 120 s frames, the top-hat passbands and the
 site-wide extinction fallback. It is a planning baseline, not an empirical
 limiting-magnitude claim.
 
