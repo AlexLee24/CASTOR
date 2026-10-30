@@ -314,15 +314,14 @@
                             </label>
                         </div>
 
-                        <hr class="etc-divider">
-
-                        <h3 class="etc-section-title">Spectral Energy Distribution (SED)</h3>
-                        <label class="etc-field">
-                            <span class="etc-field-label">SED Model</span>
-                            <select name="target.sed.type" id="select-sed-type">
-                                <option value="flat">Flat Spectrum</option>
-                            </select>
-                        </label>
+                        <!-- The whole SED section is hidden, not just Blackbody: a selector
+                             with one option, read by nothing, is a control that controls
+                             nothing. The schema still requires target.sed, so the value rides
+                             along as a hidden input and payloads and saved files are unchanged.
+                             Bringing the section back means restoring the divider, the
+                             "Spectral Energy Distribution (SED)" heading and a select of the
+                             same name (id select-sed-type) in place of this input. -->
+                        <input type="hidden" name="target.sed.type" value="flat">
                         <!-- Blackbody is hidden rather than offered, because choosing it could
                              only ever fail. schema.TempSED declares nothing but its own tag, so
                              the temperature field below was rejected as an extra input and the
@@ -331,7 +330,7 @@
                              The engine does not read target.sed at all yet — calculator's
                              _unify_flux branches on target.brightness and never looks at the
                              SED — so flat is not one model among two, it is the only behaviour
-                             there is, and the selector above says so honestly.
+                             there is.
 
                              Restoring this means three things, not one: give TempSED a
                              temperature_k field, make the engine actually integrate a blackbody
