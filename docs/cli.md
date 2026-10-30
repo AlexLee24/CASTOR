@@ -35,7 +35,7 @@ castor calc --site lulin --filter Sloan_r --mag 18 --fwhm 1.5 --exp 300 -n 10 --
 |---|---|
 | `calc` | Run one calculation. |
 | `presets` | List what `--site` can name. `--bands` also shows what each filter overrides. |
-| `check` | Resolve every combination the preset file offers and inspect the results. |
+| `check` | Resolve every combination the preset file offers and inspect the results. `--provenance` also holds every number to a table of where it came from. |
 | `schema` | The JSON Schema of a request, for building one `--set` at a time. |
 
 ## What makes this more than a wrapper
@@ -85,6 +85,16 @@ Same text the GUI shows beside the site selector, from the same `caveat` field.
 where each number came from, but that file is in the repository and this is where
 the calculation is actually being run.
 
+Hardware named from another profile brings that profile's caveat along, on a
+line of its own and prefixed with the profile id:
+
+```
+CAVEAT: vlt: Demonstration only - do not plan real observations with this. ...
+```
+
+With `--json` the same lines arrive joined by newlines in the one `caveat`
+string, which for a configuration drawn from one profile is exactly what it was.
+
 ### Layered input, in one direction
 
 Each layer wins over the last, so a saved request can be reused with one thing
@@ -98,9 +108,47 @@ changed:
 and is repeatable, which is what keeps the flag list short: the common fields get
 flags, everything else is reachable without one.
 
+`options.background_dominance_factor` is one of those: k, how far the background
+must outweigh read noise in the "Background/read crossover" time (ATBD 4.3.5). Its
+default of 1.0 belongs to the engine, not to this tool, so it is not on the
+`assumed` list — but whenever k is anything else the result names it beside that
+time, because a request file can set it without the person reading the output
+ever having typed it. The time-series contract (`castor schema --batch`) takes the
+same field and echoes it at every step, so one `options` object gives a single
+request and a series the same t_opt convention.
+
 `--request` reads what the GUI's SAVE writes. A saved form holds more than a
 request does — the batch fields, both branches of every either/or — so the extras
 are dropped and named on stderr rather than rejected.
+
+### More than one preset file
+
+`calc`, `presets` and `check` read the shipped file and then each file on
+`CASTOR_PRESETS_PATH`. `--presets-file` replaces that whole list with the files
+it names; it repeats, and they merge in the order given, so a single one still
+means exactly what it always did:
+
+```bash
+export CASTOR_PRESETS_PATH=~/my_rigs.json
+castor presets                                             # lulin, vlt, other, then my_rigs.json's
+castor presets --presets-file a.json --presets-file b.json # a.json's, then b.json's; nothing else
+```
+
+A profile defined in two files, a file that cannot be read, or one that breaks
+any rule a single file is held to is bad input (exit 3), and the message names
+the file — a misspelled field ends `(in my_rigs.json)`, since its location starts
+at `profiles`. The merge rules are in [Presets](presets.md#several-files).
+
+`--telescope`, `--camera` and `--filter` take `PROFILE/KEY` to use an entry from
+a profile other than the site's — someone's own refractor under Lulin's sky:
+
+```bash
+castor calc --site lulin --telescope other/RedCat51 --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+```
+
+The site keeps its location and sky; what a borrowed filter carries applies only
+where it was measured ([Presets](presets.md#hardware-from-another-profile)). A
+name that does not exist lists what that profile does have.
 
 ### Exit codes distinguish kinds of outcome
 
@@ -114,6 +162,25 @@ are dropped and named on stderr rather than rejected.
 Saturation leaves by the front door with a computed result attached, but not with
 the exit code of an unremarkable success: every caller checks the exit code, and
 not every caller reads `flags.is_saturated`.
+
+### `--json` is the whole response, the text is a summary
+
+`--json` prints one object with five keys and stdout holds nothing else:
+`assumed` and `ignored` (the notes above, as lists), the profile's `caveat` (or
+`null`), the validated `request` and the engine's full `response`. The text
+answer prints seven rows at most; the response holds more, and a caller that
+needs it should read the JSON rather than parse the text:
+
+| key | |
+|---|---|
+| `response.noise.single`, `response.noise.total` | The signal and each variance term behind both SNRs ([ATBD](ATBD.md) §4.3.6). `signal / sqrt(total_variance)` is the SNR exactly. |
+| `response.core.total_exp_time` | t_single × N, integration only — no readout overhead. |
+| `response.core.background_dominance_factor` | The k `optimal_exposure_time` was solved for, echoed at the default too; the text names it only off the default. |
+| `response.diagnostics.airmass`, `.sky_surface_brightness` | The airmass (after the 89° clamp) and the μ_sky the calculation actually used. |
+| `response.ephemeris` | Target and moon elevation, lunar phase angle and separation. A target below the horizon has a negative elevation here, while its airmass is clamped. |
+
+Adding these left the text rows exactly as they were (`tests/test_cli.py` pins
+them), so a script reading stdout without `--json` did not have to change.
 
 ## `castor schema`
 
@@ -155,6 +222,88 @@ resolve that combination and look. `check` now looks:
 Exit 3 on any finding, so CI can run it. Verified against a deliberately broken
 file rather than only against the good one.
 
+Given several files it checks every profile in each, each against its own
+catalogues — which is what a host generating a file of its own runs alongside
+the shipped one. It does not enumerate combinations across profiles (every site
+with every borrowed rig); the rules that govern those are pinned by tests in
+`tests/test_presets.py` instead.
+
+### `--provenance`: where every number came from
+
+```bash
+uv run python validation/provenance.py > provenance.json   # the shipped file's record
+uv run castor check --presets-file src/castorGUI/data/presets.json --provenance provenance.json
+```
+
+With a provenance table, `check` also holds the file to the rule
+[`validation/provenance.py`](../validation/provenance.py) holds the shipped file
+to: every number has a record saying where it came from, and every record a
+number. The table is JSON, one record per number, keyed by where the number sits:
+
+```json
+{
+  "lulin.cameras.Sophia.readout_noise": [7.9, "MEASURED", "photon transfer curve over 123 frames; datasheet -152 1 MHz port says 8.5"]
+}
+```
+
+A record is the value it vouches for, how that value is known (`MEASURED`,
+`DOCUMENT`, `DERIVED` or `GUESS`) and a note of at least ten characters naming
+the document, frames or computation. Findings print after the file's own, in the
+same `PROBLEM` lines:
+
+- a number with no record, or a record for a number the file does not hold;
+- a record vouching for a different value than the file holds — the file
+  changed and its citation did not;
+- a class outside the four, or a note too short to name a source.
+
+The file is read as written, not as loaded: loading coerces, and a record
+vouches for what the file says. A table that cannot be read is bad input, exit 3.
+That includes one that is not UTF-8 text, which is what `>` writes in Windows
+PowerShell 5.1 (UTF-16): the table is read as UTF-8, like the preset file.
+
+Given [several preset files](#more-than-one-preset-file), one table covers every
+number in all of them: the same files `check` reads, merged the same way
+(`presets.document()`, which keeps each as written). A profile id is defined in
+one file only, so a path still names one number in one file. Hardware named
+`PROFILE/KEY` is borrowed when a configuration is chosen, not copied into a file,
+so its numbers are recorded once, under the profile that owns them — a record
+under the site borrowing it is for a number no file holds. To keep each file's
+record beside it, check the files one at a time:
+
+```bash
+castor check --presets-file my_rigs.json --provenance my_rigs.provenance.json
+```
+
+Without `--presets-file`, `check` reads `CASTOR_PRESETS_PATH`'s files too, and
+the shipped record says nothing about them, which is why the first example names
+the shipped file: left out, that command fails wherever the variable is set.
+
+The rule is `castorCLI.provenance`, as functions over a file's `profiles` object
+exactly as JSON gives it, for a host that keeps its own preset file:
+
+```python
+import json
+from castorCLI import provenance
+
+profiles = json.loads(open("my_presets.json").read())["profiles"]
+for problem in provenance.check(profiles, provenance.load_table("my_provenance.json")):
+    print(problem.kind, problem)
+```
+
+`walk(profiles)` names every number by its path. `check(profiles, table)` returns
+one `Problem` per finding, carrying the `path`, a `message` for people and a
+stable `kind` a host can count, translate or set aside: `missing_record`,
+`orphan_record`, `value_mismatch`, `unknown_class`, `short_note` or
+`malformed_record`. A table in Python is any mapping of path to a
+`(value, class, note)` triple; `load_table(path)` reads the JSON form, and
+`summary(profiles, table)` counts each profile's numbers by class.
+`check_file(catalogue)` in `main.py` is likewise the rest of `check` without the
+printing.
+
+The shipped file's own record stays in `validation/`: where each of this
+repository's numbers came from is a fact about the repository, not something the
+package carries.
+
 ## Design notes
 
 **Why `presets.py` lives here and not in the engine.** Hardware presets are out
@@ -168,4 +317,8 @@ both implement "first entry listed is the default", "a hardware-only profile
 fills in no location", "`median_seeing_fwhm` is displayed and never applied". The
 browser cannot run Python, so two implementations are unavoidable; what
 `presets.py` prevents is a *third* appearing the moment another Python caller
-wants presets.
+wants presets. What keeps the two from drifting apart is `tests/test_gui_form.py`,
+which runs `etc.js` under Node and checks the request it sends against
+`resolve()` for every shipped configuration. Hardware named `PROFILE/KEY` exists
+only in `presets.py`: the browser's selectors stay within one profile, so there
+is nothing for `etc.js` to mirror.

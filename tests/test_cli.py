@@ -3,11 +3,19 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from castorCLI.main import cli
+from castorCLI import presets, provenance
+from castorCLI.main import check_file, cli
 
 # ==========================================
 # Fixtures
 # ==========================================
+
+@pytest.fixture(autouse=True)
+def no_extra_presets(monkeypatch):
+    """Without --presets-file every command reads the search path, so a
+    CASTOR_PRESETS_PATH left set in the shell running the suite would quietly
+    change what each test here is looking at."""
+    monkeypatch.delenv(presets.PATH_VARIABLE, raising=False)
 
 @pytest.fixture
 def run():
@@ -247,6 +255,28 @@ def test_set_parses_json_values(run, lulin):
 
     assert json.loads(result.stdout)["request"]["target"]["morphology"]["type"] == "extended"
 
+def test_k_is_reached_with_set_and_echoed_both_ways(run, lulin):
+    """No flag is needed for the t_opt convention: --set reaches it, the request
+    echo shows what was asked and the response shows what was used."""
+    default = json.loads(run(*lulin, "--json").stdout)
+    doubled = json.loads(run(*lulin, "--set", "options.background_dominance_factor=2", "--json").stdout)
+
+    assert default["request"]["options"]["background_dominance_factor"] == 1.0
+    assert doubled["request"]["options"]["background_dominance_factor"] == 2.0
+    assert doubled["response"]["core"]["background_dominance_factor"] == 2.0
+    assert doubled["response"]["core"]["optimal_exposure_time"] == pytest.approx(
+        4.0 * default["response"]["core"]["optimal_exposure_time"], rel=1e-12
+    )
+
+def test_a_non_default_k_is_named_beside_the_time_it_changes(run, lulin):
+    """The default output is unchanged; off the default the reader is told which
+    k the background-limited time was solved for."""
+    assert "(k =" not in run(*lulin).stdout
+
+    stated = run(*lulin, "--set", "options.background_dominance_factor=3.1235")
+    line = next(row for row in stated.stdout.splitlines() if "Background/read crossover" in row)
+    assert line.endswith("(k = 3.1235)")
+
 # ==========================================
 # Reading back what the form saved
 # ==========================================
@@ -315,6 +345,49 @@ def test_json_stdout_is_only_json(run, lulin):
     """Anything else on stdout would break the caller that reaches for --json."""
     json.loads(run(*lulin, "--json").stdout)
 
+def test_json_has_the_keys_cli_md_names(run, lulin):
+    """docs/cli.md lists the top-level keys for a caller writing a strict parser."""
+    payload = json.loads(run(*lulin, "--json").stdout)
+
+    assert set(payload) == {"assumed", "ignored", "caveat", "request", "response"}
+
+def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
+    """--json is the whole response, so what the engine now reports about how it got
+    its answer arrives with it: the variance terms, the total time, the airmass
+    and sky it used, and where the target and moon were."""
+    response = json.loads(run(*lulin, "--json").stdout)["response"]
+
+    assert response["core"]["total_exp_time"] == 3000.0          # -n 10 --exp 300
+    assert response["diagnostics"]["airmass"] >= 1.0
+    assert 15.0 < response["diagnostics"]["sky_surface_brightness"] < 25.0
+    for block in ("single", "total"):
+        assert set(response["noise"][block]) == {
+            "exp_time", "num_exposures", "signal", "source_variance", "sky_variance",
+            "dark_variance", "readout_variance", "flatness_variance", "total_variance",
+            "num_pixels_background",
+        }
+    assert response["noise"]["total"]["num_exposures"] == 10
+    assert response["ephemeris"]["target_elevation_deg"] == pytest.approx(81.5, abs=0.5)   # WELL_PLACED
+    assert set(response["ephemeris"]) == {
+        "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+    }
+
+@pytest.mark.parametrize("question, rows", [
+    (["-n", "10"], ["Total SNR", "Single-frame SNR", "Total time", "Saturates after",
+                    "Background/read crossover", "Total FWHM"]),
+    (["--snr", "50"], ["Total SNR", "Single-frame SNR", "Exposures needed", "Total time",
+                       "Saturates after", "Background/read crossover", "Total FWHM"]),
+])
+def test_the_text_answer_keeps_its_rows(run, question, rows):
+    """The response grew; what calc prints did not. Its rows are the same ones, in
+    the same order, so nothing that reads stdout has to change."""
+    result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
+                 "--mag", "21", "--fwhm", "1.5", "--exp", "300", *question, "--time", WELL_PLACED)
+
+    # The label column is 28 wide (_results), so read all of it.
+    printed = [line[2:30].strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    assert printed == rows
+
 # ==========================================
 # Discovery
 # ==========================================
@@ -335,3 +408,410 @@ def test_schema_is_the_contract_itself(run):
 
     assert contract["title"] == "ObservationRequest"
     assert "instrument" in contract["properties"]
+
+# ==========================================
+# Checking a preset file
+# ==========================================
+
+def _shipped_profiles():
+    return json.loads(presets.DEFAULT_PATH.read_text(encoding="utf-8"))["profiles"]
+
+@pytest.fixture
+def overridden_nothing(tmp_path):
+    """Loads perfectly, and a band's throughput applies to nothing: the filter
+    names a telescope its profile does not list."""
+    path = tmp_path / "overridden_nothing.json"
+    path.write_text(json.dumps({
+        "profiles": {
+            "bare_scope": {
+                "telescopes": {"T": {"telescope": {
+                    "primary_mirror_diameter": 1.0, "secondary_mirror_diameter": 0.2,
+                    "focal_length": 8.0, "optical_throughput": 0.5}}},
+                "cameras": {"C": {"camera": {
+                    "pixel_pitch": 10.0, "quantum_efficiency": 0.8, "dark_current_rate": 0.01,
+                    "readout_noise": 5.0, "full_well_capacity": 100000}}},
+                "filters": {"F": {
+                    "optic_filter": {"central_wavelength": 550.0, "filter_bandwidth": 100.0,
+                                     "filter_transmission": 0.9},
+                    "telescope": {"X": {"optical_throughput": 0.4}}}},
+            }
+        }
+    }), encoding="utf-8")
+    return path
+
+@pytest.fixture
+def table_for_shipped(tmp_path):
+    """A provenance table that covers the shipped file exactly.
+
+    Built from the file rather than taken from validation/provenance.py, which is
+    the shipped file's real record but is not part of this suite: what is under
+    test here is the command, not the record.
+    """
+    return _record_everything(tmp_path / "provenance.json", _shipped_profiles())
+
+def _record_everything(path, profiles):
+    """Writes a table recording every number in `profiles`, claiming no source for any."""
+    path.write_text(json.dumps({
+        key: [value, provenance.GUESS, "fixture: no source claimed"]
+        for key, value in provenance.walk(profiles).items()
+    }), encoding="utf-8")
+    return path
+
+def test_check_passes_the_shipped_file(run):
+    result = run("check")
+
+    assert result.exit_code == 0
+    assert result.stdout.splitlines()[0].endswith("resolvable configurations checked across 3 profiles")
+    assert result.stdout.splitlines()[-1] == "no problems found"
+    assert result.stderr == ""
+
+def test_check_finds_what_loading_cannot(run, overridden_nothing):
+    result = run("check", "--presets-file", str(overridden_nothing))
+
+    assert result.exit_code == 3
+    assert ("  PROBLEM  bare_scope: filter 'F' overrides telescope 'X', which this profile "
+            "does not list — it applies to nothing") in result.stderr.splitlines()
+
+def test_check_file_is_the_command_without_the_printing(run, overridden_nothing):
+    """What a host calls on its own file instead of shelling out."""
+    checked, problems = check_file(presets.load())
+    assert problems == []
+    assert run("check").stdout.startswith(f"{checked} resolvable configurations checked")
+
+    checked, problems = check_file(presets.load(overridden_nothing))
+    assert checked == 1
+    assert problems == ["bare_scope: filter 'F' overrides telescope 'X', which this profile "
+                        "does not list — it applies to nothing"]
+
+def test_check_holds_the_file_to_a_provenance_table(run, table_for_shipped):
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 0
+    held = len(provenance.walk(_shipped_profiles()))
+    assert f"{held} values checked against {table_for_shipped}" in result.stdout
+    assert result.stdout.splitlines()[-1] == "no problems found"
+
+def test_check_without_a_table_says_nothing_about_provenance(run):
+    """The flag is opt-in: a run without it prints exactly what it always has."""
+    assert "values checked against" not in run("check").stdout
+
+def test_a_bad_provenance_table_fails_the_check(run, table_for_shipped):
+    table = json.loads(table_for_shipped.read_text(encoding="utf-8"))
+    del table["lulin.cameras.Sophia.readout_noise"]
+    table["lulin.environment.mu_dark"][2] = "guessed"
+    table_for_shipped.write_text(json.dumps(table), encoding="utf-8")
+
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 3
+    problems = [line for line in result.stderr.splitlines() if line.startswith("  PROBLEM  ")]
+    assert [line.split(":")[0] for line in problems] == [
+        "  PROBLEM  lulin.cameras.Sophia.readout_noise",
+        "  PROBLEM  lulin.environment.mu_dark",
+    ]
+    assert "no problems found" not in result.stdout
+
+def test_provenance_problems_follow_the_files_own(run, overridden_nothing, tmp_path):
+    table = tmp_path / "provenance.json"
+    table.write_text("{}", encoding="utf-8")
+
+    result = run("check", "--presets-file", str(overridden_nothing), "--provenance", str(table))
+
+    problems = [line for line in result.stderr.splitlines() if line.startswith("  PROBLEM  ")]
+    assert result.exit_code == 3
+    assert problems[0].startswith("  PROBLEM  bare_scope: filter 'F'")
+    assert problems[1].startswith("  PROBLEM  bare_scope.telescopes.T.primary_mirror_diameter:")
+
+def test_provenance_vouches_for_the_file_as_written(run, overridden_nothing, tmp_path):
+    """Loading coerces a quoted number to a float; the record must match what the
+    file actually says, so the check reads the file, not the loaded catalogue."""
+    data = json.loads(overridden_nothing.read_text(encoding="utf-8"))
+    data["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]["focal_length"] = "8.0"
+    overridden_nothing.write_text(json.dumps(data), encoding="utf-8")
+    table = tmp_path / "provenance.json"
+    table.write_text(json.dumps({
+        key: [8.0 if key.endswith("focal_length") else value, provenance.DOCUMENT, "fixture datasheet"]
+        for key, value in provenance.walk(data["profiles"]).items()
+    }), encoding="utf-8")
+
+    result = run("check", "--presets-file", str(overridden_nothing), "--provenance", str(table))
+
+    assert ("  PROBLEM  bare_scope.telescopes.T.focal_length: the file holds '8.0' "
+            "but its record vouches for 8.0") in result.stderr.splitlines()
+
+def test_an_unreadable_provenance_table_is_bad_input(run, tmp_path):
+    result = run("check", "--provenance", str(tmp_path / "nowhere.json"))
+
+    assert result.exit_code == 3
+    assert result.stderr.startswith("error: Cannot read provenance table")
+
+def test_a_provenance_table_that_is_not_utf8_is_bad_input(run, table_for_shipped):
+    """What `>` writes in Windows PowerShell 5.1: an error line, not a traceback."""
+    table_for_shipped.write_text(table_for_shipped.read_text(encoding="utf-8"), encoding="utf-16")
+
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 3
+    assert result.stderr.startswith("error: Cannot read provenance table")
+    assert "not UTF-8 text" in result.stderr
+
+def test_a_preset_file_that_is_not_utf8_is_bad_input(run, monkeypatch, tmp_path):
+    """The same file read through the variable, as every command now reads it."""
+    path = tmp_path / "utf16.json"
+    path.write_text(json.dumps({"profiles": {}}), encoding="utf-16")
+
+    named = run("check", "--presets-file", str(path))
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(path))
+    searched = run("check")
+
+    for result in (named, searched):
+        assert result.exit_code == 3
+        assert result.stderr.startswith("error: Cannot read presets at")
+        assert "not UTF-8 text" in result.stderr
+
+# ==========================================
+# Several preset files
+# ==========================================
+
+SHIPPED = str(presets.DEFAULT_PATH)
+
+def test_one_presets_file_still_replaces_the_shipped_one(run, hardware_only_presets):
+    result = run("presets", "--presets-file", str(hardware_only_presets))
+
+    assert "bare_scope" in result.stdout and "lulin" not in result.stdout
+
+def test_presets_file_repeats_to_merge_in_order(run, hardware_only_presets):
+    result = run("presets", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets))
+
+    assert result.exit_code == 0
+    assert result.stdout.index("lulin") < result.stdout.index("bare_scope")
+
+def test_the_variable_adds_files_after_the_shipped_one(run, monkeypatch, hardware_only_presets):
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(hardware_only_presets))
+    result = run("presets")
+
+    assert result.exit_code == 0
+    assert result.stdout.index("lulin") < result.stdout.index("bare_scope")
+
+def test_naming_a_presets_file_sets_the_variable_aside(run, monkeypatch, tmp_path,
+                                                       hardware_only_presets):
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(tmp_path / "nowhere.json"))
+    result = run("presets", "--presets-file", str(hardware_only_presets))
+
+    assert result.exit_code == 0
+
+def test_a_missing_file_on_the_variable_is_bad_input(run, monkeypatch, tmp_path):
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(tmp_path / "nowhere.json"))
+    result = run("presets")
+
+    assert result.exit_code == 3
+    assert "nowhere.json" in result.stderr
+
+def test_a_profile_in_two_files_is_bad_input(run):
+    result = run("presets", "--presets-file", SHIPPED, "--presets-file", SHIPPED)
+
+    assert result.exit_code == 3
+    assert "'lulin' is defined in both" in result.stderr
+
+@pytest.fixture
+def misspelled_presets(tmp_path, hardware_only_presets):
+    broken = json.loads(hardware_only_presets.read_text())
+    telescope = broken["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]
+    telescope["focal_lenght"] = telescope.pop("focal_length")
+    path = tmp_path / "misspelled.json"
+    path.write_text(json.dumps(broken))
+    return path
+
+@pytest.mark.parametrize("from_variable", [False, True])
+def test_a_misspelled_field_names_the_file_it_is_in(run, monkeypatch, misspelled_presets,
+                                                    from_variable):
+    """The field's location starts at "profiles", which on its own does not say which
+    of the files read is the broken one."""
+    if from_variable:
+        monkeypatch.setenv(presets.PATH_VARIABLE, str(misspelled_presets))
+        result = run("presets")
+    else:
+        result = run("presets", "--presets-file", SHIPPED, "--presets-file", str(misspelled_presets))
+
+    assert result.exit_code == 3
+    assert "profiles.bare_scope.telescopes.T.telescope.focal_lenght" in result.stderr
+    assert f"(in {misspelled_presets})" in result.stderr
+
+def test_check_covers_every_merged_file(run, hardware_only_presets):
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets))
+
+    assert result.exit_code == 0
+    assert "43 resolvable configurations checked across 4 profiles" in result.stdout
+
+def test_check_finds_a_problem_in_a_later_file(run, tmp_path, hardware_only_presets):
+    broken = json.loads(hardware_only_presets.read_text())
+    broken["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]["secondary_mirror_diameter"] = 1.0
+    path = tmp_path / "broken.json"
+    path.write_text(json.dumps(broken))
+
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(path))
+
+    assert result.exit_code == 3
+    assert "PROBLEM  bare_scope/T/C/F: secondary is not smaller" in result.stderr
+
+# ==========================================
+# Hardware named from another profile
+# ==========================================
+
+def test_calc_takes_a_telescope_from_another_profile(run, lulin):
+    """Lulin's sky and location, with the RedCat from the "other" profile, which
+    keeps its own throughput rather than Sloan r''s figure measured on LOT."""
+    result = run(*lulin, "--telescope", "other/RedCat51", "--json")
+    request = json.loads(result.stdout)["request"]
+
+    assert result.exit_code == 0
+    assert request["environment"]["location"]["elevation_m"] == 2862.0
+    assert request["environment"]["mu_dark"] == 21.26
+    assert request["instrument"]["telescope"]["primary_mirror_diameter"] == 0.051
+    assert request["instrument"]["telescope"]["optical_throughput"] == 0.9
+
+def test_the_header_names_the_borrowed_telescope(run, lulin):
+    result = run(*lulin, "--telescope", "other/RedCat51")
+
+    assert "Lulin Observatory · William Optics RedCat 51 · Sophia · Sloan r'" in result.stdout
+
+def test_a_hardware_family_runs_under_a_site(run, lulin, hardware_only_presets):
+    """What a file of hardware families is for: someone's own rig under a real
+    site's sky. On its own such a profile still exits 3 for want of a location."""
+    result = run(*lulin, "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--telescope", "bare_scope/T", "--camera", "bare_scope/C",
+                 "--filter", "bare_scope/F", "--json")
+    request = json.loads(result.stdout)["request"]
+
+    assert result.exit_code == 0
+    assert request["environment"]["location"]["latitude_deg"] == 23.47
+    assert request["environment"]["mu_dark"] == 21.5   # site-wide: F brings no Lulin band sky
+    assert request["instrument"]["camera"]["readout_noise"] == 5.0
+    assert request["instrument"]["optic_filter"]["central_wavelength"] == 550.0
+
+def test_an_unknown_qualified_name_lists_what_there_is(run, lulin):
+    result = run(*lulin, "--telescope", "other/RedCat99")
+
+    assert result.exit_code == 3
+    assert "Available: RedCat51, RedCat71" in result.stderr
+
+def test_borrowed_hardware_brings_its_profiles_caveat(run, lulin):
+    result = run(*lulin, "--camera", "vlt/FORS2_MIT")
+
+    assert "CAVEAT: vlt: Demonstration only" in result.stderr
+
+def test_json_carries_a_borrowed_caveat(run, lulin):
+    payload = json.loads(run(*lulin, "--camera", "vlt/FORS2_MIT", "--json").stdout)
+
+    assert payload["caveat"] == "vlt: " + presets.load().profile("vlt").caveat
+
+def test_a_sites_own_caveat_reads_as_it_always_has(run):
+    caveat = presets.load().profile("vlt").caveat
+    args = ["calc", "--site", "vlt", "--ra", "113.65", "--dec", "-31.89",
+            "--mag", "18", "--exp", "30", "-n", "1", "--fwhm", "0.8", "--time", WELL_PLACED]
+
+    assert f"\nCAVEAT: {caveat}\n" in run(*args).stderr
+    assert json.loads(run(*args, "--json").stdout)["caveat"] == caveat
+
+# ==========================================
+# Provenance across several preset files
+# ==========================================
+
+def _problems(result):
+    return [line.removeprefix("  PROBLEM  ") for line in result.stderr.splitlines()
+            if line.startswith("  PROBLEM  ")]
+
+def _written(*paths):
+    """The files' profiles as written and merged: what check --provenance walks."""
+    return presets.document(*paths)["profiles"]
+
+def test_one_table_covers_every_merged_file(run, hardware_only_presets, tmp_path):
+    """Profile ids are unique across files, so one table keyed by path still names
+    each number in exactly one of them, and the merged count is the files' sum."""
+    table = _record_everything(tmp_path / "provenance.json", _written(SHIPPED, hardware_only_presets))
+
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--provenance", str(table))
+
+    assert result.exit_code == 0, result.stderr
+    held = len(provenance.walk(_written(SHIPPED))) + len(provenance.walk(_written(hardware_only_presets)))
+    assert f"{held} values checked against {table}" in result.stdout
+    assert result.stdout.splitlines()[-1] == "no problems found"
+
+def test_a_later_files_numbers_need_records_of_their_own(run, hardware_only_presets,
+                                                         table_for_shipped):
+    """The shipped record vouches for the shipped file. A file read beside it
+    answers for every number it holds, and nothing of the shipped file's is
+    reported along the way."""
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--provenance", str(table_for_shipped))
+
+    problems = _problems(result)
+    assert result.exit_code == 3
+    assert [problem.split(":")[0] for problem in problems] == list(
+        provenance.walk(_written(hardware_only_presets)))
+    assert all(problem.endswith("the table does not say where it came from") for problem in problems)
+
+def test_each_file_can_be_held_to_a_table_of_its_own(run, hardware_only_presets,
+                                                     table_for_shipped, tmp_path):
+    """One check per file, each with its own table: how a host keeps its record
+    beside the file it is about."""
+    own = _record_everything(tmp_path / "own.json", _written(hardware_only_presets))
+
+    assert run("check", "--presets-file", SHIPPED, "--provenance", str(table_for_shipped)).exit_code == 0
+    assert run("check", "--presets-file", str(hardware_only_presets), "--provenance", str(own)).exit_code == 0
+
+def test_the_variables_files_are_held_to_the_table_too(run, monkeypatch, hardware_only_presets,
+                                                       table_for_shipped):
+    """With no --presets-file, check reads the search path, so a file on
+    CASTOR_PRESETS_PATH is part of what the table must cover. Naming the shipped
+    file sets the variable aside, as it does for every command."""
+    monkeypatch.setenv(presets.PATH_VARIABLE, str(hardware_only_presets))
+
+    result = run("check", "--provenance", str(table_for_shipped))
+
+    assert result.exit_code == 3
+    assert "bare_scope.telescopes.T.primary_mirror_diameter" in [
+        problem.split(":")[0] for problem in _problems(result)]
+    assert run("check", "--presets-file", SHIPPED, "--provenance", str(table_for_shipped)).exit_code == 0
+
+def test_a_later_file_is_vouched_for_as_written(run, hardware_only_presets, tmp_path):
+    """Merging goes through presets.document(), not the loaded catalogue, so a
+    second file's quoted number is still compared as the file spells it."""
+    data = json.loads(hardware_only_presets.read_text())
+    data["profiles"]["bare_scope"]["telescopes"]["T"]["telescope"]["focal_length"] = "8.0"
+    hardware_only_presets.write_text(json.dumps(data))
+    merged = _written(SHIPPED, hardware_only_presets)
+    merged["bare_scope"]["telescopes"]["T"]["telescope"]["focal_length"] = 8.0
+    table = _record_everything(tmp_path / "provenance.json", merged)
+
+    result = run("check", "--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets),
+                 "--provenance", str(table))
+
+    assert _problems(result) == [
+        "bare_scope.telescopes.T.focal_length: the file holds '8.0' but its record vouches for 8.0"]
+
+def test_borrowed_hardware_is_recorded_once_under_its_owner(run, lulin, hardware_only_presets,
+                                                            tmp_path):
+    """PROFILE/KEY borrows an entry when a configuration is chosen and copies
+    nothing into a file. Lulin running bare_scope's rig needs no record under
+    lulin, and a record written there vouches for a number no file holds."""
+    files = ["--presets-file", SHIPPED, "--presets-file", str(hardware_only_presets)]
+    table = _record_everything(tmp_path / "provenance.json", _written(SHIPPED, hardware_only_presets))
+
+    borrowed = run(*lulin, *files, "--telescope", "bare_scope/T", "--camera", "bare_scope/C",
+                   "--filter", "bare_scope/F")
+    assert borrowed.exit_code == 0, borrowed.stderr
+    assert run("check", *files, "--provenance", str(table)).exit_code == 0
+
+    records = json.loads(table.read_text(encoding="utf-8"))
+    records["lulin.telescopes.bare_scope/T.focal_length"] = [
+        8.0, provenance.DOCUMENT, "copied from bare_scope's own record"]
+    table.write_text(json.dumps(records), encoding="utf-8")
+
+    result = run("check", *files, "--provenance", str(table))
+
+    assert result.exit_code == 3
+    assert _problems(result) == [
+        "lulin.telescopes.bare_scope/T.focal_length: the table records 8.0 "
+        "for a number the file does not hold"]

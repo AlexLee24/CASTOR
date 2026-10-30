@@ -68,8 +68,8 @@ flowchart TD
 
 ##### A. Core Computational Engine
 
-* **Two calculation modes:** Calculating SNR from a specified exposure count, or solving for the count that reaches a target SNR. The solve accounts for the correlated background-flatness floor and reports a target above that floor's ceiling as unreachable.
-* **Metric Generation:** Returning source and sky count rates, pixel scale, SNR, and a saturation flag. The caller can derive total integration time from frame count and single-frame duration; readout overhead is not included.
+* **Two calculation modes:** Calculating SNR from a specified exposure count, or solving for the count that reaches a target SNR with an exact analytical quadratic solver. The solve accounts for the correlated background-flatness floor and reports a target above that floor's ceiling as unreachable.
+* **Metric Generation:** Computing total integration time (readout overhead is not included), each noise contributor separately (source, sky, dark current, read noise, background flatness), electron count rates (source/sky), pixel scale, and sensor saturation flags.
 
 ##### B. Data Contract & Batch Orchestration
 
@@ -130,7 +130,7 @@ src/
 │   ├── schema.py           # Data Contracts & Mutex Validation
 │   ├── moon.py             # Astropy-Based Ephemeris, Lunar & Zodiacal Sky Brightness
 │   └── physics.py          # Pure Mathematical & Optical Physics Engine
-├── castorCLI/          # command line + the preset reader  -> cli.md, presets.md
+├── castorCLI/          # command line, the preset reader and its provenance check  -> cli.md, presets.md
 └── castorGUI/          # browser and desktop UI            -> gui_architecture.md
 ```
 
@@ -138,6 +138,10 @@ src/
 presets are deliberately out of scope for `castor/` (§1.3), and a host with its own
 hardware database — Kinder is one — has no use for a reader of this repository's
 JSON file. Putting it in the engine would make it dead weight there.
+`castorCLI/provenance.py`, the check that every preset number says where it came
+from, sits beside it for the same reason. A host that writes preset files of its
+own instead can have them read beside the shipped one
+([presets](presets.md#several-files)); the engine sees none of it either way.
 
 ### Module Responsibilities
 
@@ -351,9 +355,13 @@ is a `BatchObservationResponse`.
 
 The response strictly avoids UI-specific formatting, presentation layers, or plotting objects, focusing purely on returning raw mathematical value and physical metrics. The output is logically grouped into the following categories:
 
-* **Core metrics:** Single-frame and total SNR, and in solve-for-time mode the required frame count, the flatness SNR ceiling, and whether the target is reachable. The result also includes saturation and noise-crossover times.
-* **Rates and diagnostics:** Source and sky electron rates, effective area, pixel scale, throughput, aperture geometry, and related quantities.
-* **Flags:** Saturation and model warnings. Elapsed observation time, including readout overhead, is not returned.
+* **Core Solved Metrics** (`core`): Single-frame and total SNR, and in solve-for-time mode the required frame count, the flatness SNR ceiling, and whether the target is reachable; alongside the saturation limit, the background/read-noise crossover time with the $k$ it was solved for (`options.background_dominance_factor`, echoed; ATBD §4.3.5), and the total integration time ($t_{\text{single}} \cdot N_{\text{exp}}$; integration only, since readout overhead is not modelled — `validation/QUESTIONS.md` 11). For an unreachable target there is no frame count, so the total integration time is `null`.
+* **Secondary Diagnostics** (`budget`, `diagnostics`): Intermediate physical values computed during calculation — the source, sky and peak-pixel count rates, and the optical and environmental values they were derived from, including the airmass and sky surface brightness actually used.
+* **Noise Budget** (`noise`): The signal and each variance term behind both SNRs (ATBD §4.3.6), for one frame and for the stack. `signal / sqrt(total_variance)` reproduces each SNR exactly, so a caller can chart the breakdown or combine frames without re-deriving the CCD equation from the rates. For an unreachable target there is no stack, so `noise.total` is `null`.
+* **Ephemeris** (`ephemeris`): Where the target and the moon were — elevations, lunar phase angle and separation. The target elevation is not clamped, so a target below the horizon reads as such rather than only as a large airmass.
+* **System Metadata** (`flags`): Domain-specific warning messages and the saturation flag.
+
+The time-series response (`BatchObservationResponse`) carries the same categories as one list per timestamp. Its `diagnostics` hold only the two values that move during a series, the airmass and the sky surface brightness; the rest are fixed for the whole series. It does not carry the flatness ceiling's two fields: a timestamp whose target is unreachable is a `null` gap in `required_exposures`, `total_exp_time` and every `noise.total` list, plus a warning. Its request's options take the same `background_dominance_factor` a single request's do, so each step's crossover time, and the $k$ echoed beside it, are what a single request at that instant returns, as long as `instrument.throughput_correction` is 1.0 — the batch path does not apply it yet, so with any other value its sky rate, and with it $t_{\text{opt}}$, differ (`tests/test_batch_calculator.py::test_a_batch_step_is_the_single_request_at_that_instant` pins it to 1.0 for this reason). Every block is filled on every run, and blocks added later are appended after the existing ones, so a dump keeps its existing keys in their order.
 
 ## 6. Open work
 
