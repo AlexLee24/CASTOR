@@ -4,7 +4,7 @@
 
 ### 1.1 Product Identity
 
-CASTOR GUI is the reference interface for the [CASTOR](architecture.md) exposure time calculator engine. It gives astronomers a form-driven UI for building an observation request (instrument, target, environment, calculation strategy), running the calculation live, and reading back the results — without writing any code or touching `castor.schema` directly.
+CASTOR GUI is the reference interface for the [CASTOR](architecture.md) exposure time calculator engine. It gives astronomers a form-driven UI for building an observation request (instrument, target, environment, calculation strategy), running the calculation, and reading back the results — without writing any code or touching `castor.schema` directly.
 
 It is plain HTML, CSS and JavaScript ([`src/castorGUI/frontend/`](../src/castorGUI/frontend/)), served either by its own small development host or by whatever site embeds it. That choice is the product decision, not an implementation detail: CASTOR GUI is meant to be **mounted inside [Kinder](https://kinder.astro.ncu.edu.tw)**, a Flask/Jinja astronomy portal with no frontend build step, and a plain HTML fragment is the only shape that a Jinja template can include natively. See [`frontend/README.md`](../src/castorGUI/frontend/README.md) for the host contract.
 
@@ -56,7 +56,7 @@ flowchart TD
 
 **Chrome vs. content ownership.** Kinder owns the outer site chrome — nav bar, routing, page title, page background, and how much vertical room the calculator gets. CASTOR GUI owns the content area and nothing outside it: every CSS rule is scoped under `.castor-etc`.
 
-Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.css` defines `--kw-accent: #C5A059`, `--kw-border`, `--kw-space-*` and the rest; [`etc.css`](../src/castorGUI/frontend/css/etc.css) reads those variables with its own fallbacks, so mounted it inherits the site's theme and standalone it still renders correctly on its own.
+Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.css` defines `--kw-accent` (orange, `#F39F5A`), `--kw-border`, `--kw-space-*` and the rest; [`etc.css`](../src/castorGUI/frontend/css/etc.css) reads those variables, so mounted it inherits the site's theme. Its fallbacks are Kinder's own values, so standalone looks the same; they are a copy and need updating when Kinder's theme changes. The Calculate button is Kinder's plain tool button (`.kw-btn`), rule for rule.
 
 #### In Scope for CASTOR GUI
 
@@ -65,11 +65,15 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 * **Domain-Driven Form:** Four freely-switchable tabs — Instrument, Target, Environment, Options — mirroring the engine's four request pillars. Every `<input name="...">` is a dotted path matching `castor.schema`'s nested shape, so the request payload is built by walking the form rather than by naming each field twice.
 * **Observing Setup:** Four selectors from [`data/presets.json`](../src/castorGUI/data/presets.json) — site, telescope, camera, filter. A site owns all three hardware catalogues, since an observatory has the instruments it has and its filter wheel holds what it holds; that is why the site selector comes first and what makes it narrow the other three. Selecting it also fills in the site's coordinates, `mu_dark` and extinction, which is the cross-tab fill-in those live together for. Within a site the three stay independent of one another, because cameras do get moved between telescopes. The calculator opens on the first entry in each catalogue rather than on Custom, so it starts from a real, named configuration instead of anonymous numbers.
 * **Progressive disclosure:** Each selector owns the collapsed `<details>` directly beneath it, holding exactly the fields that selector writes; a summary line below them states what was applied (aperture, focal length, f/ratio, pixel pitch, QE, read noise). Once a telescope has been chosen by name its individual numbers are something to check on demand, not to read past every time. Setting a selector to Custom opens its own panel and only its own, since those fields are then the only way to say anything. The fields stay in the DOM and in the payload while closed — `<details>` hides, it does not disable.
-* **Save / Load:** Serializing the form to/from JSON.
+* **Image FWHM:** One field named `environment.total_fwhm`, using the engine's definition in [ATBD §4.1.2](ATBD.md#412-spatial-resolution). No component estimator is offered by this form.
+* **Moonlight:** `environment.auto_calc_background` is a checkbox on the `mu_dark` label row, because it changes what that number means: off, the whole sky; on, the baseline with moonlight layered over it. A time sweep always includes moonlight, so while sweeping the checkbox is replaced by a note and its value is kept for when the sweep is off.
+* **Save / Load:** Serializing the form to/from JSON. LOAD requires `environment.total_fwhm` before applying any fields, so a file using the former component contract cannot silently retain the current form's unrelated width. Such a file is rewritten in the dialog with the quadrature sum of its four components, the width the old engine computed, and applied only when Import is pressed again.
 
-##### B. Live Calculation & Results Display
+##### B. Calculation & Results Display
 
-* **Recalculate on every edit:** No submit button, no gated wizard. Edits are debounced, and each request family cancels its own predecessor so a slow earlier response cannot land after a fast later one and overwrite it.
+* **Calculate on request:** One Calculate button, pinned under the form so it is reachable from any tab; Enter in any field does the same. The GUI used to recalculate on every edit. Users' feedback changed that: the numbers moved while a field was still half-typed, so nobody could tell an answer from an intermediate state. Still no gated wizard — the tabs stay freely switchable. A second click cancels the request in flight, so a slow earlier response cannot land after a later one and overwrite it.
+* **Results panel states:** Before the first calculation and while one is in flight, the CASTOR beaver stands in for the results, with a faint caption ("Waiting for input" / "Calculating…"). It stays up for at least 0.7 s, since a local run returns fast enough to make it a flicker. Editing the form after a result fades the numbers on show: they still answer the previous question, not the current one. The fade clears on the next Calculate. Whenever the numbers on show do not match the form, before the first run included, the Calculate button turns its border and text to the accent colour.
+* **Calculation goal:** Solve for SNR and Solve for Exposures are a segmented control (a radio group named `options.type`), so both choices stay visible and switching takes one click.
 * **Error & Warning Surfacing:** Pydantic `ValidationError`s and engine `ValueError`s become readable messages; physical-boundary warnings (saturation, high airmass) appear inline. On error the metric cards blank rather than leaving the last good run's numbers beside an error message.
 * **Observing Window:** When "Sweep time range" is on, `run_batch_calculation()` drives a three-panel Plotly chart (target/moon elevation, single-exposure SNR, saturation margin) sharing one time axis.
 
@@ -79,7 +83,7 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 
 #### Out of Scope for CASTOR GUI
 
-* **No Independent Calculations:** Every number displayed comes from an engine call. No formulas from `physics.py` or `moon.py` are duplicated here.
+* **No Independent Result Calculations:** The observation model stays in the engine; input preparation is the client's responsibility (§3.1).
 * **No Relaxed Validation:** Invalid input is rejected by the same `StrictModel` rules the engine enforces on any other caller.
 * **No Auth, No Multi-User State:** Accounts and sessions are the host's responsibility.
 * **No Backend of Its Own:** [`server.py`](../src/castorGUI/server.py) exists so the frontend can be developed and verified against a real HTTP host. It is a reference implementation of the route contract, not a production server — in production those routes are Kinder's.
@@ -91,7 +95,7 @@ src/castorGUI/
 ├── frontend/
 │   ├── etc_body.html    # The UI. Plain HTML fragment — no wrapper, no template syntax
 │   ├── css/etc.css      # All styling, scoped under .castor-etc
-│   ├── js/etc.js        # Controller: payload building, live recalc, presets, chart
+│   ├── js/etc.js        # Controller: payload building, calculation, presets, chart
 │   ├── js/plotly.min.js # Vendored so the standalone build works offline
 │   ├── index.html       # Standalone page shell
 │   └── README.md        # The host contract — read this before embedding
@@ -116,7 +120,12 @@ src/castorGUI/
 
 ### 3.1 Thin Client Over the Engine
 
-No physics, no independent validation. Every result traces to a single `run_calculation()` / `run_batch_calculation()` call, so the GUI and the engine can never silently disagree about a number.
+Count rates, noise, SNR, saturation and derived diagnostics come from a
+`run_calculation()` / `run_batch_calculation()` call, with validation owned by
+the schema. Preparing a required input belongs to the client: a frontend may
+choose to collect or estimate a total FWHM before building its request, without
+making component fields part of the engine contract. The shipped form's choice
+is documented under Request Building (§1.3).
 
 ### 3.2 Same Contract as Any External Caller
 
@@ -128,7 +137,7 @@ The mounted and standalone deployments are the same files, differing only in wha
 
 ### 3.4 Presets Describe, They Don't Presume
 
-A preset fills in what it actually knows, and no more. A site sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Each hardware selector writes only its own slice, so changing camera neither resets the telescope nor rewrites an `mu_dark` the observer tuned for the night. And `median_seeing_fwhm` is displayed but never applied: seeing describes the night being planned, not the site, and it is the field an observer is most likely to have set deliberately.
+A preset fills in what it actually knows, and no more. A site sets coordinates and sky; a hardware-only profile touches `instrument` alone, because inventing a location for a telescope model would silently produce wrong airmass and moon geometry. Each hardware selector writes only its own slice, so changing camera neither resets the telescope nor rewrites an `mu_dark` the observer tuned for the night. `median_seeing_fwhm` is displayed as reference information and never applied to the image FWHM field; a site median alone cannot specify that observation's stellar width.
 
 ## 4. Data Flow
 
@@ -140,8 +149,9 @@ sequenceDiagram
     participant Host as Host route<br/>(Kinder blueprint / server.py)
     participant Engine as castor (calculator.py /<br/>batch_calculator.py)
 
-    User->>UI: Edits a field
-    UI->>UI: Debounce, cancel the in-flight request
+    User->>UI: Edits fields (results on show fade)
+    User->>UI: Clicks Calculate
+    UI->>UI: Cancel the in-flight request, show the beaver
     UI->>UI: Walk the form into a request payload
     UI->>Host: POST /api/exposure_time_calculator
     Host->>Host: ObservationRequest.model_validate()
@@ -155,7 +165,7 @@ sequenceDiagram
         UI-->>User: Hero value, metric cards, warnings
     end
     opt Sweep time range is on
-        UI->>Host: POST .../batch (longer debounce)
+        UI->>Host: POST .../batch
         Host->>Engine: run_batch_calculation(request)
         Engine-->>Host: BatchObservationResponse
         Host-->>UI: 200 JSON

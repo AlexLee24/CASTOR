@@ -93,13 +93,20 @@ class PointMorphology(StrictModel):
     type: Literal["point"] = "point"
 
 class ExtendedMorphology(StrictModel):
+    """A uniform surface-brightness target.
+
+    Changes the meaning of every brightness field: an extended target's magnitude
+    is mag/arcsec² and its flux density is per arcsec², scaled by the aperture area
+    in physics.calculate_extended_source_rate. A total magnitude given here is
+    silently wrong, not rejected.
+    """
     type: Literal["extended"] = "extended"
 
 class VegaMagnitude(StrictModel):
     type: Literal["vega_mag"] = "vega_mag"
     target_mag: float = Field(
         ..., 
-        description="Apparent magnitude of the observation target in the Vega system. (ATBD: m_target)"
+        description="Apparent magnitude of the observation target in the Vega system; mag/arcsec² for an extended target. (ATBD: m_target)"
     )
     zero_point_flux: PositiveFloat = Field(
         ..., 
@@ -110,21 +117,21 @@ class ABMagnitude(StrictModel):
     type: Literal["ab_mag"] = "ab_mag"
     target_mag: float = Field(
         ..., 
-        description="Apparent magnitude of the observation target in the AB system (0 mag = 3631 Jy)."
+        description="Apparent magnitude of the observation target in the AB system (0 mag = 3631 Jy); mag/arcsec² for an extended target."
     )
 
 class JanskyFlux(StrictModel):
     type: Literal["jansky_flux"] = "jansky_flux"
     flux_value: PositiveFloat = Field(
         ..., 
-        description="Frequency flux density (F_nu) in Jansky (Jy)."
+        description="Frequency flux density (F_nu) in Jansky (Jy); Jy/arcsec² for an extended target."
     )
 
 class WavelengthFlux(StrictModel):
     type: Literal["wavelength_flux"] = "wavelength_flux"
     flux_value: PositiveFloat = Field(
         ..., 
-        description="Wavelength flux density (F_lambda) in erg/s/cm²/Å."
+        description="Wavelength flux density (F_lambda) in erg/s/cm²/Å; per arcsec² for an extended target."
     )
 
 class FlatSED(StrictModel):
@@ -137,7 +144,7 @@ class TargetProfile(StrictModel):
     morphology: Annotated[Union[PointMorphology, ExtendedMorphology], Field(discriminator="type")]
     brightness: Annotated[
         Union[VegaMagnitude, ABMagnitude, JanskyFlux, WavelengthFlux], 
-        Field(discriminator="type", description="Brightness definition and zero-point reference.")
+        Field(discriminator="type", description="Brightness definition and zero-point reference. Per arcsec² when morphology is extended.")
     ]
     sed: Annotated[Union[FlatSED, TempSED], Field(discriminator="type")]
 
@@ -213,21 +220,15 @@ class EnvironmentCondition(StrictModel):
         description="Atmospheric attenuation per unit airmass in mag/airmass. (ATBD: k_ext)"
     )
     
-    seeing_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Atmospheric seeing FWHM in arcseconds. (ATBD: FWHM_See)"
-    )
-    diffraction_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Diffraction limit FWHM in arcseconds. (ATBD: FWHM_Dif)"
-    )
-    optical_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Optical aberrations FWHM in arcseconds. (ATBD: FWHM_Opt)"
-    )
-    tracking_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Tracking error FWHM in arcseconds. (ATBD: FWHM_Trk)"
+    total_fwhm: PositiveFloat = Field(
+        ...,
+        allow_inf_nan=False,
+        description=(
+            "Expected or measured stellar image FWHM in arcseconds for this setup and "
+            "observing conditions, including atmospheric and instrumental spreading. "
+            "Supplied by the caller; no further seeing, diffraction, optical or tracking "
+            "terms are added. (ATBD: FWHM_tot, Section 4.1.2)"
+        )
     )
 
 class SkyAnnulus(StrictModel):
@@ -302,7 +303,7 @@ class ObservationRequest(StrictModel):
     )
     environment: EnvironmentCondition = Field(
         ..., 
-        description="Environmental parameters including observer location, time, atmospheric conditions, and seeing FWHM. (Ref: ATBD Section 3.3)"
+        description="Environmental parameters including observer location, time, atmospheric conditions, and total image FWHM. (Ref: ATBD Section 3.3)"
     )
     options: CalculationOptions = Field(
         ..., 
@@ -369,7 +370,7 @@ class SignalNoiseBudget(StrictModel):
 class PhysicalDiagnostics(StrictModel):
     total_fwhm: float = Field(
         ..., 
-        description="Total spatial spreading incorporating seeing, diffraction, optical, and tracking errors. (ATBD: FWHM_tot) [arcsec]"
+        description="Caller-supplied stellar image FWHM used in this calculation. (ATBD: FWHM_tot) [arcsec]"
     )
     effective_area: float = Field(
         ..., 
@@ -461,10 +462,14 @@ class TimeSeriesEnvironment(StrictModel):
         description="Atmospheric attenuation per unit airmass in mag/airmass."
     )
 
-    seeing_fwhm: PositiveFloat = Field(..., description="Atmospheric seeing FWHM in arcseconds.")
-    diffraction_fwhm: PositiveFloat = Field(..., description="Diffraction limit FWHM in arcseconds.")
-    optical_fwhm: PositiveFloat = Field(..., description="Optical aberrations FWHM in arcseconds.")
-    tracking_fwhm: PositiveFloat = Field(..., description="Tracking error FWHM in arcseconds.")
+    total_fwhm: PositiveFloat = Field(
+        ...,
+        allow_inf_nan=False,
+        description=(
+            "Stellar image FWHM in arcseconds, held constant across the time series. "
+            "Same definition as EnvironmentCondition.total_fwhm. (ATBD: FWHM_tot)"
+        )
+    )
 
 class BatchBaseOptions(StrictModel):
     aperture_factor: PositiveFloat = Field(

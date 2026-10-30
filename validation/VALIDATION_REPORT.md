@@ -332,7 +332,7 @@ all surface. `test_solve_time_floor.py` is a passing regression.
 SLT carries a measured 2% correlated background residual. Sophia currently
 carries zero, meaning unmeasured rather than absent, so the long-integration
 LOT/SLT gap is partly a model-completeness gap. The atlas is also conditional
-on one pointing, 1.4 arcsec seeing, 120 s frames, the top-hat passbands and the
+on one pointing, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms), 120 s frames, the top-hat passbands and the
 site-wide extinction fallback. It is a planning baseline, not an empirical
 limiting-magnitude claim.
 
@@ -515,7 +515,7 @@ that never meets it.
 
 ### Concrete result
 
-Standard case: SLT/DU934P, AB=20 point source, 120 s frames, 1.4 arcsec seeing,
+Standard case: SLT/DU934P, AB=20 point source, 120 s frames, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms),
 0.85xFWHM aperture, 3–5xFWHM median annulus, the Lulin preset's own sky, target
 near zenith, and requested SNR 20.
 
@@ -610,7 +610,7 @@ exposure solver audited in the solve-for-time section.
 
 ### Standard scene
 
-Point source, AB magnitudes, g'/r'/i', 120 s sub-exposures, 1.4 arcsec seeing,
+Point source, AB magnitudes, g'/r'/i', 120 s sub-exposures, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms),
 0.85xFWHM aperture, 3–5xFWHM median sky annulus, fixed target near zenith at
 Lulin, no lunar term, and each filter's current preset sky and throughput.
 
@@ -639,7 +639,7 @@ limit. Dark current is negligible in these particular 120 s cases.
 
 These are conditional model predictions, not measured limiting magnitudes or
 uncertainty intervals. They use the current top-hat filters, one pointing, one
-seeing value and the site-wide 0.17 extinction fallback. Readout overhead is
+image FWHM and the site-wide 0.17 extinction fallback. Readout overhead is
 not modelled. Saturation uses the preset physical full well; LOT frames in the
 end-to-end night actually hit their 16-bit ADC ceiling near 60,292 e-, so the
 bright boundary in the CSV is optimistic for that operating mode.

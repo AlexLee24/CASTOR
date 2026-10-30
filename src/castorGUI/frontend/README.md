@@ -119,3 +119,8 @@ Two of these are easy to trip over when editing the form:
   engine. It is deliberately a superset of a valid request — every branch of
   every discriminated union keeps its value — which is why it is read back
   through the form rather than posted straight to the API.
+- **Image FWHM is required on LOAD.** A file without `environment.total_fwhm`
+  cannot inherit the current form's value. One holding the former four
+  components is rewritten in the dialog with their quadrature sum, the width the
+  old engine used, and applied only on a second Import. The definition is in
+  [ATBD §4.1.2](../../../docs/ATBD.md#412-spatial-resolution).

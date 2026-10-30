@@ -13,7 +13,6 @@ __all__ = [
     "calculate_photon_energy",
     "calculate_total_throughput",
     "calculate_pixel_scale",
-    "calculate_total_fwhm",
     "calculate_aperture_geometry",
     "calculate_sky_estimate_pixels",
     "convert_ab_to_wavelength_flux",
@@ -158,37 +157,6 @@ def calculate_pixel_scale(
     # Convert pixel_pitch from µm to m (1 µm = 1e-6 m)
     pixel_pitch_m = pixel_pitch_um * 1e-6
     return ARCSEC_PER_RADIAN * (pixel_pitch_m / focal_length_m)
-
-def calculate_total_fwhm(
-    seeing_fwhm: Numeric,
-    diffraction_fwhm: Numeric,
-    optical_fwhm: Numeric,
-    tracking_fwhm: Numeric
-) -> Numeric:
-    """
-    Calculate the total spatial spreading (FWHM_tot) by quadrature sum.
-
-    Corresponds to ATBD Section 4.1.2: FWHM_tot = sqrt(See² + Dif² + Opt² + Trk²).
-
-    Parameters
-    ----------
-    seeing_fwhm : Numeric
-        Atmospheric seeing FWHM [arcsec].
-    diffraction_fwhm : Numeric
-        Diffraction limit FWHM [arcsec].
-    optical_fwhm : Numeric
-        Optical aberrations FWHM [arcsec].
-    tracking_fwhm : Numeric
-        Telescope tracking error FWHM [arcsec].
-
-    Returns
-    -------
-    Numeric
-        Total FWHM (FWHM_tot) [arcsec].
-    """
-    return np.sqrt(
-        seeing_fwhm**2 + diffraction_fwhm**2 + optical_fwhm**2 + tracking_fwhm**2
-    )
 
 def calculate_aperture_geometry(
     aperture_factor: Numeric,

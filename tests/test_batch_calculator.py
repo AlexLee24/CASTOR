@@ -66,8 +66,8 @@ def batch_base_request():
             time_step_minutes=10.0, # Compute once every 10 minutes
             mu_dark=21.5,
             extinction_coeff=0.17,
-            # Lesson learned last time — use 0.1 here to satisfy PositiveFloat
-            seeing_fwhm=1.5, diffraction_fwhm=0.1, optical_fwhm=0.1, tracking_fwhm=0.1 
+            # Preserve the former four-component budget as one caller-supplied width.
+            total_fwhm=(1.5 ** 2 + 0.1 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5
         ),
         options=schema.BatchSolveForTime(
             aperture_factor=1.5, single_exp_time=300.0, target_snr=100.0
@@ -77,6 +77,31 @@ def batch_base_request():
 # ==========================================
 # Test cases
 # ==========================================
+
+@pytest.mark.parametrize("total_fwhm", [0.8, 2.4])
+def test_batch_and_single_use_the_same_image_width(batch_base_request, total_fwhm):
+    """One timestamp with the same inputs must give the same SNR and saturation."""
+    from castor.calculator import run_calculation
+
+    batch_base_request.environment.total_fwhm = total_fwhm
+    batch_base_request.environment.end_time_utc = batch_base_request.environment.start_time_utc
+    batch_base_request.options = schema.BatchSolveForSNR(
+        aperture_factor=0.85, single_exp_time=120.0, num_exposures=1,
+        sky_annulus=schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0)
+    )
+    data = batch_base_request.model_dump()
+    env = data["environment"]
+    env["observing_time_utc"] = env.pop("start_time_utc")
+    del env["end_time_utc"], env["time_step_minutes"]
+    env["auto_calc_background"] = True
+
+    single = run_calculation(schema.ObservationRequest.model_validate(data))
+    batch = run_batch_calculation(batch_base_request)
+
+    assert single.diagnostics.total_fwhm == total_fwhm
+    assert batch.core.single_snr == pytest.approx([single.core.single_snr])
+    assert batch.core.total_snr == pytest.approx([single.core.total_snr])
+    assert batch.core.saturation_time_limit == pytest.approx([single.core.saturation_time_limit])
 
 def test_expand_time_series():
     """Ensure the time-expansion helper works correctly and has a bound in place"""
@@ -182,7 +207,7 @@ def test_batch_pipeline_warning_flag(mock_moon_batch, batch_base_request):
 
 def test_batch_pipeline_real_astropy_path(batch_base_request):
     """
-    Deliberately does NOT use mock_moon_batch: every other test in this file mocks
+    Deliberately does NOT use mock_moon_batch: most pipeline tests in this file mock
     castor.moon out entirely, which means the real astropy call path
     (moon.get_moon_and_target_geometry -> astropy.time.Time(..., format="isot") and
     moon.calculate_sky_brightness's full argument list) was never actually exercised

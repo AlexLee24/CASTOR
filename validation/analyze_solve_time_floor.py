@@ -58,10 +58,7 @@ def request_for(telescope: str, camera: str, filter_id: str, magnitude: float, t
     data["environment"].update({
         "observing_time_utc": OBSERVING_TIME,
         "auto_calc_background": False,
-        "seeing_fwhm": 1.4,
-        "diffraction_fwhm": 0.2,
-        "optical_fwhm": 0.1,
-        "tracking_fwhm": 0.1,
+        "total_fwhm": (1.4 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5,
     })
     data["options"] = {
         "type": "solve_time",
@@ -305,7 +302,7 @@ that never meets it.
 
 ## Concrete result
 
-Standard case: SLT/DU934P, AB=20 point source, 120 s frames, 1.4 arcsec seeing,
+Standard case: SLT/DU934P, AB=20 point source, 120 s frames, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms),
 0.85xFWHM aperture, 3–5xFWHM median annulus, the Lulin preset's own sky, target
 near zenith, and requested SNR 20.
 

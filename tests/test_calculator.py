@@ -1,3 +1,4 @@
+import math
 import pytest
 from datetime import datetime, timezone
 
@@ -66,7 +67,7 @@ def base_request():
             auto_calc_background=False,
             mu_dark=21.5,
             extinction_coeff=0.17,
-            seeing_fwhm=1.5, diffraction_fwhm=0.1, optical_fwhm=0.1, tracking_fwhm=0.1
+            total_fwhm=(1.5 ** 2 + 0.1 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5
         ),
         # Defaults to mode B: given a target SNR, solve backward for the number of exposures needed
         options=schema.SolveForTime(
@@ -77,6 +78,18 @@ def base_request():
 # ==========================================
 # Test cases: pipeline assembly and routing verification
 # ==========================================
+
+@pytest.mark.parametrize("total_fwhm", [0.8, 2.4])
+def test_image_fwhm_is_used_without_additional_spreading(mock_moon, base_request, total_fwhm):
+    """A measured width already includes the instrument's contribution."""
+    base_request.environment.total_fwhm = total_fwhm
+    response = run_calculation(base_request)
+    diag = response.diagnostics
+
+    assert diag.total_fwhm == total_fwhm
+    assert diag.num_pixels_aperture == pytest.approx(
+        math.pi * (base_request.options.aperture_factor * total_fwhm / diag.pixel_scale) ** 2
+    )
 
 def test_pipeline_point_solve_time(mock_moon, base_request):
     """

@@ -100,9 +100,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         inst.camera.quantum_efficiency
     )) * inst.throughput_correction
     pixel_scale = float(physics.calculate_pixel_scale(inst.camera.pixel_pitch, inst.telescope.focal_length))
-    total_fwhm = float(physics.calculate_total_fwhm(
-        env.seeing_fwhm, env.diffraction_fwhm, env.optical_fwhm, env.tracking_fwhm
-    ))
+    total_fwhm = env.total_fwhm
     
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)

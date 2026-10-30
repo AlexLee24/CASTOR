@@ -14,7 +14,7 @@ that never meets it.
 
 ## Concrete result
 
-Standard case: SLT/DU934P, AB=20 point source, 120 s frames, 1.4 arcsec seeing,
+Standard case: SLT/DU934P, AB=20 point source, 120 s frames, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms),
 0.85xFWHM aperture, 3–5xFWHM median annulus, the Lulin preset's own sky, target
 near zenith, and requested SNR 20.
 

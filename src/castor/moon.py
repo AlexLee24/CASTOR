@@ -53,7 +53,7 @@ Numeric: TypeAlias = float | NDArray[np.float64]
 # pointing. It bites on the exact thing an exposure time calculator is for:
 # planning a night more than a month out, offline. None here means "extrapolate
 # and warn" instead of "raise" — astropy's own fallback is a 50-year polar-motion
-# mean, good to the arcsecond, which is well inside seeing_fwhm for any target this
+# mean, good to the arcsecond, which is well inside total_fwhm for any target this
 # reaches. This is a process-wide astropy setting, so it is set once at import time
 # rather than per call.
 iers.conf.auto_max_age = None
