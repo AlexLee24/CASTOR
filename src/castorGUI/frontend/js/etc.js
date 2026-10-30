@@ -700,9 +700,23 @@
     var resultsPanel = el('results-panel');
     var calcButton = el('btn-calculate');
 
+    /* A local run comes back in a few tens of milliseconds, which made the beaver a
+       flicker. Holding it this long reads as "it ran" rather than as a glitch. */
+    var BEAVER_MIN_MS = 700;
+    var busySince = 0;
+    var busyHoldTimer = null;
+
     function setSingleBusy(active) {
-        resultsPanel.classList.toggle('is-busy', active);
-        el('beaver-status').textContent = active ? 'Calculating…' : '';
+        clearTimeout(busyHoldTimer);
+        if (active) {
+            busySince = Date.now();
+            resultsPanel.classList.add('is-busy');
+            el('beaver-status').textContent = 'Calculating…';
+            return;
+        }
+        busyHoldTimer = setTimeout(function () {
+            resultsPanel.classList.remove('is-busy');
+        }, Math.max(0, BEAVER_MIN_MS - (Date.now() - busySince)));
     }
 
     function markStale() {

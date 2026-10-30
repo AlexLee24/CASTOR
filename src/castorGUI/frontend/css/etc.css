@@ -477,8 +477,10 @@
     position: absolute;
     inset: 0;
     display: none;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 16px;
     pointer-events: none;
 }
 .castor-etc .etc-beaver::before {
@@ -488,6 +490,13 @@
     /* Resolved against this stylesheet, so it holds in any host that serves
        css/ and img/ side by side — which both hosts do. */
     background: url("../img/castor-logo-white.png") center / contain no-repeat;
+}
+.castor-etc .etc-beaver-caption {
+    /* The section titles' size and weight, in the muted colour. */
+    color: var(--etc-text-muted);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
 }
 .castor-etc .is-idle > .etc-beaver,
 .castor-etc .is-busy > .etc-beaver { display: flex; }
@@ -506,15 +515,6 @@
    question, no longer to this one. */
 .castor-etc .etc-results-scroll { transition: opacity 0.15s ease; }
 .castor-etc .is-stale > .etc-results-scroll { opacity: 0.35; }
-
-.castor-etc .etc-visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-}
 
 .castor-etc .etc-hero { text-align: center; }
 .castor-etc .etc-hero-label {
