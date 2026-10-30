@@ -6,11 +6,10 @@
    Kinder points it at its own Flask blueprint; the standalone server.py points
    it at the identical paths it serves itself.
 
-   Interaction model: four freely switchable tabs, no submit button, every edit
-   recalculates. Recalculating over the network is what makes that last part
-   delicate — a slow earlier response can land after a fast later one and
-   overwrite it, so each request family keeps a single AbortController and
-   cancels its own predecessor.
+   Interaction model: four freely switchable tabs and one Calculate button.
+   Edits only fade the results already on show; the button runs the request.
+   Each request family keeps a single AbortController and cancels its own
+   predecessor, so a slow earlier response can never land after a later one.
 ============================================================================ */
 (function () {
     'use strict';
@@ -20,16 +19,6 @@
         batchUrl: '/api/exposure_time_calculator/batch',
         presetsUrl: '/api/exposure_time_calculator/presets'
     }, window.CASTOR_ETC_CONFIG || {});
-
-    // Single-point is cheap; batch runs astropy ephemeris over the whole window,
-    // so it waits longer before firing (same split as app.py's BATCH_DEBOUNCE).
-    var SINGLE_DEBOUNCE_MS = 250;
-    var BATCH_DEBOUNCE_MS = 500;
-
-    // How long a single-point request may be in flight before the "Updating…" cue
-    // appears. Long enough that a fast response never flashes it, short enough that a
-    // slow one shows feedback before the wait reads as a freeze.
-    var BUSY_GRACE_MS = 200;
 
     var root = document.getElementById('castor-etc');
     var form = document.getElementById('castor-form');
@@ -95,6 +84,8 @@
 
         _read: function (input) {
             if (input.type === 'checkbox') { return input.checked; }
+            // Every radio in a group carries the shared name; only the checked one speaks.
+            if (input.type === 'radio') { return input.checked ? input.value : null; }
             if (input.type === 'datetime-local') {
                 if (!input.value) { return null; }
                 var d = new Date(input.value);   // parsed as local wall-clock time
@@ -349,7 +340,7 @@
             return;
         }
 
-        var accent = themeColor('--etc-accent', '#C5A059');
+        var accent = themeColor('--etc-accent', '#F39F5A');
         var moon = themeColor('--etc-moon', '#6FA8DC');
         var warning = themeColor('--etc-warning', '#fbbf24');
         var sun = themeColor('--etc-sun', '#8f8fa8');
@@ -691,65 +682,78 @@
     }
 
     // ========================================================================
-    // Scheduling — debounce + cancel-the-predecessor
+    // Scheduling — run on Calculate, cancel-the-predecessor
     // ========================================================================
 
-    /* Shows the "Updating…" cue while a single-point request is outstanding, but only
-       once it has been outstanding for BUSY_GRACE_MS — the common fast response settles
-       first and never flashes it. Cleared the instant a result or an error lands. */
-    var busyGraceTimer = null;
+    /* Calculation runs when asked, not on every edit. Recalculating live meant the
+       numbers kept moving while a field was still half-typed, and a reader could not
+       tell an answer from an intermediate state; a button makes "this is the result
+       for what I entered" an explicit moment.
+
+       The results panel is in one of three states, kept as classes on it:
+         is-idle   nothing has been calculated yet
+         is-busy   the single-point request is in flight
+         is-stale  the form has changed since the numbers on show were computed
+       The first two show the beaver in place of the results; the third fades them,
+       since they still answer the previous question but no longer this one. While
+       idle or stale the Calculate button carries is-due and takes the accent. */
+    var resultsPanel = el('results-panel');
+    var calcButton = el('btn-calculate');
+
     function setSingleBusy(active) {
-        clearTimeout(busyGraceTimer);
-        if (active) {
-            busyGraceTimer = setTimeout(function () { el('results-busy').hidden = false; }, BUSY_GRACE_MS);
-        } else {
-            el('results-busy').hidden = true;
-        }
+        resultsPanel.classList.toggle('is-busy', active);
+        el('beaver-status').textContent = active ? 'Calculating…' : '';
     }
 
-    function makeRunner(delay, buildBody, url, onResult, onBusy) {
-        var timer = null;
+    function markStale() {
+        if (resultsPanel.classList.contains('is-idle')) { return; }
+        resultsPanel.classList.add('is-stale');
+        calcButton.classList.add('is-due');
+    }
+
+    function makeRunner(buildBody, url, onResult, onBusy) {
         var controller = null;
 
-        return function schedule() {
-            clearTimeout(timer);
-            timer = setTimeout(function () {
-                if (controller) { controller.abort(); }
-                controller = new AbortController();
-                var mine = controller;
+        return function run() {
+            // A second click while the first is still out supersedes it.
+            if (controller) { controller.abort(); }
+            controller = new AbortController();
+            var mine = controller;
 
-                var body;
-                try {
-                    body = buildBody();
-                } catch (err) {
-                    onResult(null, err.message);
-                    return;
-                }
+            var body;
+            try {
+                body = buildBody();
+            } catch (err) {
+                onResult(null, err.message);
+                return;
+            }
 
-                if (onBusy) { onBusy(true); }
-                postJSON(url, body, mine.signal).then(function (data) {
-                    if (mine.signal.aborted) { return; }
-                    onResult(data, null);
-                }).catch(function (err) {
-                    if (err.name === 'AbortError') { return; }
-                    onResult(null, err.message);
-                }).then(function () {
-                    // Clear busy only for the request that is still current. A superseded
-                    // one was aborted by its successor, which has already turned the cue
-                    // back on — clearing it here would hide the wait that is still running.
-                    if (onBusy && !mine.signal.aborted) { onBusy(false); }
-                });
-            }, delay);
+            if (onBusy) { onBusy(true); }
+            postJSON(url, body, mine.signal).then(function (data) {
+                if (mine.signal.aborted) { return; }
+                onResult(data, null);
+            }).catch(function (err) {
+                if (err.name === 'AbortError') { return; }
+                onResult(null, err.message);
+            }).then(function () {
+                // Clear busy only for the request that is still current. A superseded
+                // one was aborted by its successor, which has already turned the cue
+                // back on — clearing it here would hide the wait that is still running.
+                if (onBusy && !mine.signal.aborted) { onBusy(false); }
+            });
         };
     }
 
-    var scheduleSingle = makeRunner(SINGLE_DEBOUNCE_MS, buildSingleRequest, CONFIG.apiUrl, renderSingle, setSingleBusy);
-    var scheduleBatch = makeRunner(BATCH_DEBOUNCE_MS, buildBatchRequest, CONFIG.batchUrl, renderBatch);
+    var runSingle = makeRunner(buildSingleRequest, CONFIG.apiUrl, renderSingle, setSingleBusy);
+    var runBatch = makeRunner(buildBatchRequest, CONFIG.batchUrl, renderBatch);
 
-    function recalculate() {
+    function calculate() {
+        resultsPanel.classList.remove('is-idle', 'is-stale');
+        calcButton.classList.remove('is-due');
+
         // The single-point result is always computed — the sweep is an addition on
         // top of it, not an alternate mode.
-        scheduleSingle();
+        runSingle();
 
         if (!el('toggle-batch').checked) {
             el('observing-window').hidden = true;
@@ -760,13 +764,11 @@
             refreshWarnings();
             return;
         }
-        // Reveal the section immediately so flipping the switch has a visible
-        // effect, rather than nothing happening until the request comes back.
         el('observing-window').hidden = false;
         // Promotes the chart to the top of the results panel — see etc.css.
         resultsScroll.classList.add('is-sweep');
         setChartStatus('Calculating…');
-        scheduleBatch();
+        runBatch();
     }
 
     // ========================================================================
@@ -1146,7 +1148,7 @@
                     revealDetails(panel);
                 }
                 renderSpecs();
-                recalculate();
+                markStale();
             });
             bindCustomReselect(select, panel);
         }
@@ -1172,7 +1174,7 @@
 
             profileSelect.addEventListener('change', function () {
                 applyProfile(profileSelect.value);
-                recalculate();
+                markStale();
             });
             profileSelect.addEventListener('click', function () {
                 if (!profileSelect.value) { CATALOGUES.forEach(function (c) { revealDetails(c.panel); }); }
@@ -1191,7 +1193,6 @@
             if (firstProfile) {
                 profileSelect.value = firstProfile;
                 applyProfile(firstProfile);
-                recalculate();
             } else {
                 renderSpecs();
             }
@@ -1384,6 +1385,8 @@
 
             if (input.type === 'checkbox') {
                 input.checked = Boolean(value);
+            } else if (input.type === 'radio') {
+                input.checked = input.value === value;
             } else if (input.type === 'datetime-local') {
                 input.value = isoToLocalInputValue(value);
             } else if (input.hasAttribute('data-percent')) {
@@ -1410,7 +1413,7 @@
         CATALOGUES.forEach(function (cat) { revealDetails(cat.panel); });
         renderSpecs();
         syncConditionalFields();
-        recalculate();
+        markStale();
     }
 
     // ========================================================================
@@ -1453,13 +1456,15 @@
     form.addEventListener('input', function () {
         syncConditionalFields();
         renderSpecs();
-        recalculate();
+        markStale();
     });
     form.addEventListener('change', function () {
         syncConditionalFields();
-        recalculate();
+        markStale();
     });
-
-    // One calculation up front so the results panel isn't empty on first paint.
-    recalculate();
+    // The Calculate button is the form's submit button, so Enter in a field lands here too.
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        calculate();
+    });
 })();

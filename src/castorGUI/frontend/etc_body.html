@@ -467,13 +467,21 @@
                                 <span class="etc-unit">s</span>
                             </span>
                         </label>
-                        <label class="etc-field">
-                            <span class="etc-field-label">Calculation Goal</span>
-                            <select name="options.type" id="select-options-type">
-                                <option value="solve_snr">Solve for SNR (given exposures)</option>
-                                <option value="solve_time">Solve for Exposures (given target SNR)</option>
-                            </select>
-                        </label>
+                        <!-- Two choices, both always visible: one click switches, where a
+                             dropdown took two and hid the alternative. -->
+                        <div class="etc-field">
+                            <span class="etc-field-label" id="label-options-type">Calculation Goal</span>
+                            <div class="etc-segmented" role="radiogroup" aria-labelledby="label-options-type">
+                                <label class="etc-segment">
+                                    <input type="radio" name="options.type" value="solve_snr" checked>
+                                    <span>Solve for SNR</span>
+                                </label>
+                                <label class="etc-segment">
+                                    <input type="radio" name="options.type" value="solve_time">
+                                    <span>Solve for Exposures</span>
+                                </label>
+                            </div>
+                        </div>
                         <div class="dynamic-group" data-options="solve_snr">
                             <label class="etc-field">
                                 <span class="etc-field-label">Number of Exposures</span>
@@ -593,27 +601,36 @@
 
                 </form>
             </div>
+
+            <!-- Outside the scrolling frame so it is on screen whichever tab is open.
+                 type="submit" with form= ties it to the form, which also makes Enter in
+                 any field run the calculation. -->
+            <div class="etc-form-footer">
+                <button type="submit" form="castor-form" class="etc-calc is-due" id="btn-calculate">Calculate</button>
+            </div>
         </section>
 
         <!-- ══════════════════════════════════════════════════════════════
-             RIGHT: live results. No buttons — a pure render target, same
+             RIGHT: results. No buttons — a pure render target, same
              contract as rightPanel.py.
+
+             Three states, as classes on this section (see etc.js):
+               is-idle   nothing calculated yet — the beaver stands in
+               is-busy   a calculation is in flight — the beaver again
+               is-stale  the form changed since the numbers below were computed
         ══════════════════════════════════════════════════════════════ -->
-        <section class="etc-panel etc-panel-results">
+        <section class="etc-panel etc-panel-results is-idle" id="results-panel">
+            <!-- role="status" so a screen reader hears the wait without stealing focus. -->
+            <div class="etc-beaver" role="status" aria-live="polite">
+                <span class="etc-visually-hidden" id="beaver-status"></span>
+            </div>
+
             <div class="etc-results-scroll">
 
                 <div class="etc-hero">
                     <div class="etc-hero-label" id="hero-label">Primary Result</div>
                     <div class="etc-hero-value" id="hero-value">&mdash;</div>
-                    <div class="etc-hero-desc" id="hero-desc">Waiting for input&hellip;</div>
-                    <!-- Shown only while a recalculation is in flight past a short grace
-                         period (see etc.js's setSingleBusy): on a slow network the panel
-                         would otherwise sit on the last result with no sign anything is
-                         happening, which reads as a freeze. role="status" lets a screen
-                         reader hear it without stealing focus. -->
-                    <div class="etc-hero-busy" id="results-busy" role="status" aria-live="polite" hidden>
-                        <span class="etc-hero-busy-dot" aria-hidden="true"></span>Updating&hellip;
-                    </div>
+                    <div class="etc-hero-desc" id="hero-desc"></div>
                 </div>
 
                 <div class="etc-alert etc-alert-error" id="error-box" hidden>
