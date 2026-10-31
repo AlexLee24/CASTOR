@@ -8,7 +8,7 @@ The primary purpose of this Algorithm Theoretical Basis Document (ATBD) is to de
 
 ### 1.2 Scope
 
-The ETC algorithm accounts for a comprehensive set of variables affecting astronomical imaging. It supports the evaluation of both point sources and extended sources. Furthermore, the algorithm incorporates hardware specifications (such as mirror sizes, pixel properties, and sensor noise characteristics) and environmental factors (including atmospheric extinction, moon flux, and total seeing/tracking errors) to ensure accurate simulations of observation conditions.
+The ETC algorithm accounts for a comprehensive set of variables affecting astronomical imaging. It supports the evaluation of both point sources and extended sources. Furthermore, the algorithm incorporates hardware specifications (such as mirror sizes, pixel properties, and sensor noise characteristics) and environmental factors (including atmospheric extinction, moon flux, and total stellar image FWHM) to ensure accurate simulations of observation conditions.
 
 ## 2. Algorithm Architecture Overview
 
@@ -17,7 +17,7 @@ The ETC algorithm accounts for a comprehensive set of variables affecting astron
 The algorithm architecture follows a strict forward-propagation pipeline, progressing sequentially from external inputs to final observational metrics. The pipeline is divided into four chronological stages:
 
 * **Stage 1: External Input Parameters:** The foundational stage comprising user-defined environmental, hardware, and observational settings.
-* **Stage 2: Physical & Environmental Conversions:** Translates external parameters into physical and optical characteristics, such as Airmass ($X$), Effective Area ($A_{\text{eff}}$), and Total FWHM ($FWHM_{\text{total}}$).
+* **Stage 2: Physical & Environmental Conversions:** Translates external parameters into physical and optical characteristics, such as Airmass ($X$) and Effective Area ($A_{\text{eff}}$).
 * **Stage 3: Photoelectron Count Rates:** Computes the intermediate photoelectron count rates for the target source ($Rate_{\text{src}}$), sky background ($Rate_{\text{sky}}$), and peak pixels ($Rate_{\text{peak}}$) based on the Stage 2 outputs.
 * **Stage 4: Final Output Metrics:** Calculates the observational parameters, including the total SNR ($\text{SNR}_{\text{total}}$), single-exposure SNR ($\text{SNR}_{\text{single}}$), required number of exposures ($N_{\text{exp}}$), total integration time ($t_{\text{total}}$), saturation limits ($t_{\text{sat}}$), and the noise budget behind both SNRs: the signal and each variance term (§4.3.6).
 
@@ -34,7 +34,7 @@ flowchart LR
     %% Target & Environment
     Eph([Ephemeris: RA, DEC, Time, Lat/Lon])
     mu_dark([mu_dark])
-    FWHM_comps([Seeing/Diffraction/\nOptical/Tracking Errors])
+    FWHM_tot([total_fwhm])
     m([target_mag])
     F0([zero_point_flux])
     k_ext([extinction_coeff])
@@ -67,7 +67,6 @@ flowchart LR
     X[airmass]
     Flux_moon[Moon Flux]
     mu_sky[mu_sky]
-    FWHM_tot[total_fwhm]
     Ep[photon_energy]
     A_eff[effective_area]
     S_pix[pixel_scale]
@@ -97,7 +96,6 @@ flowchart LR
     %% ==========================================
     Eph --> X & Flux_moon
     mu_dark & Flux_moon --> mu_sky
-    FWHM_comps --> FWHM_tot
     lambda_c --> Ep
     D_pri & D_sec --> A_eff
     f_sys & p_pix --> S_pix
@@ -131,8 +129,8 @@ flowchart LR
     classDef layer3 stroke:#2ecc71,stroke-width:2.5px;
     classDef layer4 stroke:#f39c12,stroke-width:3px;
 
-    class Eph,mu_dark,FWHM_comps,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_single_in,N_exp_in,SNR_tgt,k_bg layer1;
-    class X,Flux_moon,mu_sky,FWHM_tot,Ep,A_eff,S_pix,T_sys layer2;
+    class Eph,mu_dark,FWHM_tot,m,F0,k_ext,dL,lambda_c,D_pri,D_sec,f_sys,p_pix,R_opt,T_filt,QE,C_corr,R_dark,RON,FWC,kap,t_single_in,N_exp_in,SNR_tgt,k_bg layer1;
+    class X,Flux_moon,mu_sky,Ep,A_eff,S_pix,T_sys layer2;
     class f_enc,N_pix,R_sky,R_src,R_peak layer3;
     class SNR_total,SNR_single,N_exp_out,t_sat,t_opt,t_tot layer4;
 ```
@@ -190,9 +188,9 @@ This profile defines the intrinsic physical properties of the celestial source. 
 | `morphology.type` | - | - | Spatial distribution discriminator: `"point"` or `"extended"`. |
 | `sed.type` | - | - | Spectral model discriminator: `"flat"` or `"Temp"`. |
 | `brightness.type` | - | - | Brightness model discriminator: `"vega_mag"`, `"ab_mag"`, `"jansky_flux"`, or `"wavelength_flux"`. |
-| `brightness.target_mag` | $m$ | mag | Apparent magnitude (Required if type is Vega or AB). |
+| `brightness.target_mag` | $m$ | mag | Apparent magnitude (Required if type is Vega or AB). mag/arcsec² when `morphology.type` is `"extended"`. |
 | `brightness.zero_point_flux` | $F_{\text{zp}}$ | erg/s/cm²/Å | Reference flux (Required ONLY if type is `"vega_mag"`). |
-| `brightness.flux_value` | $F_\nu, F_\lambda$ | Jy, erg... | Direct physical flux (Required if type is Jansky or Wavelength). |
+| `brightness.flux_value` | $F_\nu, F_\lambda$ | Jy, erg... | Direct physical flux (Required if type is Jansky or Wavelength). Per arcsec² when `morphology.type` is `"extended"`. |
 
 ### 3.3 Environment Condition (`environment`)
 
@@ -206,7 +204,7 @@ This profile defines the physical environment, geometric constraints, and atmosp
 | `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky, and the baseline every $\mu_{\text{sky}}$ is built on (§4.1.1). Where `zodiacal_share` accompanies it, this is the *local* component only — airglow and light pollution — with zodiacal light and scattered starlight split back out; where it does not, this is the whole moonless sky, undecomposed. |
 | `zodiacal_share` | - | dimensionless, optional | Fraction of the *original, undecomposed* moonless-sky measurement `mu_dark` was split from that was zodiacal light and scattered starlight, at this site's own reference sightline. `None` (the default, and the value for every site without this measurement) means not modelled: `mu_dark` is the whole sky and §4.1.1's $Flux_{\text{zodi}}$ term is zero. |
 | `extinction_coeff` | $k_{\text{ext}}$ | mag/airmass | Atmospheric attenuation per unit airmass. |
-| `fwhm_components` | $FWHM_{\text{comps}}$ | arcsec | Spatial spreading errors (Seeing, Diffraction, Optical, Tracking). |
+| `total_fwhm` | $FWHM_{\text{tot}}$ | arcsec | Required stellar image FWHM; definition and caller responsibilities in §4.1.2. |
 
 ### 3.4 Calculation Options (`options`)
 
@@ -247,10 +245,24 @@ $Flux_{\text{zodi}}$ is zero unless `zodiacal_share` is set. Where it is, `zodia
 
 When `auto_calc_background` is disabled, $Flux_{\text{moon}}$ is left out. $Flux_{\text{zodi}}$ is not: together with $\mu_{\text{dark}}$ it describes the moonless sky, so it does not depend on the flag. With neither term, $\mu_{\text{sky}} = \mu_{\text{dark}}$ directly. The $\mu_{\text{sky}}$ actually used is reported as `diagnostics.sky_surface_brightness`. $\mu_{\text{dark}}$ is a required input in both cases — moonless-sky brightness (light pollution, airglow, etc.) cannot be derived from time and location alone, so this flag only ever adds terms on top of it, never substitutes for it.
 
-**4.1.2 Spatial Resolution**
-The total spatial spreading, represented by the Full Width at Half Maximum ($FWHM_{\text{tot}}$), combines contributions from atmospheric seeing, diffraction, optical aberrations, and tracking errors:
+#### 4.1.2 Spatial Resolution
 
-$$FWHM_{\text{tot}} = \sqrt{FWHM_{\text{See}} + FWHM_{\text{Dif}} + FWHM_{\text{Opt}} + FWHM_{\text{Trk}}}$$
+`environment.total_fwhm` is the expected or measured FWHM of stellar images in
+arcseconds, including atmospheric seeing and instrumental spreading. It is a
+required, finite positive input with no engine default. A caller may use comparable
+observations or estimate it from separate contributions; the engine receives only
+the total and adds no further spreading terms. Choosing how to obtain that input,
+including whether to offer component fields, belongs to the client.
+
+The value applies to the intended setup, band and observing conditions. CASTOR
+does not rescale it with wavelength or airmass; a time-series request holds it
+constant throughout the window. The same value is returned as
+`diagnostics.total_fwhm` for a single calculation.
+
+Requests saved under the former four-field contract must supply `total_fwhm`
+instead. To preserve a previous calculation, combine its four values as
+$\sqrt{FWHM_{\text{See}}^2 + FWHM_{\text{Dif}}^2 + FWHM_{\text{Opt}}^2 + FWHM_{\text{Trk}}^2}$
+and remove the old fields. The engine does not convert legacy requests.
 
 **4.1.3 Optical System Properties**
 The effective collecting area of the telescope ($A_{\text{eff}}$) incorporates the central obscuration from the secondary mirror:
@@ -381,17 +393,27 @@ $N_{\text{est}}$ carries the same per-pixel variance as the aperture, because th
 Because $N_{\text{est}} \propto N_{\text{pix}}^2$, it is negligible for tight apertures and dominant for wide ones. At $k_{\text{ap}} = 0.85$ with a $3$–$5 \cdot \text{FWHM}$ annulus it adds about 7% to the variance; at $k_{\text{ap}} = 3$ with a $5$–$8 \cdot \text{FWHM}$ annulus it adds about 36%. That second figure is measured, not assumed: see §5.3.
 
 **4.3.3 Required Exposures**
-If the calculation mode demands solving for time based on a desired signal quality, the required number of exposures is derived as:
+When the calculation solves for time, the required number of exposures inverts the stacked-SNR relation of §4.3.1. If every noise term averaged down between frames this would be the familiar
 
 $$N_{\text{exp}} = \left( \frac{\text{SNR}_{\text{target}}}{\text{SNR}_{\text{single}}} \right)^2$$
+
+but the flatness residual $V_{\text{flat}}$ does not (§4.3.1a): it tracks the *total* accumulated background, so in a stack its variance grows as $N_{\text{exp}}^2$ rather than $N_{\text{exp}}$. Writing the per-frame signal as $a$, the per-frame variance of the averaging terms (source, sky, dark, readout) as $L$, and the per-frame flatness amplitude as $F$ so that $V_{\text{flat}} = (N_{\text{exp}} F)^2$, the stack SNR is
+
+$$\text{SNR}(N_{\text{exp}}) = \frac{N_{\text{exp}} \cdot a}{\sqrt{N_{\text{exp}} \cdot L + N_{\text{exp}}^2 \cdot F^2}}$$
+
+which inverts to
+
+$$N_{\text{exp}} = \frac{\text{SNR}_{\text{target}}^2 \left( 1/\text{SNR}_{\text{single}}^2 - 1/\text{SNR}_{\text{ceil}}^2 \right)}{1 - \left( \text{SNR}_{\text{target}} / \text{SNR}_{\text{ceil}} \right)^2}, \qquad \text{SNR}_{\text{ceil}} = \frac{a}{F} = \frac{Rate_{\text{src}}}{f_{\text{flat}} \cdot Rate_{\text{sky}} \cdot N_{\text{pix}}}$$
+
+$\text{SNR}_{\text{ceil}}$ is the asymptotic ceiling the stack approaches as $N_{\text{exp}} \to \infty$: signal and flatness noise both grow with total integration time, so their ratio is fixed and no exposure count crosses it. When $f_{\text{flat}} = 0$ the ceiling is infinite and the expression collapses to the square-root law above. When $\text{SNR}_{\text{target}} \ge \text{SNR}_{\text{ceil}}$ the denominator is non-positive — the target is unreachable at any exposure count — and CASTOR reports that state (`target_reachable = false`, `required_exposures = null`, and $\text{SNR}_{\text{total}}$ set to the ceiling) instead of returning a frame count that never meets the request.
 
 **4.3.4 Saturation Limit**
 To ensure the detector operates within its linear regime, the saturation time limit ($t_{\text{sat}}$) evaluates how long it takes for a single pixel to reach its Full Well Capacity (FWC) under the combined flux of the target peak, sky, and dark current:
 
 $$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
 
-**4.3.5 Background-Limited (Optimal) Exposure Time**
-$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) reaches $k$ times the fixed per-frame readout noise, per pixel — at $k = 1$, the point where it just overtakes it. Beyond this point read noise costs less than the penalty $p$ that $k$ leaves (below), which bounds what lengthening a single exposure can still gain per unit of *total* integration time; once that is small, it becomes more efficient to add exposures than to keep extending one. $k$ is the standard-deviation ratio between the two noise sources:
+**4.3.5 Background/Read Noise Crossover Time**
+$t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) reaches $k$ times the fixed per-frame readout noise, per pixel — at $k = 1$, the point where it just overtakes it. Beyond this point read noise costs less than the penalty $p$ that $k$ leaves (below), which bounds what lengthening a single exposure can still gain per unit of *total* integration time; once that is small, it becomes more efficient to add exposures than to keep extending one. The API retains the historical name `optimal_exposure_time`, but this is a crossover, not a recommended exposure length: saturation, tracking, cosmic rays, overhead, and the observing strategy also matter. $k$ is the standard-deviation ratio between the two noise sources:
 
 $$t_{\text{opt}} = \frac{(k \cdot \text{RON})^2}{Rate_{\text{sky}} + R_{\text{dark}}}$$
 
@@ -453,6 +475,8 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 * **Photon Noise Only, Partially Closed for Flat-Fielding:** Every other noise term modeled here scales with photon or electron counts; scintillation and PSF instability do not, and they set a floor the model cannot reach. Measured against 314 stars on fifteen LOT/SOPHIA $r'$ frames (2025-11-06), predictions track the observed scatter to within 8% across seven flux bins spanning $2$ to $260\ \text{ke}^-$ (`validation/test_endtoend.py`). An apparent shortfall above $60\ \text{ke}^-$ that grew with brightness — obs/pred as low as 0.22 for the brightest stars — turned out to be a validation artifact, not a gap in this model: those frames' 16-bit readout saturates at $65535\ \text{ADU} \times 0.92\ \text{e}^-/\text{ADU} = 60292\ \text{e}^-$ peak-pixel count, far below the $150000\ \text{e}^-$ Full Well Capacity this preset carries, and stars riding that ceiling were not excluded. Once stars peaking above $50000\ \text{e}^-$ are dropped, the same bins agree with prediction to within 8%, comparable to the fainter ones. Flat-field and background-gradient residual is no longer entirely outside the model: $V_{\text{flat}}$ (§4.3.1a) carries it when `background_flatness_fraction` is set, measured at 2.0% of the background on the one camera it has been checked against (SLT/DU934P). It defaults to 0.0 (not modelled) for every other preset, and the measured value is itself an upper limit from a cloudy night, not a floor a clear one would also hit.
 
 * **Cost of the Sky Estimate:** That same measurement is where $N_{\text{est}}$ (§4.3.2) comes from. Without it the engine ran 13% optimistic at $k_{\text{ap}} = 3$ (observed/predicted 0.868); with it, 1.011. The correction was not fitted — its size follows from the aperture and annulus geometry alone, and the two agree to better than a percent.
+
+* **Monochrome Detectors Only:** Every camera is modelled as monochrome — every pixel in the aperture collects the band at the camera's `quantum_efficiency`. A one-shot-colour (Bayer) sensor imaged through one colour channel uses only 1/2 (G) or 1/4 (R, B) of its pixels for that band, and debayering interpolates the rest, which correlates neighbouring pixels' noise. The engine has no colour-filter-array description, so for such a camera the predicted SNR is optimistic; an outside trial on a colour DSLR in 2026-10 found roughly a factor of $\sqrt{2}$, recovered only by hand-adjusting throughput and pixel size. Both cameras in the shipped `other` profile are colour sensors, and that profile carries a caveat saying so. See `validation/QUESTIONS.md` item 18.
 
 ### 5.4 Design Rationale and Model Simplification
 

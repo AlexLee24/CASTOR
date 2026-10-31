@@ -1,14 +1,15 @@
-"""Map where solve-for-time promises an SNR it cannot deliver.
+"""Map the reachable/unreachable structure solve-for-time now respects.
 
-The solve-for-time section reports the defect at one operating point.  The audit
-CSV actually sweeps LOT/SLT x g'/r'/i' x AB 17-23 x target SNR 5-50, so the
-whole reachable/unreachable structure can be drawn as a heat map instead of
-three numbers.
+The solve-for-time section reports one operating point.  The audit CSV sweeps
+LOT/SLT x g'/r'/i' x AB 17-23 x target SNR 5-50, so the whole reachable/
+unreachable structure can be drawn as a heat map instead of three numbers.
 
-Colour is the fraction of the requested SNR the current sqrt(N) solver actually
-returns (1.0 = honest, < 1 = the answer undershoots its own request).  Cells
-where the model's asymptotic ceiling is itself below the target -- physically
-unreachable at any exposure -- are hatched.
+Colour is the fraction of the requested SNR the returned exposure count actually
+reaches (1.0 = honest, a small overshoot = integer-frame rounding).  Cells where
+the model's asymptotic ceiling is itself below the target -- physically
+unreachable at any exposure -- are hatched, and since the question-17 fix these
+are the only cells that fall short: the solver returns the unreachable flag there
+rather than an undershooting count.
 
 Run from the repository root::
 
@@ -73,10 +74,10 @@ def main() -> None:
                         extend="max")
     cbar.set_label("achieved / requested SNR  (1.0 = honest)")
     fig.suptitle(
-        "Solve-for-time reachability: LOT (flatness 0) stays honest, "
-        "SLT under-delivers as the 2% floor bites\n"
+        "Solve-for-time reachability: the fixed solver reaches the request "
+        "wherever the ceiling allows\n"
         "hatched = requested SNR above the model's asymptotic ceiling "
-        "(unreachable at any exposure)", fontsize=11)
+        "(unreachable at any exposure, now flagged)", fontsize=11)
     fig.savefig(FIGURE, dpi=140, bbox_inches="tight")
     print(f"wrote {FIGURE.relative_to(ROOT)}")
 

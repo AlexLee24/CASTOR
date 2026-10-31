@@ -9,8 +9,10 @@
                   { "edit": "<input name>", "value": "<text typed>" },
                   { "load": <a saved request, as LOAD takes it> } ] }
 
-   and writes a JSON array to stdout: the request the form POSTs once it has
-   opened, then the one it POSTs after each step.
+   and writes a JSON array to stdout: the request the form POSTs when Calculate
+   is pressed once it has opened, then the one it POSTs when Calculate is pressed
+   after each step. The form calculates only on request, so the harness presses
+   it, as a user would.
 
    The page is a stand-in, deep enough for the form and no deeper. Its controls
    are read out of etc_body.html itself, so a field renamed or re-defaulted there
@@ -253,15 +255,20 @@ async function main() {
     const source = fs.readFileSync(path.join(FRONTEND, 'js', 'etc.js'), 'utf8');
     vm.runInContext(source, sandbox, { filename: 'etc.js' });
 
+    async function calculate(since) {
+        page.form.dispatch('submit');
+        await settle();
+        return lastRequest(since);
+    }
+
     const requests = [];
-    let since = 0;
     await settle();
-    requests.push(lastRequest(since));
+    requests.push(await calculate(posted.length));
     for (const step of input.steps || []) {
-        since = posted.length;
+        const since = posted.length;
         act(step);
         await settle();
-        requests.push(lastRequest(since));
+        requests.push(await calculate(since));
     }
 
     if (errors.length) { throw new Error('etc.js reported: ' + errors.join('\n')); }

@@ -3,7 +3,7 @@
 Everything CASTOR does not know, in one place, with the same field on every
 entry: **who can close it**. That field is the point of the file. Until now the
 open items were spread across this document, the standing findings in
-[README.md](README.md), the `GUESS` rows in `provenance.py`, the strict xfail
+[VALIDATION_REPORT.md](VALIDATION_REPORT.md), the `GUESS` rows in `provenance.py`, the strict xfail
 reasons and a docstring, and the honest answer to "what is still open?" was that
 nobody could say without reading all five.
 
@@ -12,6 +12,72 @@ calibrated LOT/SOPHIA frames over 18 nights (2025-09-29 to 2026-02-15), reduced
 against Pan-STARRS DR2; method is in `lulin.py`. Where a prototype is cited it
 is one of the two Perl calculators CASTOR was refactored from, transcribed in
 `lulin_prototype.py`.
+
+## Release handoff — 2026-09-18
+
+Start here after a long break. This is the state of `main` at `8d72093`, before
+any official release or version tag. The package still declares version 0.1.0.
+The default GitHub workflow runs the specification suite; desktop packages are
+built only by manually dispatching that workflow.
+
+**What reached `main` during the September freeze.** The end-to-end test became
+reproducible in `validation/` (`a4dd05c`, HAP-69), and a supposed bright-star
+noise failure was traced to the 16-bit ADC ceiling rather than the noise model
+(same commit, HAP-72). The tight 0.85-FWHM aperture was confirmed to be
+sensitive to PSF changes in real reductions; §5.2 of the ATBD now tells a user
+with simple aperture photometry to supply the larger aperture they actually
+use (`114702c`, HAP-11). The sky-estimate cost, SLT read noise, and correlated
+background term were added or corrected (`051994e`, `f393a54`, `6a34861`);
+SLT/DU934P now has a measured 2% `background_flatness_fraction` in its preset.
+The ATBD aperture statement was corrected (`a4dd05c`, HAP-71). Four SLT
+SN2024ggi nights still cannot separate extinction from per-night transparency
+(`7365adf`, HAP-73), so the Lulin preset retains its site-wide 0.17 fallback.
+The sky-model check exposed an uncharacterised light-pollution component at
+Lulin (`5b45ad5`, HAP-10); see questions 9, 10 and 16.
+
+**What has external support.** LOT/SOPHIA r' noise agrees with the observed
+per-star scatter on one night and field: median observed/predicted SNR 1.011
+for 261 saturation-safe stars below 60 ke-, with bootstrap 95% interval
+0.980–1.050. SLT r' extended-source aperture noise agrees to about 1% at
+large radii after its read-noise and flatness corrections. These results and
+their narrower operating conditions are in `VALIDATION_REPORT.md`; they do not
+establish accuracy across all filters, pointings, sky levels or instruments.
+
+**Before an official release.** Question 17 is now fixed: solve-for-time inverts
+the full stacked-SNR relation, so a returned frame count actually reaches the
+requested SNR, and a request above the flatness ceiling is reported as
+unreachable (`target_reachable = false`, `required_exposures = null`) through the
+response schema, the CLI and the GUI rather than answered with a wrong count. The
+former strict xfail in `test_solve_time_floor.py` is now a passing regression.
+What remains is release mechanics: re-run both test suites and the preset check,
+exercise a freshly packaged desktop app on each supported platform, choose the
+release version, and create release notes and a tag. A passing push workflow
+alone has not exercised the packaging jobs.
+
+**Known limits to disclose even after that fix.** The sky model has not been
+validated across pointings and lunar conditions (HAP-10); Lulin extinction
+remains unmeasured by band (question 4); the default tight aperture needs a
+reduction method that controls PSF variation (HAP-11); VLT is explicitly a
+demonstration profile (questions 14–15); colour (Bayer) cameras, including
+both in the `other` profile, are modelled as monochrome and predict optimistic
+SNR (question 18). Other unresolved measurements and
+model gaps stay in the table below, with the person or work needed to close
+each. Do not treat a green specification suite as evidence that every preset
+is empirically calibrated.
+
+**Deliberately deferred.** Spectral SED handling (HAP-76), a free extended
+source aperture (HAP-77), a revised target format (HAP-68), moon-state display
+(HAP-74), stale-result indication (HAP-75), and the `environment` rename
+(HAP-14) are feature work. Structural refactoring is tracked in HAP-100.
+Readout overhead is question 11 and HAP-113. Revisit these after the release
+correctness gate, with tests around each behavior before changing it.
+
+**Resume commands.** From a clean checkout run `uv sync --locked`,
+`uv run pytest`, `uv run pytest validation`, and `uv run castor check`. The
+first suite should pass; the validation suite intentionally contains strict
+xfails documenting unresolved claims. Read this file, then the report and
+`docs/LESSONS.md`, before changing any preset value or interpreting a prior
+validation result.
 
 **Who can close it**
 
@@ -40,7 +106,8 @@ is one of the two Perl calculators CASTOR was refactored from, transcribed in
 | 14 | The VLT profile is mostly invention | DECIDE | 12 `GUESS` rows |
 | 15 | FORS2's throughput is a fudge that works in one band | BUILD | strict xfail, `test_eso.py` |
 | 16 | Everything measured here looks in one direction | OBSERVE | `test_lulin.py` |
-| 17 | Solve-for-time ignores the correlated flatness-noise ceiling | BUILD | strict xfail, `test_solve_time_floor.py` |
+| 17 | Solve-for-time ignores the correlated flatness-noise ceiling | BUILD | Closed — `test_solve_time_floor.py` |
+| 18 | Colour (Bayer) cameras are modelled as monochrome | BUILD | caveat on the `other` profile |
 
 ---
 
@@ -614,24 +681,54 @@ made.
 
 ---
 
-## 17. Solve-for-time ignores the correlated flatness-noise ceiling — BUILD
+## 17. Solve-for-time ignores the correlated flatness-noise ceiling — CLOSED
 
-**The forward model and inverse solver now disagree.** The 2% SLT background-
-flatness term is correlated across a stack, so it creates an asymptotic SNR
-ceiling. `calculate_total_snr()` implements that correctly. But
-`solve_required_exposures()` still returns `(target_snr / single_snr)^2`, which
-assumes every noise term averages down as the square root of the frame count.
+**Was:** the 2% SLT background-flatness term is correlated across a stack, so it
+creates an asymptotic SNR ceiling that `calculate_total_snr()` implemented
+correctly, but `solve_required_exposures()` returned `(target_snr / single_snr)^2`,
+which assumes every noise term averages down as the square root of the frame
+count. For the fixed near-zenith case (SLT/DU934P, r', AB=20, 120 s frames,
+requested SNR 20) the calculator said six frames were required and then reported
+an achieved SNR of only 14.44 — its own model put the asymptotic ceiling below
+20, so no number of frames could satisfy the request.
 
-For the fixed near-zenith case in `VALIDATION_REPORT.md` (solve-for-time) — SLT/DU934P, r',
-AB=20, 120 s frames, requested SNR 20 — the calculator says six frames are
-required and then reports an achieved SNR of only 14.44. Its own model puts the
-asymptotic ceiling below 20, so no number of frames can satisfy the request.
+**Fixed.** `solve_required_exposures()` now inverts the full relation
+`SNR(N) = N*a / sqrt(N*L + N^2*F^2)`, taking the ceiling from a new
+`calculate_flatness_snr_ceiling()` (`SNR_ceil = Rate_src / (f * Rate_sky * N_pix)`).
+When the ceiling is infinite (`f = 0`) it collapses to the old square-root law;
+when `target_snr >= SNR_ceil` it returns `+inf`, and the calculator translates
+that into an explicit unreachable response: `target_reachable = false`,
+`required_exposures = null`, `total_snr` set to the ceiling, and a warning. The
+`CoreResult` schema carries `snr_ceiling` and `target_reachable`; the CLI and GUI
+both surface the unreachable state; the batch path reports unreachable timestamps
+as `None` gaps. `test_solve_time_floor.py` is now a passing regression covering a
+reachable target that meets its request, an unreachable target that is flagged,
+and the `f = 0` control. Derivation in ATBD §4.3.3.
 
-**What changes with a fix.** The inverse needs to solve
-`SNR(N) = N*S / sqrt(N*V + N^2*F^2)` and return an explicit unreachable result
-when `target_snr >= S/F`. The response schema, CLI and GUI then need a way to
-represent that result rather than a finite exposure count. The strict xfail in
-`test_solve_time_floor.py` pins the present contradiction.
+## 18. Colour (Bayer) cameras are modelled as monochrome — BUILD
+
+**Found 2026-10-02**, not in Lulin data. An outside trial used CASTOR to predict
+single-frame SNR for a colour DSLR (a 6D). Run as shipped, with the camera
+entered as monochrome, the prediction came out about √2 too optimistic. After
+the trial calibrated the zero point from the same frames and adjusted by hand
+for the Bayer pattern (half the throughput, pixel pitch ×√2), the median
+measured/predicted SNR was 1.09. That fit tests noise only, because the signal
+was calibrated from those frames, and the hand adjustment is an approximation.
+
+**The gap.** `CameraSchema` has no colour filter array. Every pixel in the
+aperture collects the band at `quantum_efficiency`. On a Bayer sensor only 1/2
+(G) or 1/4 (R, B) of the pixels sit behind any one colour, and debayering
+interpolates the rest, which correlates neighbouring pixels' noise.
+
+**Already in the shipped presets.** Both cameras in the `other` profile,
+ASI2600MC and ASI533MC, are colour (MC) sensors entered as monochrome with QE
+0.8. That profile now carries a `caveat` saying so, shown by the GUI and the
+CLI. It is a disclosure; the numbers are unchanged.
+
+**What closes it.** A camera field naming the colour filter array and the
+channel(s) a band uses. A decision about where noise is counted: raw CFA pixels
+(simpler and honest) or debayered pixels (correlated). Then a check against real
+colour-camera frames. Until then ATBD §5.3 states the limitation.
 
 **Visible meanwhile.** The response's noise budget makes the ceiling readable
 without the fix: `noise.single.signal / sqrt(noise.single.flatness_variance)` is

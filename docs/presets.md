@@ -40,16 +40,17 @@ and moon geometry rather than an error. Its hardware is still usable under a rea
 site, named from there — see [Hardware from another
 profile](#hardware-from-another-profile).
 
-**`median_seeing_fwhm` is displayed and never applied.** Seeing is a condition of
-the night being planned, not a property of the site, and it is the field an
-observer is most likely to have set deliberately.
+**`median_seeing_fwhm` is displayed and never applied.** It is a reference for
+the site's atmosphere, not a total stellar image width for the planned
+observation (see [ATBD §4.1.2](ATBD.md#412-spatial-resolution)).
 
 **`caveat` is free text shown beside the profile's name** by every host. A
 profile whose numbers are not good enough to plan real observations with says so
 here, in the one place a user picking it will actually look —
 [`validation/provenance.py`](../validation/provenance.py) records where every
 value came from, but that file is in the repository, not in front of someone
-choosing from a dropdown. VLT carries one.
+choosing from a dropdown. VLT carries one, and so does Other, whose two cameras
+are colour sensors the engine models as monochrome (QUESTIONS.md 18).
 
 ## Band-dependent overrides
 

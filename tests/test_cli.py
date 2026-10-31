@@ -33,9 +33,9 @@ WELL_PLACED = "2026-01-15T16:00:00Z"
 
 @pytest.fixture
 def lulin():
-    """The shortest complete calculation: a site, a target, and one question."""
+    """A site, a target, its expected image width, and one question."""
     return ["calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-            "--mag", "18", "--exp", "300", "-n", "10", "--time", WELL_PLACED]
+            "--mag", "18", "--fwhm", "1.5", "--exp", "300", "-n", "10", "--time", WELL_PLACED]
 
 @pytest.fixture
 def hardware_only_presets(tmp_path):
@@ -95,8 +95,7 @@ def saved_form(tmp_path):
         "environment": {
             "location": {"latitude_deg": 23.47, "longitude_deg": 120.87, "elevation_m": 2862},
             "observing_time_utc": "2026-01-01T18:00:00Z", "auto_calc_background": True,
-            "mu_dark": 21.0, "extinction_coeff": 0.15, "seeing_fwhm": 1.5,
-            "diffraction_fwhm": 0.2, "optical_fwhm": 0.1, "tracking_fwhm": 0.1,
+            "mu_dark": 21.0, "extinction_coeff": 0.15, "total_fwhm": (1.5 ** 2 + 0.2 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5,
         },
         "options": {"type": "solve_snr", "aperture_factor": 1.5,
                     "single_exp_time": 120, "num_exposures": 1, "target_snr": 10.0},
@@ -110,7 +109,7 @@ def saved_form(tmp_path):
 # The happy path
 # ==========================================
 
-def test_a_site_and_a_target_are_enough(run, lulin):
+def test_a_site_target_and_image_fwhm_run(run, lulin):
     result = run(*lulin)
 
     assert result.exit_code == 0
@@ -119,7 +118,7 @@ def test_a_site_and_a_target_are_enough(run, lulin):
 
 def test_solving_for_time_reports_the_frames_needed(run):
     result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-                 "--mag", "21", "--exp", "300", "--snr", "50", "--time", WELL_PLACED)
+                 "--mag", "21", "--fwhm", "1.5", "--exp", "300", "--snr", "50", "--time", WELL_PLACED)
 
     assert result.exit_code == 0
     assert "Exposures needed" in result.stdout
@@ -128,6 +127,28 @@ def test_named_hardware_shows_up_in_the_header(run, lulin):
     result = run(*lulin, "--telescope", "SLT", "--filter", "Sloan_z")
 
     assert "SLT 0.4 m" in result.stdout and "Sloan z'" in result.stdout
+
+def test_edited_hardware_is_not_named_as_the_preset(run, lulin):
+    """--set changes the numbers after the names were chosen; the header must not
+    go on claiming the preset camera was the one calculated."""
+    result = run(*lulin, "--set", "instrument.camera.readout_noise=9.9")
+
+    assert "Sophia (modified)" in result.stdout
+    assert "LOT 1.0 m ·" in result.stdout  # untouched hardware keeps its plain name
+
+def test_restating_a_preset_value_is_not_an_edit(run, lulin):
+    """The mark compares numbers, not whether --set was used."""
+    result = run(*lulin, "--set", "instrument.camera.quantum_efficiency=0.85")
+
+    assert "(modified)" not in result.stdout
+
+def test_the_header_gives_the_brightness_unit(run, lulin):
+    assert "AB 18 mag at" in run(*lulin).stdout
+
+def test_an_extended_target_is_read_per_square_arcsecond(run, lulin):
+    result = run(*lulin, "--set", "target.morphology.type=extended")
+
+    assert "AB 18 mag/arcsec² at" in result.stdout
 
 # ==========================================
 # Never inventing a number quietly
@@ -146,16 +167,25 @@ def test_assumptions_stay_off_stdout(run, lulin):
 
     assert "assumed" not in result.stdout
 
-def test_seeing_falls_back_to_the_site_median_and_says_which(run, lulin):
-    result = run(*lulin)
+def test_a_site_median_cannot_supply_the_image_fwhm(run, lulin):
+    args = lulin.copy()
+    index = args.index("--fwhm")
+    del args[index:index + 2]
+    result = run(*args)
 
-    assert "environment.seeing_fwhm = 1.4" in result.stderr
-    assert "not tonight's seeing" in result.stderr
+    assert result.exit_code == 3
+    assert "environment.total_fwhm: Field required" in result.stderr
+    assert "pass --fwhm" in result.stderr
+    assert 'lulin\'s median seeing of 1.4" is a reference, not a default' in result.stderr
 
 def test_a_stated_value_is_not_an_assumption(run, lulin):
-    result = run(*lulin, "--seeing", "2.2")
+    result = run(*lulin, "--fwhm", "2.2", "--json")
+    payload = json.loads(result.stdout)
 
-    assert "environment.seeing_fwhm" not in result.stderr
+    assert result.exit_code == 0
+    assert payload["request"]["environment"]["total_fwhm"] == 2.2
+    assert payload["response"]["diagnostics"]["total_fwhm"] == 2.2
+    assert all("fwhm" not in item["path"] for item in payload["assumed"])
 
 def test_a_hardware_only_profile_names_what_it_cannot_supply(run, hardware_only_presets):
     """A hardware-only profile lists no site, and the tool would rather fail than
@@ -244,7 +274,7 @@ def test_a_non_default_k_is_named_beside_the_time_it_changes(run, lulin):
     assert "(k =" not in run(*lulin).stdout
 
     stated = run(*lulin, "--set", "options.background_dominance_factor=3.1235")
-    line = next(row for row in stated.stdout.splitlines() if "Background-limited at" in row)
+    line = next(row for row in stated.stdout.splitlines() if "Background/read crossover" in row)
     assert line.endswith("(k = 3.1235)")
 
 # ==========================================
@@ -273,6 +303,20 @@ def test_flags_layer_over_a_saved_form(run, saved_form):
 
     assert json.loads(result.stdout)["request"]["target"]["brightness"]["target_mag"] == 22.0
 
+def test_a_saved_component_budget_needs_an_explicit_total(run, saved_form):
+    """Pruning a saved form's extras must not invent a replacement image width."""
+    data = json.loads(saved_form.read_text(encoding="utf-8"))
+    del data["environment"]["total_fwhm"]
+    data["environment"].update({
+        "seeing_fwhm": 1.5, "diffraction_fwhm": 0.2,
+        "optical_fwhm": 0.1, "tracking_fwhm": 0.1,
+    })
+    result = run("calc", "--request", "-", input=json.dumps(data))
+
+    assert result.exit_code == 3
+    assert "environment.total_fwhm: Field required" in result.stderr
+    assert "pass --fwhm 1.52 to keep that width" in result.stderr
+
 # ==========================================
 # Saturation
 # ==========================================
@@ -280,7 +324,7 @@ def test_flags_layer_over_a_saved_form(run, saved_form):
 def test_saturation_leaves_by_a_different_exit_code(run):
     """A caller that only checks the exit code still finds out."""
     result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-                 "--mag", "8", "--exp", "300", "-n", "1", "--time", WELL_PLACED)
+                 "--mag", "8", "--fwhm", "1.5", "--exp", "300", "-n", "1", "--time", WELL_PLACED)
 
     assert result.exit_code == 1
     assert "SATURATED" in result.stderr
@@ -330,17 +374,18 @@ def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
 
 @pytest.mark.parametrize("question, rows", [
     (["-n", "10"], ["Total SNR", "Single-frame SNR", "Total time", "Saturates after",
-                    "Background-limited at", "Total FWHM"]),
+                    "Background/read crossover", "Total FWHM"]),
     (["--snr", "50"], ["Total SNR", "Single-frame SNR", "Exposures needed", "Total time",
-                       "Saturates after", "Background-limited at", "Total FWHM"]),
+                       "Saturates after", "Background/read crossover", "Total FWHM"]),
 ])
 def test_the_text_answer_keeps_its_rows(run, question, rows):
     """The response grew; what calc prints did not. Its rows are the same ones, in
     the same order, so nothing that reads stdout has to change."""
     result = run("calc", "--site", "lulin", "--ra", "113.65", "--dec", "31.89",
-                 "--mag", "21", "--exp", "300", *question, "--time", WELL_PLACED)
+                 "--mag", "21", "--fwhm", "1.5", "--exp", "300", *question, "--time", WELL_PLACED)
 
-    printed = [line[2:24].strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    # The label column is 28 wide (_results), so read all of it.
+    printed = [line[2:30].strip() for line in result.stdout.splitlines() if line.startswith("  ")]
     assert printed == rows
 
 # ==========================================
@@ -352,6 +397,7 @@ def test_presets_lists_sites_and_marks_the_defaults(run):
 
     assert "lulin" in result.stdout
     assert "LOT*" in result.stdout
+    assert 'median seeing 1.4" — reference only, not image FWHM' in result.stdout
 
 def test_presets_warns_that_a_hardware_profile_has_no_place(run, hardware_only_presets):
     result = run("presets", "--presets-file", str(hardware_only_presets))
@@ -662,7 +708,7 @@ def test_json_carries_a_borrowed_caveat(run, lulin):
 def test_a_sites_own_caveat_reads_as_it_always_has(run):
     caveat = presets.load().profile("vlt").caveat
     args = ["calc", "--site", "vlt", "--ra", "113.65", "--dec", "-31.89",
-            "--mag", "18", "--exp", "30", "-n", "1", "--seeing", "0.8", "--time", WELL_PLACED]
+            "--mag", "18", "--exp", "30", "-n", "1", "--fwhm", "0.8", "--time", WELL_PLACED]
 
     assert f"\nCAVEAT: {caveat}\n" in run(*args).stderr
     assert json.loads(run(*args, "--json").stdout)["caveat"] == caveat

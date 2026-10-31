@@ -67,8 +67,8 @@ def batch_base_request():
             time_step_minutes=10.0, # Compute once every 10 minutes
             mu_dark=21.5,
             extinction_coeff=0.17,
-            # Lesson learned last time — use 0.1 here to satisfy PositiveFloat
-            seeing_fwhm=1.5, diffraction_fwhm=0.1, optical_fwhm=0.1, tracking_fwhm=0.1 
+            # Preserve the former four-component budget as one caller-supplied width.
+            total_fwhm=(1.5 ** 2 + 0.1 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5
         ),
         options=schema.BatchSolveForTime(
             aperture_factor=1.5, single_exp_time=300.0, target_snr=100.0
@@ -78,6 +78,31 @@ def batch_base_request():
 # ==========================================
 # Test cases
 # ==========================================
+
+@pytest.mark.parametrize("total_fwhm", [0.8, 2.4])
+def test_batch_and_single_use_the_same_image_width(batch_base_request, total_fwhm):
+    """One timestamp with the same inputs must give the same SNR and saturation."""
+    from castor.calculator import run_calculation
+
+    batch_base_request.environment.total_fwhm = total_fwhm
+    batch_base_request.environment.end_time_utc = batch_base_request.environment.start_time_utc
+    batch_base_request.options = schema.BatchSolveForSNR(
+        aperture_factor=0.85, single_exp_time=120.0, num_exposures=1,
+        sky_annulus=schema.SkyAnnulus(inner_factor=3.0, outer_factor=5.0)
+    )
+    data = batch_base_request.model_dump()
+    env = data["environment"]
+    env["observing_time_utc"] = env.pop("start_time_utc")
+    del env["end_time_utc"], env["time_step_minutes"]
+    env["auto_calc_background"] = True
+
+    single = run_calculation(schema.ObservationRequest.model_validate(data))
+    batch = run_batch_calculation(batch_base_request)
+
+    assert single.diagnostics.total_fwhm == total_fwhm
+    assert batch.core.single_snr == pytest.approx([single.core.single_snr])
+    assert batch.core.total_snr == pytest.approx([single.core.total_snr])
+    assert batch.core.saturation_time_limit == pytest.approx([single.core.saturation_time_limit])
 
 def test_expand_time_series():
     """Ensure the time-expansion helper works correctly and has a bound in place"""
@@ -120,6 +145,38 @@ def test_batch_pipeline_solve_time(mock_moon_batch, batch_base_request):
     for snr in response.core.total_snr:
         assert snr >= 100.0
 
+def test_batch_solve_time_unreachable_target_is_a_none_gap(mock_moon_batch, batch_base_request):
+    """A correlated flatness floor can put the target above the ceiling: those
+    timestamps report a None exposure count and a warning, not a fake number, and
+    the response still serialises to valid JSON (no Infinity/NaN)."""
+    import json
+
+    # A 2% flatness floor plus a faint target and a demanding SNR pushes the
+    # request above the asymptotic ceiling everywhere in the window.
+    batch_base_request.instrument.camera.background_flatness_fraction = 0.02
+    batch_base_request.target.brightness = schema.VegaMagnitude(
+        target_mag=21.0, zero_point_flux=3.6e-9
+    )
+    batch_base_request.options = schema.BatchSolveForTime(
+        aperture_factor=1.5, single_exp_time=300.0, target_snr=200.0
+    )
+
+    response = run_batch_calculation(batch_base_request)
+
+    assert response.core.required_exposures is not None
+    assert all(n is None for n in response.core.required_exposures)
+    assert any("ceiling" in w.lower() for w in response.flags.warnings)
+    # Unreachable timestamps report the finite asymptotic ceiling, not inf/nan.
+    assert all(map(lambda s: s == s and abs(s) != float("inf"), response.core.total_snr))
+    # No stack, so nothing that describes one: the same gaps in the total time and
+    # in every stacked noise term, while the single frame is still reported.
+    assert all(t is None for t in response.core.total_exp_time)
+    for values in response.noise.total.model_dump().values():
+        assert all(v is None for v in values)
+    assert all(v is not None for v in response.noise.single.signal)
+    json.loads(response.model_dump_json())  # raises on Infinity/NaN tokens
+
+
 def test_batch_pipeline_solve_snr(mock_moon_batch, batch_base_request):
     """Test the pipeline: solving SNR forward over a time series (SolveForSNR), switched to an extended source"""
     # Swap out the request content
@@ -157,7 +214,7 @@ def test_batch_pipeline_warning_flag(mock_moon_batch, batch_base_request):
 
 def test_batch_pipeline_real_astropy_path(batch_base_request):
     """
-    Deliberately does NOT use mock_moon_batch: every other test in this file mocks
+    Deliberately does NOT use mock_moon_batch: most pipeline tests in this file mock
     castor.moon out entirely, which means the real astropy call path
     (moon.get_moon_and_target_geometry -> astropy.time.Time(..., format="isot") and
     moon.calculate_sky_brightness's full argument list) was never actually exercised
@@ -296,11 +353,14 @@ def _leaves(dumped: dict, prefix: str = ""):
             yield f"{prefix}{key}", value
 
 # What the single response carries and a batch response does not: the Stage 2
-# values that are fixed for a whole series (architecture.md §5.2).
+# values that are fixed for a whole series (architecture.md §5.2), and the
+# flatness ceiling's two fields, which a batch states instead as None gaps in
+# required_exposures plus a warning.
 SINGLE_ONLY = {
     "diagnostics.total_fwhm", "diagnostics.effective_area", "diagnostics.pixel_scale",
     "diagnostics.total_throughput", "diagnostics.enclosed_flux_fraction",
     "diagnostics.num_pixels_aperture", "diagnostics.num_pixels_sky_estimate",
+    "core.snr_ceiling", "core.target_reachable",
 }
 
 def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
@@ -338,8 +398,7 @@ def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
         environment=schema.EnvironmentCondition(
             location=env.location, observing_time_utc=env.start_time_utc, auto_calc_background=True,
             mu_dark=env.mu_dark, zodiacal_share=env.zodiacal_share, extinction_coeff=env.extinction_coeff,
-            seeing_fwhm=env.seeing_fwhm, diffraction_fwhm=env.diffraction_fwhm,
-            optical_fwhm=env.optical_fwhm, tracking_fwhm=env.tracking_fwhm),
+            total_fwhm=env.total_fwhm),
         options=schema.SolveForTime(**batch_base_request.options.model_dump(exclude={"type"})),
     ))
 

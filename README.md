@@ -7,28 +7,60 @@
        src="src/castorGUI/frontend/img/castor-logo-black.png">
 </picture>
 
-CASTOR(Calculator for Astronomical Strategy and Time On Rigs) is a Python module for calculating the exposure time of telescopes and astronomical observations.
+CASTOR (Calculator for Astronomical Strategy and Time On Rigs) is a Python tool
+for estimating signal-to-noise ratio and exposure counts for optical observations.
 
 By inputting the settings of the instrument, target, and environment, along with either the number of exposures or the target SNR, you can calculate the resulting SNR or the suggested number of exposures.
 
-We designed this as a lightweight, fast, and general-purpose module for anyone who needs to run these calculations. We keep it simple and easy to use.
+It provides a Python API, command-line interface, and reference GUI. The
+[validation report](validation/VALIDATION_REPORT.md) describes where its
+predictions have been checked against observations and where they remain
+model estimates.
 
 ## Requirements & Installation
 
-To use CASTOR, you will need:
+CASTOR needs Python >= 3.12.
 
-- Python >= 3.12
-- `uv` (for dependency management)
+### To use it
 
-You can clone the repository and install the dependencies easily:
+Install it like any Python package, and the `castor` command works from any
+directory:
 
 ```bash
-git clone https://github.com/alexlee24/castor.git
-cd castor
+pip install git+https://github.com/happpycorn/CASTOR.git
+```
+
+Either of these does the same, keeping CASTOR in an environment of its own so it
+cannot clash with your other packages:
+
+```bash
+pipx install git+https://github.com/happpycorn/CASTOR.git
+uv tool install git+https://github.com/happpycorn/CASTOR.git
+```
+
+Then check it runs:
+
+```bash
+castor presets
+```
+
+pip and pipx resolve dependencies from the minimum versions in `pyproject.toml`,
+so they may pick newer releases than the ones tested; `uv.lock` records those,
+and only a checkout installed with `uv sync` follows it. The install also brings
+in the GUI's dependencies (FastAPI, pywebview) even if you only use the command
+line.
+
+### To work on it
+
+Clone the repository and let `uv` install the exact locked versions:
+
+```bash
+git clone https://github.com/happpycorn/CASTOR.git
+cd CASTOR
 uv sync
 ```
 
-Check the `pyproject.toml` for more details on the exact package dependencies.
+Inside a checkout, run the CLI as `uv run castor ...`.
 
 ## Usage
 
@@ -58,8 +90,10 @@ usually one line. Everything the CLI filled in for you is reported on stderr, so
 "the tool chose this" never gets mistaken for "the observer meant this".
 
 ```bash
-uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --fwhm 1.5 --exp 300 -n 10
 ```
+
+From a development checkout, prefix it with `uv run`.
 
 | command | |
 |---|---|
@@ -97,3 +131,10 @@ and are skipped where it is not installed.
 - **[Algorithm Theoretical Basis Document (ATBD)](docs/ATBD.md):** Mathematical formulations for photon count rates, SNR, and ephemeris.
 - **API Specifications:** CASTOR uses strict Pydantic schemas for data validation. For detailed request and response contracts, please refer directly to [`src/castor/schema.py`](src/castor/schema.py).
 - **[Validation](validation/VALIDATION_REPORT.md):** What CASTOR's answers are worth, measured against outside references and real frames — and [what it still does not know](validation/QUESTIONS.md), each item labelled with who can close it.
+
+Before using a calculated exposure count for an observing plan, read the
+[current limitations and release handoff](validation/QUESTIONS.md). Solve-for-time
+now accounts for the correlated background-flatness floor: it returns a count
+that actually reaches the requested SNR, and where that SNR sits above the floor's
+asymptotic ceiling it reports the target as unreachable rather than returning a
+frame count that never meets it.

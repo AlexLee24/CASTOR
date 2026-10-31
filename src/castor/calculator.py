@@ -115,9 +115,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         inst.camera.quantum_efficiency
     )) * inst.throughput_correction
     pixel_scale = float(physics.calculate_pixel_scale(inst.camera.pixel_pitch, inst.telescope.focal_length))
-    total_fwhm = float(physics.calculate_total_fwhm(
-        env.seeing_fwhm, env.diffraction_fwhm, env.optical_fwhm, env.tracking_fwhm
-    ))
+    total_fwhm = env.total_fwhm
     
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)
@@ -180,6 +178,16 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         background_flatness_fraction=inst.camera.background_flatness_fraction
     ))
 
+    # The flatness floor does not average down, so the stack has a hard SNR
+    # ceiling. Infinite when the camera has no flatness term (f = 0), in which
+    # case the response reports None and the solver keeps its sqrt(N) behaviour.
+    snr_ceiling = float(physics.calculate_flatness_snr_ceiling(
+        source_rate, sky_rate, n_pix, inst.camera.background_flatness_fraction
+    ))
+    snr_ceiling_out = snr_ceiling if math.isfinite(snr_ceiling) else None
+
+    warnings: list[str] = []
+
     match opt:
         case schema.SolveForSNR(num_exposures=n_exp):
             num_exposures = n_exp
@@ -190,19 +198,36 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
                 inst.camera.background_flatness_fraction
             ))
             final_req_exposures = None # req_exposures isn't returned in SolveForSNR mode
+            target_reachable = None    # no target is solved for in this mode
 
         case schema.SolveForTime(target_snr=t_snr):
-            req_exp_float = physics.solve_required_exposures(t_snr, single_snr)
-            final_req_exposures = int(math.ceil(req_exp_float))
-            num_exposures = final_req_exposures
-            total_exp_time = opt.single_exp_time * final_req_exposures
+            req_exp_float = float(physics.solve_required_exposures(t_snr, single_snr, snr_ceiling))
 
-            total_snr = float(physics.calculate_total_snr(
-                source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
-                n_pix, opt.single_exp_time, total_exp_time, final_req_exposures, n_est,
-                inst.camera.background_flatness_fraction
-            ))
-            
+            if math.isinf(req_exp_float):
+                # Target sits at or above the flatness ceiling: no finite count
+                # reaches it. Report the asymptotic best and say so; with no stack,
+                # there is no total time or total noise to report either.
+                target_reachable = False
+                final_req_exposures = None
+                num_exposures = None
+                total_exp_time = None
+                total_snr = snr_ceiling
+                warnings.append(
+                    f"Target SNR {t_snr:g} is at or above the background-flatness ceiling "
+                    f"{snr_ceiling:.2f}; no exposure count reaches it."
+                )
+            else:
+                target_reachable = True
+                final_req_exposures = int(math.ceil(req_exp_float))
+                num_exposures = final_req_exposures
+                total_exp_time = opt.single_exp_time * final_req_exposures
+
+                total_snr = float(physics.calculate_total_snr(
+                    source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
+                    n_pix, opt.single_exp_time, total_exp_time, final_req_exposures, n_est,
+                    inst.camera.background_flatness_fraction
+                ))
+
         case _:
             raise ValueError("Unknown calculation option")
 
@@ -213,7 +238,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
         n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction
     )
-    total_noise = physics.calculate_total_noise_components(
+    total_noise = None if total_exp_time is None else physics.calculate_total_noise_components(
         source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
         n_pix, opt.single_exp_time, total_exp_time, num_exposures, n_est,
         inst.camera.background_flatness_fraction
@@ -231,7 +256,6 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         background_dominance_factor=opt.background_dominance_factor
     ))
 
-    warnings = []
     if airmass > 2.0:
         warnings.append("Airmass > 2.0: Extinction model accuracy may degrade.")
 
@@ -240,6 +264,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             total_snr=total_snr,
             single_snr=single_snr,
             required_exposures=final_req_exposures,
+            snr_ceiling=snr_ceiling_out,
+            target_reachable=target_reachable,
             saturation_time_limit=t_sat,
             optimal_exposure_time=t_opt,
             background_dominance_factor=opt.background_dominance_factor,
@@ -267,7 +293,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         ),
         noise=schema.NoiseBudget(
             single=_noise_components(single_noise, opt.single_exp_time, 1),
-            total=_noise_components(total_noise, total_exp_time, num_exposures)
+            total=None if total_noise is None else _noise_components(total_noise, total_exp_time, num_exposures)
         ),
         # The raw zenith angles, not z_target_safe: a target below the horizon must
         # read as a negative elevation, which the clamped airmass cannot show.

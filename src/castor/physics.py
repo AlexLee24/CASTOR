@@ -13,7 +13,6 @@ __all__ = [
     "calculate_photon_energy",
     "calculate_total_throughput",
     "calculate_pixel_scale",
-    "calculate_total_fwhm",
     "calculate_aperture_geometry",
     "calculate_sky_estimate_pixels",
     "convert_ab_to_wavelength_flux",
@@ -30,6 +29,7 @@ __all__ = [
     "calculate_total_noise_components",
     "calculate_single_snr",
     "calculate_total_snr",
+    "calculate_flatness_snr_ceiling",
     "solve_required_exposures",
     "calculate_saturation_time",
     "calculate_optimal_exposure_time"
@@ -160,37 +160,6 @@ def calculate_pixel_scale(
     # Convert pixel_pitch from µm to m (1 µm = 1e-6 m)
     pixel_pitch_m = pixel_pitch_um * 1e-6
     return ARCSEC_PER_RADIAN * (pixel_pitch_m / focal_length_m)
-
-def calculate_total_fwhm(
-    seeing_fwhm: Numeric,
-    diffraction_fwhm: Numeric,
-    optical_fwhm: Numeric,
-    tracking_fwhm: Numeric
-) -> Numeric:
-    """
-    Calculate the total spatial spreading (FWHM_tot) by quadrature sum.
-
-    Corresponds to ATBD Section 4.1.2: FWHM_tot = sqrt(See² + Dif² + Opt² + Trk²).
-
-    Parameters
-    ----------
-    seeing_fwhm : Numeric
-        Atmospheric seeing FWHM [arcsec].
-    diffraction_fwhm : Numeric
-        Diffraction limit FWHM [arcsec].
-    optical_fwhm : Numeric
-        Optical aberrations FWHM [arcsec].
-    tracking_fwhm : Numeric
-        Telescope tracking error FWHM [arcsec].
-
-    Returns
-    -------
-    Numeric
-        Total FWHM (FWHM_tot) [arcsec].
-    """
-    return np.sqrt(
-        seeing_fwhm**2 + diffraction_fwhm**2 + optical_fwhm**2 + tracking_fwhm**2
-    )
 
 def calculate_aperture_geometry(
     aperture_factor: Numeric,
@@ -887,15 +856,78 @@ def calculate_total_snr(
     )
     return terms.signal / np.sqrt(terms.total_variance)
 
+def calculate_flatness_snr_ceiling(
+    source_count_rate: Numeric,
+    sky_count_rate: Numeric,
+    num_pixels_aperture: Numeric,
+    background_flatness_fraction: Numeric = 0.0
+) -> Numeric:
+    """
+    Calculate the asymptotic SNR ceiling imposed by the background-flatness floor.
+
+    The flatness residual (calculate_background_flatness_variance) is the one
+    noise term that does not average down as exposures accumulate: it is a fixed
+    fraction of the *total* stacked background, so its standard deviation grows
+    in lockstep with the signal instead of with its square root. As the exposure
+    count grows without bound every photon-counting term (source, sky, dark,
+    readout) fades relative to the linearly growing signal, and the stacked SNR
+    approaches a hard ceiling set by signal / flatness-noise alone:
+
+        SNR_max = source_count_rate / (f * sky_count_rate * N_pix)
+
+    which is independent of exposure time and frame count -- lengthening the
+    stack scales signal and flatness noise together. Any target SNR at or above
+    this value is unreachable no matter how many frames are taken.
+
+    Parameters
+    ----------
+    source_count_rate : Numeric
+        Detected photoelectron count rate from the target [e-/s].
+    sky_count_rate : Numeric
+        Background photoelectron count rate per pixel [e-/s/pix].
+    num_pixels_aperture : Numeric
+        Number of pixels in the photometric aperture (N_pix) [count]. This
+        matches calculate_background_flatness_variance -- the aperture footprint,
+        not the sky-estimate annulus.
+    background_flatness_fraction : Numeric
+        Flat-field/background-gradient residual as a fraction of the background
+        level (f) [dimensionless]. Zero (the default) means no floor, so the
+        ceiling is infinite and the classic sqrt(N) behaviour holds.
+
+    Returns
+    -------
+    Numeric
+        Asymptotic maximum stacked SNR. Infinite where there is no flatness
+        floor (f = 0 or no background).
+    """
+    flatness_noise_rate = background_flatness_fraction * sky_count_rate * num_pixels_aperture
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ceiling = np.divide(source_count_rate, flatness_noise_rate)
+    # No floor (f = 0 or no background) leaves the ceiling unbounded.
+    return np.where(np.asarray(flatness_noise_rate) > 0.0, ceiling, np.inf)
+
 def solve_required_exposures(
     target_snr: Numeric,
-    single_snr: Numeric
+    single_snr: Numeric,
+    ceiling_snr: Numeric = np.inf
 ) -> Numeric:
     """
     Calculate the required number of exposures to reach a target SNR.
 
-    Corresponds to ATBD Section 4.3.2.
-    Derived algebraically from the SNR accumulation principles.
+    Corresponds to ATBD Section 4.3.2. The stacked SNR follows
+
+        SNR(N) = N * a / sqrt(N * L + N^2 * c)
+
+    where `a` is the per-frame signal, `L` the per-frame variance from every term
+    that averages down (source, sky, dark, readout), and `c` the per-frame
+    contribution of the non-averaging flatness floor. Inverting for N gives
+
+        N = target^2 * (1/single^2 - 1/ceiling^2) / (1 - target^2/ceiling^2)
+
+    with `ceiling` the asymptotic SNR from calculate_flatness_snr_ceiling. When
+    the ceiling is infinite (no flatness floor) the flatness terms vanish and
+    this collapses to the classic N = (target/single)^2. When the target sits at
+    or above the ceiling no finite N reaches it, and the result is +inf.
 
     Parameters
     ----------
@@ -903,14 +935,27 @@ def solve_required_exposures(
         Goal Signal-to-Noise Ratio [dimensionless].
     single_snr : Numeric
         SNR achieved in a single exposure [dimensionless].
+    ceiling_snr : Numeric
+        Asymptotic SNR ceiling from the background-flatness floor
+        (calculate_flatness_snr_ceiling). Infinite (the default) reproduces the
+        pure sqrt(N) accumulation for callers with no correlated background term.
 
     Returns
     -------
     Numeric
-        Required number of exposures (exact float). 
-        Note: The scheduling layer should apply np.ceil() if integer frame counts are required.
+        Required number of exposures (exact float), or +inf when the target is
+        at or above the flatness ceiling and therefore unreachable.
+        Note: The scheduling layer should apply np.ceil() only after checking for
+        an infinite (unreachable) result.
     """
-    return (target_snr / single_snr) ** 2.0
+    target_sq = np.square(target_snr)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # 1/ceiling^2 -> 0 as the ceiling grows without bound, recovering sqrt(N).
+        inv_ceiling_sq = np.divide(1.0, np.square(ceiling_snr))
+        denominator = 1.0 - target_sq * inv_ceiling_sq
+        required = target_sq * (np.divide(1.0, np.square(single_snr)) - inv_ceiling_sq) / denominator
+    # denominator <= 0 means the target is at or above the ceiling: unreachable.
+    return np.where(np.asarray(denominator) > 0.0, required, np.inf)
 
 def calculate_saturation_time(
     full_well_capacity: Numeric,
@@ -961,7 +1006,9 @@ def calculate_optimal_exposure_time(
     still gain per unit of *total* integration time (splitting a fixed total
     exposure into more sub-frames of at least this length costs no more than
     that penalty) — so once it is small, it becomes more efficient to add more
-    exposures than to keep extending a single one.
+    exposures than to keep extending a single one. It is a noise crossover,
+    not a recommended exposure length: saturation, tracking, cosmic rays,
+    overhead, and the intended observing strategy must also be considered.
 
     Derived from a standard-deviation ratio between the two noise sources:
     background shot noise reaches `background_dominance_factor` times the
@@ -997,7 +1044,7 @@ def calculate_optimal_exposure_time(
     Returns
     -------
     Numeric
-        Optimal single exposure time (t_opt) [s].
+        Background/read-noise crossover time (t_opt) [s].
     """
     background_rate = sky_count_rate + dark_current_rate
     return ((background_dominance_factor * readout_noise) ** 2.0) / background_rate

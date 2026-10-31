@@ -16,6 +16,7 @@ from castor.physics import (
     calculate_total_noise_components,
     calculate_single_snr,
     calculate_total_snr,
+    calculate_flatness_snr_ceiling,
     solve_required_exposures,
     calculate_optimal_exposure_time
 )
@@ -358,6 +359,52 @@ def test_snr_reversibility():
 
     # (20 / 10)^2 = 4.0
     assert required_exposures == pytest.approx(4.0)
+
+def test_solve_required_exposures_infinite_ceiling_is_sqrt_law():
+    """An infinite ceiling (no flatness floor) reproduces the classic sqrt(N) law."""
+    assert solve_required_exposures(20.0, 10.0, np.inf) == pytest.approx(4.0)
+
+def test_solve_required_exposures_inverts_the_forward_stack():
+    """The solved (float) count fed back into calculate_total_snr returns the target.
+
+    This is the property question 17 turned on: the inverse must agree with the
+    forward stack even when the non-averaging flatness term is present.
+    """
+    params = dict(
+        source_count_rate=50.0, sky_count_rate=8.0, dark_current_rate=0.02,
+        readout_noise=4.0, num_pixels_aperture=40.0, single_exp_time=120.0,
+        num_pixels_sky_estimate=15.0, background_flatness_fraction=0.02,
+    )
+    single_snr = calculate_single_snr(**params)
+    ceiling = calculate_flatness_snr_ceiling(
+        params["source_count_rate"], params["sky_count_rate"],
+        params["num_pixels_aperture"], params["background_flatness_fraction"],
+    )
+    target_snr = 0.9 * float(ceiling)  # comfortably reachable, below the ceiling
+
+    n = float(solve_required_exposures(target_snr, single_snr, ceiling))
+    achieved = calculate_total_snr(
+        params["source_count_rate"], params["sky_count_rate"], params["dark_current_rate"],
+        params["readout_noise"], params["num_pixels_aperture"], params["single_exp_time"],
+        n * params["single_exp_time"], n, params["num_pixels_sky_estimate"],
+        params["background_flatness_fraction"],
+    )
+    assert float(achieved) == pytest.approx(target_snr, rel=1e-9)
+
+def test_solve_required_exposures_unreachable_is_infinite():
+    """A target at or above the ceiling cannot be reached by any finite count."""
+    single_snr, ceiling = 5.0, 18.0
+    assert np.isinf(float(solve_required_exposures(ceiling, single_snr, ceiling)))
+    assert np.isinf(float(solve_required_exposures(ceiling + 1.0, single_snr, ceiling)))
+
+def test_flatness_snr_ceiling_is_infinite_without_a_floor():
+    """No flatness fraction means no floor, so the ceiling is unbounded."""
+    assert np.isinf(float(calculate_flatness_snr_ceiling(50.0, 8.0, 40.0, 0.0)))
+
+def test_flatness_snr_ceiling_value():
+    """Ceiling is source_rate / (f * sky_rate * N_pix), independent of time."""
+    ceiling = calculate_flatness_snr_ceiling(50.0, 8.0, 40.0, 0.02)
+    assert float(ceiling) == pytest.approx(50.0 / (0.02 * 8.0 * 40.0))
 
 def test_optimal_exposure_time_crossover_point():
     """Crossover point definition: when background_dominance_factor=1.0, plugging the

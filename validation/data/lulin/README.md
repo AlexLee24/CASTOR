@@ -37,9 +37,9 @@ we need to know what CASTOR would have been told:
 - **When** — timestamp in UTC, or the airmass if that is all that survives. The
   moon is derived from the time, so a time is worth more than an airmass.
 - **Exposure time and frame count**, kept separate: read noise enters per frame.
-- **Seeing**, ideally the FWHM measured on the frame rather than the site
-  forecast. CASTOR takes this as an input and does not adjust it for band or
-  airmass, so a measured value removes a whole class of disagreement.
+- **Image FWHM**, ideally measured on the frame, with its pixel scale if the
+  width is in pixels. This supplies `environment.total_fwhm` in arcseconds
+  (see [ATBD §4.1.2](../../../docs/ATBD.md#412-spatial-resolution)).
 - **The photometric aperture** the measurement used, in arcsec or in pixels.
   This is not a detail: an aperture of 1.5 FWHM against one of 0.85 changes the
   sky in the aperture by three times, which is larger than every modelling

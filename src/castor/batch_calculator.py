@@ -74,7 +74,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     photon_energy = float(physics.calculate_photon_energy(inst.optic_filter.central_wavelength))
     total_throughput = float(physics.calculate_total_throughput(inst.telescope.optical_throughput, inst.optic_filter.filter_transmission, inst.camera.quantum_efficiency))
     pixel_scale = float(physics.calculate_pixel_scale(inst.camera.pixel_pitch, inst.telescope.focal_length))
-    total_fwhm = float(physics.calculate_total_fwhm(env.seeing_fwhm, env.diffraction_fwhm, env.optical_fwhm, env.tracking_fwhm))
+    total_fwhm = env.total_fwhm
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
     n_pix, f_enc = float(n_pix), float(f_enc)
 
@@ -126,6 +126,11 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     # Stays None for solve_snr, where "how many exposures" is an input rather than
     # an answer and there is nothing per-timestamp to report.
     req_exp_int_arr = None
+    # Timestamps whose target sits above the flatness ceiling (unreachable) carry
+    # NaN in req_exp_int_arr and are reported as None gaps; this flags the warning.
+    any_unreachable = False
+    # Every timestamp has a stack unless solve_time finds one it cannot reach.
+    reachable_mask = True
 
     match opt:
         case schema.BatchSolveForSNR(num_exposures=n_exp):
@@ -138,18 +143,29 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             )
 
         case schema.BatchSolveForTime(target_snr=t_snr):
-            req_exp_float_arr = physics.solve_required_exposures(t_snr, single_snr_arr)
+            ceiling_arr = physics.calculate_flatness_snr_ceiling(
+                source_rate_arr, sky_rate_arr, n_pix, inst.camera.background_flatness_fraction
+            )
+            req_exp_float_arr = physics.solve_required_exposures(t_snr, single_snr_arr, ceiling_arr)
+            reachable_mask = np.isfinite(req_exp_float_arr)
+            any_unreachable = bool(not np.all(reachable_mask))
 
-            req_exp_int_arr = np.ceil(req_exp_float_arr)
-            total_exp_time_arr = opt.single_exp_time * req_exp_int_arr
-            num_exposures, total_exp_time = req_exp_int_arr, total_exp_time_arr
+            # The forward stack cannot take the +inf that unreachable timestamps
+            # carry, so solve those with a placeholder count and overwrite below.
+            req_exp_ceil_arr = np.ceil(np.where(reachable_mask, req_exp_float_arr, 1.0))
+            total_exp_time_arr = opt.single_exp_time * req_exp_ceil_arr
+            num_exposures, total_exp_time = req_exp_ceil_arr, total_exp_time_arr
 
-            total_snr_arr = physics.calculate_total_snr(
+            total_snr_reachable = physics.calculate_total_snr(
                 source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
-                n_pix, opt.single_exp_time, total_exp_time_arr, req_exp_int_arr, n_est,
+                n_pix, opt.single_exp_time, total_exp_time_arr, req_exp_ceil_arr, n_est,
                 inst.camera.background_flatness_fraction
             )
-            
+            # Unreachable timestamps report the asymptotic ceiling as their best
+            # SNR and an empty (None) exposure count.
+            total_snr_arr = np.where(reachable_mask, total_snr_reachable, ceiling_arr)
+            req_exp_int_arr = np.where(reachable_mask, req_exp_ceil_arr, np.nan)
+
         case _:
             raise ValueError("Unknown batch calculation option")
 
@@ -177,10 +193,15 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
         background_dominance_factor=opt.background_dominance_factor
     )
-    
+
     warnings = []
     if np.any(airmass_arr > 2.0):
         warnings.append("Airmass > 2.0 detected in time series: Extinction model accuracy may degrade.")
+    if any_unreachable:
+        warnings.append(
+            "Target SNR is at or above the background-flatness ceiling at one or more "
+            "timestamps; those points are unreachable at any exposure count."
+        )
 
     # Every result is stretched to one value per timestamp. That also covers a
     # value physics returns as a scalar because it was built only from constants
@@ -190,23 +211,35 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     def to_list(arr) -> list[float]:
         return np.broadcast_to(arr, (n_steps,)).tolist()
 
-    def noise_block(terms: physics.NoiseTerms, exp_time, num_exposures) -> schema.BatchNoiseComponents:
+    # What describes the stack is a gap (None) where there is no stack: those
+    # timestamps were solved with a placeholder count that must not be reported.
+    def to_stack_list(arr) -> list[float | None]:
+        keep = np.broadcast_to(reachable_mask, (n_steps,))
+        return [v if k else None for v, k in zip(to_list(arr), keep)]
+
+    def noise_block(terms: physics.NoiseTerms, exp_time, num_exposures,
+                    listed=to_list) -> schema.BatchNoiseComponents:
         return schema.BatchNoiseComponents(
-            exp_time=to_list(exp_time),
-            num_exposures=to_list(num_exposures),
-            **{field: to_list(value) for field, value in terms._asdict().items()}
+            exp_time=listed(exp_time),
+            num_exposures=listed(num_exposures),
+            **{field: listed(value) for field, value in terms._asdict().items()}
         )
+
+    # Unreachable timestamps carry NaN, which is not valid JSON: map them to None
+    # so the exposure-count series shows an honest gap rather than a bad number.
+    def to_exposure_list(arr) -> list[float | None]:
+        return [None if not np.isfinite(v) else float(v) for v in np.atleast_1d(arr)]
 
     return schema.BatchObservationResponse(
         core=schema.BatchCoreResult(
             timestamps_iso=time_series_iso,
             total_snr=to_list(total_snr_arr),
             single_snr=to_list(single_snr_arr),
-            required_exposures=None if req_exp_int_arr is None else to_list(req_exp_int_arr),
+            required_exposures=None if req_exp_int_arr is None else to_exposure_list(req_exp_int_arr),
             saturation_time_limit=to_list(t_sat_arr),
             optimal_exposure_time=to_list(t_opt_arr),
             background_dominance_factor=to_list(opt.background_dominance_factor),
-            total_exp_time=to_list(total_exp_time)
+            total_exp_time=to_stack_list(total_exp_time)
         ),
         # Reuses the zenith angles the photometry already needed; elevation is just
         # their complement. Deliberately the raw z_target_arr, not the z_target_safe
@@ -234,6 +267,6 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         ),
         noise=schema.BatchNoiseBudget(
             single=noise_block(single_noise, opt.single_exp_time, 1),
-            total=noise_block(total_noise, total_exp_time, num_exposures)
+            total=noise_block(total_noise, total_exp_time, num_exposures, listed=to_stack_list)
         )
     )

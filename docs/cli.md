@@ -7,17 +7,26 @@ preset catalogue it shares with the GUI.
 > of the same engine ([Architecture](architecture.md)) and the same preset file
 > ([Presets](presets.md)); neither is part of it.
 
+Installed with pip, pipx or `uv tool install` (see the README), `castor` is an
+ordinary command:
+
 ```bash
-uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --exp 300 -n 10
+castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --fwhm 1.5 --exp 300 -n 10
 ```
 
-For a session of several commands, put the environment on the path once and drop
+From a development checkout it runs through the project environment instead:
+
+```bash
+uv run castor calc --site lulin --filter Sloan_r --ra 210.8 --dec 54.3 --mag 18 --fwhm 1.5 --exp 300 -n 10
+```
+
+For a session of several commands there, put the environment on the path once and drop
 the prefix. `rehash` is what zsh needs to notice — it caches command lookups, so
 without it the shell keeps insisting there is no `castor`:
 
 ```bash
 source .venv/bin/activate && rehash
-castor calc --site lulin --filter Sloan_r --mag 18 --exp 300 -n 10 --ra 210.8 --dec 54.3
+castor calc --site lulin --filter Sloan_r --mag 18 --fwhm 1.5 --exp 300 -n 10 --ra 210.8 --dec 54.3
 ```
 
 ## The four commands
@@ -43,7 +52,6 @@ the reason it is a convention rather than a measurement:
 
 ```
 assumed (pass the flag or --set to state it yourself):
-  environment.seeing_fwhm = 1.4  — lulin's published median, not tonight's seeing
   options.aperture_factor = 0.85  — photon-limit optimum; tight apertures need a stable PSF or aperture correction
   target.sed.type = 'flat'  — a choice of contract, not a measurement
   ...
@@ -53,6 +61,14 @@ The list lives in one place, `ASSUMPTIONS` in `main.py`. Adding a default means
 writing the sentence that justifies it; there is nowhere to put one without a
 reason. Results go to stdout and everything else to stderr, so a pipeline gets
 the answer and a person gets the caveats.
+
+Image FWHM must come from `--fwhm`, `--set environment.total_fwhm=...`, or the
+request file. It has no CLI fallback: the site's median seeing is reference
+information, not a total image width. When it is missing, the error says to pass
+`--fwhm` and names the site's median as a reference. A request file still holding
+the former four components is not converted; the error gives their quadrature
+sum as the `--fwhm` value that keeps the old width. See
+[ATBD §4.1.2](ATBD.md#412-spatial-resolution) for the definition.
 
 ### A profile that cannot be trusted says so
 
@@ -93,7 +109,7 @@ and is repeatable, which is what keeps the flag list short: the common fields ge
 flags, everything else is reachable without one.
 
 `options.background_dominance_factor` is one of those: k, how far the background
-must outweigh read noise in the "Background-limited at" time (ATBD 4.3.5). Its
+must outweigh read noise in the "Background/read crossover" time (ATBD 4.3.5). Its
 default of 1.0 belongs to the engine, not to this tool, so it is not on the
 `assumed` list — but whenever k is anything else the result names it beside that
 time, because a request file can set it without the person reading the output
@@ -180,8 +196,8 @@ Thermal electron generation rate per pixel in e-/s/pix. (ATBD: R_dark)
 Electronic noise introduced during the readout phase in e-/pix. (ATBD: RON)
 ```
 
-Fifty-three fields carry a description and thirty-one of those name their
-[ATBD](ATBD.md) symbol, so a caller never has to guess whether `pixel_pitch` is
+Field descriptions carry units and name their [ATBD](ATBD.md) symbols, so a
+caller never has to guess whether `pixel_pitch` is
 metres or micrometres — the class of mistake that produces a plausible wrong
 answer rather than an error. With the `assumed` list beside it, that is the whole
 of what an autonomous caller needs: what the request must contain, and what was

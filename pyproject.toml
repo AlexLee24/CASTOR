@@ -1,7 +1,7 @@
 [project]
 name = "castor"
 version = "0.1.0"
-description = "Add your description here"
+description = "Astronomical exposure-time and signal-to-noise calculator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

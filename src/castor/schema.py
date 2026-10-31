@@ -93,13 +93,20 @@ class PointMorphology(StrictModel):
     type: Literal["point"] = "point"
 
 class ExtendedMorphology(StrictModel):
+    """A uniform surface-brightness target.
+
+    Changes the meaning of every brightness field: an extended target's magnitude
+    is mag/arcsec² and its flux density is per arcsec², scaled by the aperture area
+    in physics.calculate_extended_source_rate. A total magnitude given here is
+    silently wrong, not rejected.
+    """
     type: Literal["extended"] = "extended"
 
 class VegaMagnitude(StrictModel):
     type: Literal["vega_mag"] = "vega_mag"
     target_mag: float = Field(
         ..., 
-        description="Apparent magnitude of the observation target in the Vega system. (ATBD: m_target)"
+        description="Apparent magnitude of the observation target in the Vega system; mag/arcsec² for an extended target. (ATBD: m_target)"
     )
     zero_point_flux: PositiveFloat = Field(
         ..., 
@@ -110,21 +117,21 @@ class ABMagnitude(StrictModel):
     type: Literal["ab_mag"] = "ab_mag"
     target_mag: float = Field(
         ..., 
-        description="Apparent magnitude of the observation target in the AB system (0 mag = 3631 Jy)."
+        description="Apparent magnitude of the observation target in the AB system (0 mag = 3631 Jy); mag/arcsec² for an extended target."
     )
 
 class JanskyFlux(StrictModel):
     type: Literal["jansky_flux"] = "jansky_flux"
     flux_value: PositiveFloat = Field(
         ..., 
-        description="Frequency flux density (F_nu) in Jansky (Jy)."
+        description="Frequency flux density (F_nu) in Jansky (Jy); Jy/arcsec² for an extended target."
     )
 
 class WavelengthFlux(StrictModel):
     type: Literal["wavelength_flux"] = "wavelength_flux"
     flux_value: PositiveFloat = Field(
         ..., 
-        description="Wavelength flux density (F_lambda) in erg/s/cm²/Å."
+        description="Wavelength flux density (F_lambda) in erg/s/cm²/Å; per arcsec² for an extended target."
     )
 
 class FlatSED(StrictModel):
@@ -137,7 +144,7 @@ class TargetProfile(StrictModel):
     morphology: Annotated[Union[PointMorphology, ExtendedMorphology], Field(discriminator="type")]
     brightness: Annotated[
         Union[VegaMagnitude, ABMagnitude, JanskyFlux, WavelengthFlux], 
-        Field(discriminator="type", description="Brightness definition and zero-point reference.")
+        Field(discriminator="type", description="Brightness definition and zero-point reference. Per arcsec² when morphology is extended.")
     ]
     sed: Annotated[Union[FlatSED, TempSED], Field(discriminator="type")]
 
@@ -215,21 +222,15 @@ class EnvironmentCondition(StrictModel):
         description="Atmospheric attenuation per unit airmass in mag/airmass. (ATBD: k_ext)"
     )
     
-    seeing_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Atmospheric seeing FWHM in arcseconds. (ATBD: FWHM_See)"
-    )
-    diffraction_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Diffraction limit FWHM in arcseconds. (ATBD: FWHM_Dif)"
-    )
-    optical_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Optical aberrations FWHM in arcseconds. (ATBD: FWHM_Opt)"
-    )
-    tracking_fwhm: PositiveFloat = Field(
-        ..., 
-        description="Tracking error FWHM in arcseconds. (ATBD: FWHM_Trk)"
+    total_fwhm: PositiveFloat = Field(
+        ...,
+        allow_inf_nan=False,
+        description=(
+            "Expected or measured stellar image FWHM in arcseconds for this setup and "
+            "observing conditions, including atmospheric and instrumental spreading. "
+            "Supplied by the caller; no further seeing, diffraction, optical or tracking "
+            "terms are added. (ATBD: FWHM_tot, Section 4.1.2)"
+        )
     )
 
 class SkyAnnulus(StrictModel):
@@ -263,7 +264,7 @@ class BaseOptions(StrictModel):
         description="Integration time for an individual sub-exposure frame in seconds. (ATBD: t_single)"
     )
     # Optional, unlike aperture_factor, because omitting it has a defined meaning:
-    # a sky known exactly, which is what every CASTOR release before this one
+    # a sky known exactly, which earlier versions of CASTOR
     # assumed. Both shipped clients now send an annulus. The diagnostics report
     # N_est either way, so a caller who leaves it out can see that they did.
     sky_annulus: SkyAnnulus | None = Field(
@@ -319,7 +320,7 @@ class ObservationRequest(StrictModel):
     )
     environment: EnvironmentCondition = Field(
         ..., 
-        description="Environmental parameters including observer location, time, atmospheric conditions, and seeing FWHM. (Ref: ATBD Section 3.3)"
+        description="Environmental parameters including observer location, time, atmospheric conditions, and total image FWHM. (Ref: ATBD Section 3.3)"
     )
     options: CalculationOptions = Field(
         ..., 
@@ -336,8 +337,25 @@ class CoreResult(StrictModel):
         description="Signal-to-Noise Ratio for a single exposure frame. (ATBD: SNR_single) [dimensionless]"
     )
     required_exposures: int | None = Field(
-        None, 
-        description="Required number of exposures to achieve the target SNR. (ATBD: N_exp_out). Available only in 'solve_time' mode."
+        None,
+        description="Required number of exposures to achieve the target SNR. (ATBD: N_exp_out). Available only in 'solve_time' mode, and None when the target SNR is unreachable (see target_reachable)."
+    )
+    snr_ceiling: float | None = Field(
+        None,
+        description=(
+            "Asymptotic maximum stacked SNR imposed by the non-averaging background-flatness "
+            "floor. (ATBD: SNR_ceiling) [dimensionless]. None means no floor (background_flatness_fraction = 0) "
+            "so the ceiling is effectively infinite."
+        )
+    )
+    target_reachable: bool | None = Field(
+        None,
+        description=(
+            "In 'solve_time' mode, whether the requested target SNR is below the flatness ceiling "
+            "and therefore attainable with a finite exposure count. False means unreachable: "
+            "required_exposures is None and total_snr reports the asymptotic ceiling. None in "
+            "'solve_snr' mode, where no target is solved for."
+        )
     )
     saturation_time_limit: float = Field(
         ..., 
@@ -346,9 +364,10 @@ class CoreResult(StrictModel):
     optimal_exposure_time: float = Field(
         ...,
         description=(
-            "Background-limited single exposure time in seconds — the point at which sky + dark "
+            "Background/read-noise crossover time in seconds — the point at which sky + dark "
             "current shot noise reaches background_dominance_factor times the readout noise "
-            "(at the default 1.0, just overtakes it). (ATBD: t_opt) [s]"
+            "(at the default 1.0, just overtakes it). This is not a recommended exposure "
+            "length. (ATBD: t_opt) [s]"
         )
     )
     # Defaulted, unlike its neighbours, so that a response stored before this field
@@ -362,12 +381,13 @@ class CoreResult(StrictModel):
             "still says which convention its t_opt follows. (ATBD: k) [dimensionless]"
         )
     )
-    total_exp_time: float = Field(
+    total_exp_time: float | None = Field(
         ...,
         description=(
             "Integration time across all exposures, t_single × N_exp: num_exposures in 'solve_snr' "
-            "mode, required_exposures in 'solve_time'. Integration only — readout overhead is not "
-            "modelled (validation/QUESTIONS.md 11). (ATBD: t_total) [s]"
+            "mode, required_exposures in 'solve_time'. None when the target SNR is unreachable "
+            "(see target_reachable), since no exposure count reaches it. Integration only — "
+            "readout overhead is not modelled (validation/QUESTIONS.md 11). (ATBD: t_total) [s]"
         )
     )
 
@@ -388,7 +408,7 @@ class SignalNoiseBudget(StrictModel):
 class PhysicalDiagnostics(StrictModel):
     total_fwhm: float = Field(
         ..., 
-        description="Total spatial spreading incorporating seeing, diffraction, optical, and tracking errors. (ATBD: FWHM_tot) [arcsec]"
+        description="Caller-supplied stellar image FWHM used in this calculation. (ATBD: FWHM_tot) [arcsec]"
     )
     effective_area: float = Field(
         ..., 
@@ -484,9 +504,12 @@ class NoiseBudget(StrictModel):
         ...,
         description="One frame of t_single. Its signal / sqrt(total_variance) is core.single_snr."
     )
-    total: NoiseComponents = Field(
+    total: NoiseComponents | None = Field(
         ...,
-        description="The whole stack. Its signal / sqrt(total_variance) is core.total_snr."
+        description=(
+            "The whole stack. Its signal / sqrt(total_variance) is core.total_snr. None when the "
+            "target SNR is unreachable: there is no stack, and core.total_snr is the ceiling."
+        )
     )
 
 class ObservationEphemeris(StrictModel):
@@ -589,10 +612,14 @@ class TimeSeriesEnvironment(StrictModel):
         description="Atmospheric attenuation per unit airmass in mag/airmass."
     )
 
-    seeing_fwhm: PositiveFloat = Field(..., description="Atmospheric seeing FWHM in arcseconds.")
-    diffraction_fwhm: PositiveFloat = Field(..., description="Diffraction limit FWHM in arcseconds.")
-    optical_fwhm: PositiveFloat = Field(..., description="Optical aberrations FWHM in arcseconds.")
-    tracking_fwhm: PositiveFloat = Field(..., description="Tracking error FWHM in arcseconds.")
+    total_fwhm: PositiveFloat = Field(
+        ...,
+        allow_inf_nan=False,
+        description=(
+            "Stellar image FWHM in arcseconds, held constant across the time series. "
+            "Same definition as EnvironmentCondition.total_fwhm. (ATBD: FWHM_tot)"
+        )
+    )
 
 class BatchBaseOptions(StrictModel):
     aperture_factor: PositiveFloat = Field(
@@ -653,13 +680,15 @@ class BatchCoreResult(StrictModel):
     timestamps_iso: list[str] = Field(..., description="Expanded discrete UTC timestamps.")
     total_snr: list[float] = Field(..., description="Total SNR array across the time series.")
     single_snr: list[float] = Field(..., description="Single exposure SNR array.")
-    required_exposures: list[float] | None = Field(
+    required_exposures: list[float | None] | None = Field(
         None,
         description=(
             "Exposures needed to reach the target SNR at each timestamp. Available only in "
             "'solve_time' mode, and the only result array that responds to the calculation "
             "goal — single_snr and saturation_time_limit describe the sky and the detector "
-            "and are the same whichever goal is set."
+            "and are the same whichever goal is set. A None entry marks a timestamp whose "
+            "target SNR is above the background-flatness ceiling and so unreachable at any "
+            "exposure count; total_snr there reports the asymptotic ceiling."
         )
     )
     saturation_time_limit: list[float] = Field(..., description="Saturation time limit array [s].")
@@ -683,11 +712,12 @@ class BatchCoreResult(StrictModel):
             "options.background_dominance_factor, so the same at every step. (ATBD: k) [dimensionless]"
         )
     )
-    total_exp_time: list[float] = Field(
+    total_exp_time: list[float | None] = Field(
         ...,
         description=(
             "Integration time t_single × N at each timestamp: N is num_exposures in 'solve_snr' mode, "
-            "the same at every step, and required_exposures in 'solve_time'. Integration only — "
+            "the same at every step, and required_exposures in 'solve_time', None where that is. "
+            "Integration only — "
             "readout overhead is not modelled (validation/QUESTIONS.md 11). (ATBD: t_total) [s]"
         )
     )
@@ -728,29 +758,33 @@ class BatchPhysicalDiagnostics(StrictModel):
     )
 
 class BatchNoiseComponents(StrictModel):
-    """NoiseComponents at each timestamp; every list is as long as timestamps_iso."""
-    exp_time: list[float] = Field(
+    """NoiseComponents at each timestamp; every list is as long as timestamps_iso.
+
+    In `total`, a timestamp whose target SNR is unreachable has no stack to describe,
+    so every entry there is None, the same gap as in core.required_exposures.
+    """
+    exp_time: list[float | None] = Field(
         ..., description="Integration time the terms accumulated over: t_single in `single`, t_total in `total`. [s]"
     )
-    num_exposures: list[float] = Field(
+    num_exposures: list[float | None] = Field(
         ...,
         description=(
             "Frames the per-frame terms were charged for: 1 in `single`, N_exp in `total`. A float "
             "list, like required_exposures. (ATBD: N_exp) [count]"
         )
     )
-    signal: list[float] = Field(..., description="Source electrons in the aperture, Rate_src · t. [e-]")
-    source_variance: list[float] = Field(..., description="Poisson variance of the source, Rate_src · t. [e-²]")
-    sky_variance: list[float] = Field(..., description="Sky shot noise over the background pixels, N_bkg · Rate_sky · t. [e-²]")
-    dark_variance: list[float] = Field(..., description="Dark-current shot noise, N_exp · N_bkg · R_dark · t_single. [e-²]")
-    readout_variance: list[float] = Field(..., description="Read noise, N_exp · N_bkg · RON². [e-²]")
-    flatness_variance: list[float] = Field(
+    signal: list[float | None] = Field(..., description="Source electrons in the aperture, Rate_src · t. [e-]")
+    source_variance: list[float | None] = Field(..., description="Poisson variance of the source, Rate_src · t. [e-²]")
+    sky_variance: list[float | None] = Field(..., description="Sky shot noise over the background pixels, N_bkg · Rate_sky · t. [e-²]")
+    dark_variance: list[float | None] = Field(..., description="Dark-current shot noise, N_exp · N_bkg · R_dark · t_single. [e-²]")
+    readout_variance: list[float | None] = Field(..., description="Read noise, N_exp · N_bkg · RON². [e-²]")
+    flatness_variance: list[float | None] = Field(
         ..., description="Correlated flat-field/background residual; zero unless background_flatness_fraction is set. (ATBD: V_flat) [e-²]"
     )
-    total_variance: list[float] = Field(
+    total_variance: list[float | None] = Field(
         ..., description="The variance each SNR divides by: signal / sqrt(total_variance) is that SNR exactly. [e-²]"
     )
-    num_pixels_background: list[float] = Field(
+    num_pixels_background: list[float | None] = Field(
         ..., description="Pixel count the per-pixel terms were multiplied by, N_pix + N_est; the same at every step. (ATBD: N_bkg) [count]"
     )
 

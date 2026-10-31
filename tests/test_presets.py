@@ -24,8 +24,8 @@ def shipped():
 def remainder():
     """Everything a preset cannot speak for.
 
-    A preset describes equipment and a place. The target, the night, the seeing
-    budget and the calculation strategy are the caller's, and so is
+    A preset describes equipment and a place. The target, the night, the image
+    FWHM and the calculation strategy are the caller's, and so is
     throughput_correction — it is a property of the system as configured, not of any
     single catalogue entry.
     """
@@ -41,10 +41,7 @@ def remainder():
         "environment": {
             "observing_time_utc": "2026-01-01T18:00:00Z",
             "auto_calc_background": True,
-            "seeing_fwhm": 1.4,
-            "diffraction_fwhm": 0.1,
-            "optical_fwhm": 0.3,
-            "tracking_fwhm": 0.2,
+            "total_fwhm": (1.4 ** 2 + 0.1 ** 2 + 0.3 ** 2 + 0.2 ** 2) ** 0.5,
         },
         "options": {
             "type": "solve_snr",
@@ -187,7 +184,7 @@ def test_site_median_seeing_is_readable_but_never_resolved(shipped):
     profile = shipped.profile("lulin")
 
     assert profile.median_seeing_fwhm == 1.4
-    assert "seeing_fwhm" not in shipped.resolve("lulin")["environment"]
+    assert "total_fwhm" not in shipped.resolve("lulin")["environment"]
 
 # ==========================================
 # Unknown names

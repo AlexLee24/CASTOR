@@ -1,3 +1,4 @@
+import json
 import math
 
 import numpy as np
@@ -69,7 +70,7 @@ def base_request():
             auto_calc_background=False,
             mu_dark=21.5,
             extinction_coeff=0.17,
-            seeing_fwhm=1.5, diffraction_fwhm=0.1, optical_fwhm=0.1, tracking_fwhm=0.1
+            total_fwhm=(1.5 ** 2 + 0.1 ** 2 + 0.1 ** 2 + 0.1 ** 2) ** 0.5
         ),
         # Defaults to mode B: given a target SNR, solve backward for the number of exposures needed
         options=schema.SolveForTime(
@@ -80,6 +81,18 @@ def base_request():
 # ==========================================
 # Test cases: pipeline assembly and routing verification
 # ==========================================
+
+@pytest.mark.parametrize("total_fwhm", [0.8, 2.4])
+def test_image_fwhm_is_used_without_additional_spreading(mock_moon, base_request, total_fwhm):
+    """A measured width already includes the instrument's contribution."""
+    base_request.environment.total_fwhm = total_fwhm
+    response = run_calculation(base_request)
+    diag = response.diagnostics
+
+    assert diag.total_fwhm == total_fwhm
+    assert diag.num_pixels_aperture == pytest.approx(
+        math.pi * (base_request.options.aperture_factor * total_fwhm / diag.pixel_scale) ** 2
+    )
 
 def test_pipeline_point_solve_time(mock_moon, base_request):
     """
@@ -413,8 +426,8 @@ def test_the_ephemeris_matches_astropy_at_the_requested_instant(base_request):
 
 def test_the_flatness_ceiling_can_be_read_off_the_single_frame(mock_moon, base_request):
     """With f_flat set, a stack's SNR approaches signal / sqrt(flatness_variance) of
-    one frame and never passes it (ATBD 4.3.1a; validation/QUESTIONS.md 17). The
-    solver does not yet know that, but a caller can now read the ceiling."""
+    one frame and never passes it (ATBD 4.3.1a; validation/QUESTIONS.md 17), which
+    is the snr_ceiling solve_time stops at."""
     base_request.instrument.camera.background_flatness_fraction = 0.02
     base_request.target.morphology = schema.ExtendedMorphology()
     base_request.target.brightness = schema.ABMagnitude(target_mag=22.0)
@@ -430,3 +443,22 @@ def test_the_flatness_ceiling_can_be_read_off_the_single_frame(mock_moon, base_r
     assert snrs == sorted(snrs)
     assert all(snr < ceiling for snr in snrs)
     assert snrs[-1] == pytest.approx(ceiling, rel=1e-2)
+
+def test_an_unreachable_target_has_no_stack_to_report(mock_moon, base_request):
+    """Above the flatness ceiling no exposure count reaches the target, so there is
+    no total time and no stacked noise budget: both are None rather than numbers
+    made up from a count that does not exist. The single frame is still reported."""
+    base_request.instrument.camera.background_flatness_fraction = 0.02
+    base_request.target.morphology = schema.ExtendedMorphology()
+    base_request.target.brightness = schema.ABMagnitude(target_mag=22.0)
+    base_request.options = schema.SolveForTime(aperture_factor=3.0, single_exp_time=120.0, target_snr=1e6)
+    response = run_calculation(base_request)
+
+    assert response.core.target_reachable is False
+    assert response.core.required_exposures is None
+    assert response.core.total_exp_time is None
+    assert response.noise.total is None
+    assert response.core.total_snr == response.core.snr_ceiling
+    single = response.noise.single
+    assert single.signal / math.sqrt(single.total_variance) == response.core.single_snr
+    json.loads(response.model_dump_json())
