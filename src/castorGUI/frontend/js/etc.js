@@ -642,7 +642,8 @@
         var best = null;
         for (var i = 0; i < series.length; i++) {
             if (anyObservable && !mask[i]) { continue; }
-            if (!isFinite(series[i])) { continue; }
+            // null is an unreachable timestamp (a gap), and isFinite(null) is true.
+            if (series[i] === null || !isFinite(series[i])) { continue; }
             if (best === null || better(series[i], series[best])) { best = i; }
         }
         if (best === null) { restoreHero(); return; }
