@@ -93,13 +93,17 @@ Visual identity flows *from* Kinder, not the other way round. Kinder's `_theme.c
 ```text
 src/castorGUI/
 ├── frontend/
-│   ├── etc_body.html    # The UI. Plain HTML fragment — no wrapper, no template syntax
-│   ├── css/etc.css      # All styling, scoped under .castor-etc
-│   ├── js/etc.js        # Controller: payload building, calculation, presets, chart
+│   ├── etc_body.html    # Advanced mode. Plain HTML fragment — no wrapper, no template syntax
+│   ├── etc_simple_body.html # Simple mode, the same kind of fragment
+│   ├── css/etc.css      # Advanced styling, scoped under .castor-etc
+│   ├── css/etc_simple.css   # Simple mode and the mode switch, on Kinder's kw-* components
+│   ├── css/kinder_shim.css  # Those kw-* components, for the standalone shell only
+│   ├── js/etc.js        # Advanced controller: payload building, calculation, presets, chart
+│   ├── js/etc_simple.js # Simple controller and the Simple / Advanced switch
 │   ├── js/plotly.min.js # Vendored so the standalone build works offline
 │   ├── index.html       # Standalone page shell
 │   └── README.md        # The host contract — read this before embedding
-├── server.py            # Development host: the same three routes Kinder exposes
+├── server.py            # Development host: the same four routes Kinder exposes
 └── data/
     └── presets.json     # Observing profiles, rigs and filters
 ```
@@ -111,6 +115,8 @@ src/castorGUI/
 * **`etc.js`:** Builds the request by walking the form (pruning branches the discriminators exclude, since the schema is strict), converts percent-displayed fields back to the 0–1 fractions the schema wants, calls the routes named in `window.CASTOR_ETC_CONFIG`, and renders results and the chart. Reads `window.Plotly`; providing it is the host's job.
 
 * **`etc.css`:** Scoped tokens with `var(--kw-*, fallback)`.
+
+* **Simple mode (`etc_simple_body.html`, `etc_simple.js`, `etc_simple.css`):** Hardware names, a target and an SNR in; a frame length and frame count out, from the quick route. Written for Kinder and moved here unchanged (apart from drawing the logo in CSS) so both hosts serve one copy of it too. The planning is [`castorCLI/plan.py`](../src/castorCLI/plan.py): it resolves presets, so it sits beside the CLI rather than in the engine, and every number it shows is a `run_calculation()` result. It is built on Kinder's site components (`kw-*`) rather than scoped like `etc.css`; mounted in Kinder its `_theme.css` styles them, and the standalone shell loads `kinder_shim.css` for the same rules, confined so they cannot restyle the Advanced form.
 
 * **`server.py`:** Validates raw JSON straight into `castor.schema` and hands the result back. Deliberately thin — the contract is the schema, not the server. Its presets route serves `castorCLI.presets.document()` over the shipped file and any on `CASTOR_PRESETS_PATH` ([Presets](presets.md#several-files)): as written and in order, but validated first, since the form applies the fields it recognises and skips the rest without a word. With the variable unset it serves the shipped file exactly as before.
 
@@ -178,6 +184,6 @@ sequenceDiagram
 ## 5. Future Extensibility
 
 * **Desktop build:** Wrapping the same frontend in a native window (`pywebview` is already declared for this) rather than maintaining a second, separately-written desktop UI.
-* **Completing the Kinder mount:** Kinder's `exposure_time_calculator.html` still carries its own forked copy of the form. Switching it to `{% include %}` this frontend is what ends the duplication; the routes and the vendored engine are already in place.
+* **Completing the Kinder mount:** Kinder's `exposure_time_calculator.html` still carries its own copies of both modes' files. Pointing it at this frontend (both fragments, `etc_simple.js`/`.css`, and its quick route at `castorCLI.plan`) is what ends the duplication; the routes and the vendored engine are already in place. Its template already has the mode bar and panel wrappers the README describes, and `etc_simple.js` still reads its `KINDER_ETC_QUICK_URL`, so the switch changes no markup there.
 * **Preset source swap:** Serving profiles from Kinder's hardware database while keeping `presets.json` as the standalone fallback. Note the current direction is the reverse — Kinder reads this file, and only this file: its route serves `presets.json` as raw bytes. Of the two hosts, only `server.py` also reads files named on `CASTOR_PRESETS_PATH` after it; for Kinder to do the same, its route would serve `castorCLI.presets.document(*castorCLI.presets.search_path(…))`, still without `jsonify`'s key sorting. Such files' profiles are listed in the site selector, and a hardware family among them runs under the last site's sky rather than being one ([Presets](presets.md#in-the-browser)).
 * **Hardware from another profile:** The CLI can put one profile's telescope, camera or filter under another's sky (`PROFILE/KEY`); the selectors here stay within the chosen profile. Offering it would mean `etc.js` mirroring the rules for which band values follow a borrowed filter too — one more rule held in two places ([Lessons](LESSONS.md#the-same-physics-implemented-twice-will-drift-silently)) — so it waits for a reason worth that.

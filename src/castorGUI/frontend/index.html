@@ -19,16 +19,22 @@
          downloading, which on a slow link is several seconds of blank page. -->
     <script src="js/plotly.min.js" defer charset="utf-8"></script>
     <script src="js/etc.js" defer></script>
+    <script src="js/etc_simple.js" defer></script>
     <link rel="stylesheet" href="css/etc.css">
+    <!-- Kinder's own components, which Simple mode is built from. Kinder itself does
+         not load this file: its _theme.css already defines them. -->
+    <link rel="stylesheet" href="css/kinder_shim.css">
+    <link rel="stylesheet" href="css/etc_simple.css">
 
     <script>
         // The host decides where the engine lives; server.py serves these paths
-        // itself and Kinder points the same three keys at its own blueprint.
-        // Inline (not deferred) so it is in place before the deferred etc.js runs.
+        // itself and Kinder points the same keys at its own blueprint.
+        // Inline (not deferred) so it is in place before the deferred scripts run.
         window.CASTOR_ETC_CONFIG = {
             apiUrl: '/api/exposure_time_calculator',
             batchUrl: '/api/exposure_time_calculator/batch',
-            presetsUrl: '/api/exposure_time_calculator/presets'
+            presetsUrl: '/api/exposure_time_calculator/presets',
+            quickUrl: '/api/exposure_time_calculator/quick'
         };
     </script>
 
@@ -50,11 +56,34 @@
             color: #F5F5F7;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
         }
+        /* Both modes stand in the height left under the mode bar, which etc_simple.js
+           measures into --etc-top; the bottom gap is this page's own padding. The
+           Advanced override is the one line etc.css documents as the host's, the same
+           one Kinder's template sets. */
+        .etc-page { --etc-bottom-gap: 32px; }
+        .etc-page .castor-etc {
+            --etc-shell-height: clamp(420px, calc(100dvh - var(--etc-top, 120px) - var(--etc-bottom-gap)), 1150px);
+        }
     </style>
 </head>
 <body>
 
+<div class="etc-page">
+    <div class="etc-mode-bar">
+        <div class="kw-tabbar" role="tablist" aria-label="Calculator mode">
+            <button type="button" class="kw-tab is-on" role="tab" aria-selected="true" data-etc-mode="simple">Simple</button>
+            <button type="button" class="kw-tab" role="tab" aria-selected="false" data-etc-mode="advanced">Advanced</button>
+        </div>
+        <span class="kw-muted etc-mode-hint" data-etc-mode-hint="simple">Pick a telescope, a target and the SNR you need: it works out how long each frame should be and how many to take.</span>
+        <span class="kw-muted etc-mode-hint" data-etc-mode-hint="advanced" hidden>Every CASTOR input, the full noise budget and a time sweep.</span>
+    </div>
+
+<!--CASTOR_ETC_SIMPLE_BODY-->
+
+    <div class="etc-advanced" id="etc-advanced" data-etc-mode-panel="advanced" hidden>
 <!--CASTOR_ETC_BODY-->
+    </div>
+</div>
 
 </body>
 </html>

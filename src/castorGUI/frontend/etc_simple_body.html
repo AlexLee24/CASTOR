@@ -1,0 +1,92 @@
+<!--
+    CASTOR ETC — Simple mode, the second shared partial beside etc_body.html.
+
+    Hardware, a target and an SNR in; a frame length and frame count out, from
+    POST quickUrl (castorCLI/plan.py). Written for Kinder and moved here unchanged
+    except for the logo, now drawn by etc_simple.css like etc.css draws the beaver,
+    so this fragment carries no host-specific URL.
+
+    Its classes are Kinder's site components (kw-*): mounted in Kinder the site's
+    _theme.css styles them, and the standalone shell loads css/kinder_shim.css for
+    the same rules. A host showing both modes wraps this fragment and etc_body.html
+    in [data-etc-mode-panel="simple"|"advanced"] and puts [data-etc-mode] tabs above
+    them; etc_simple.js does the switching. See frontend/README.md.
+-->
+<div class="kw-tool etc-simple" id="etc-simple" data-etc-mode-panel="simple">
+    <aside class="kw-tool-side">
+        <form class="kw-panel etc-simple-form" id="etc-simple-form" novalidate>
+            <div class="etc-simple-fields">
+                <div class="kw-panel-head"><h2>Setup</h2></div>
+                <div class="kw-grid-2 etc-simple-pair">
+                    <div class="kw-field">
+                        <label for="qs-site">Observatory</label>
+                        <select class="kw-select" id="qs-site" name="site"></select>
+                    </div>
+                    <div class="kw-field">
+                        <label for="qs-camera">Camera</label>
+                        <select class="kw-select" id="qs-camera" name="camera"></select>
+                    </div>
+                </div>
+                <div class="kw-grid-2 etc-simple-pair">
+                    <div class="kw-field">
+                        <label for="qs-telescope">Telescope</label>
+                        <select class="kw-select" id="qs-telescope" name="telescope"></select>
+                    </div>
+                    <div class="kw-field">
+                        <label for="qs-filter">Filter</label>
+                        <select class="kw-select" id="qs-filter" name="filter"></select>
+                    </div>
+                </div>
+                <p class="etc-simple-caveat" id="qs-caveat" hidden></p>
+
+                <div class="kw-panel-head etc-simple-head"><h2>Target</h2></div>
+                <div class="kw-grid-2 etc-simple-pair">
+                    <div class="kw-field">
+                        <label for="qs-ra">RA</label>
+                        <input type="text" id="qs-ra" name="ra" placeholder="22:00:00 or 330.0" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="kw-field">
+                        <label for="qs-dec">Dec</label>
+                        <input type="text" id="qs-dec" name="dec" placeholder="+20:00:00 or 20.0" autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+                <div class="kw-grid-2 etc-simple-pair">
+                    <div class="kw-field">
+                        <label for="qs-mag">Magnitude (AB)</label>
+                        <input type="number" id="qs-mag" name="mag" step="any" placeholder="e.g. 19.5">
+                    </div>
+                    <div class="kw-field">
+                        <label for="qs-snr">Target SNR</label>
+                        <input type="number" id="qs-snr" name="target_snr" step="any" min="0" value="10">
+                    </div>
+                </div>
+
+                <div class="kw-panel-head etc-simple-head"><h2>When</h2></div>
+                <div class="etc-simple-pair etc-simple-when">
+                    <div class="kw-field">
+                        <label for="qs-time">Time (<span id="qs-tz">your local time</span>)</label>
+                        <input type="datetime-local" id="qs-time" name="time">
+                        <small class="kw-muted" id="qs-time-utc"></small>
+                    </div>
+                    <div class="kw-field">
+                        <label for="qs-fwhm">Seeing (″)</label>
+                        <input type="number" id="qs-fwhm" name="fwhm" step="any" min="0">
+                    </div>
+                </div>
+                <small class="kw-muted etc-simple-note" id="qs-fwhm-note"></small>
+            </div>
+
+            <div class="etc-simple-actions">
+                <button type="submit" class="kw-btn kw-btn-primary etc-simple-go" id="qs-go">Calculate</button>
+            </div>
+        </form>
+    </aside>
+
+    <section class="kw-panel etc-simple-result is-idle" id="qs-result" aria-live="polite">
+        <div class="etc-simple-empty">
+            <span class="etc-simple-logo" aria-hidden="true"></span>
+            <span id="qs-empty-text">Fill in the target and press Calculate</span>
+        </div>
+        <div class="etc-simple-body" id="qs-body"></div>
+    </section>
+</div>

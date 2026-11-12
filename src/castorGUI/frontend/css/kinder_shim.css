@@ -1,0 +1,255 @@
+/* ============================================================================
+   Kinder components for a host that is not Kinder — the standalone shell only.
+
+   Simple mode (etc_simple_body.html, etc_simple.css) is written against Kinder's
+   site components: .kw-panel, .kw-field, .kw-btn, .kw-kpi and the rest. Mounted
+   in Kinder they come from its _theme.css and this file must not be loaded.
+   Standalone they come from here: the tokens and rules those classes need, copied
+   from Kinder_web app/blueprints/basic/static/css/_theme.css (2026-11-12) and cut
+   down to what Simple mode and the mode bar use. When Kinder's theme moves, update
+   them here, as with the fallbacks in etc.css.
+
+   Two departures from Kinder, both so this file cannot restyle the Advanced form:
+   - Tokens are declared on the mode bar and the Simple panel, not on :root, so
+     .castor-etc keeps the fallbacks etc.css documents.
+   - The base input/select/button rules Kinder applies site-wide are confined to
+     the Simple panel.
+   Every selector is wrapped in :where() up to the kw-* class, so each rule has the
+   specificity it has in Kinder and etc_simple.css overrides it exactly as there.
+   No web font: the standalone page uses the system stack in index.html.
+============================================================================ */
+
+:where(.etc-mode-bar, .etc-simple) {
+    --color-accent: #F39F5A;
+    --color-accent-hover: #F6B57E;
+    --color-accent-soft: rgba(243, 159, 90, 0.14);
+    --color-accent-text: #0C0A1A;
+    --color-surface: rgba(14, 14, 18, 0.70);
+    --glass-blur: blur(30px) saturate(130%);
+
+    --kw-font-sans: inherit;
+    --kw-text-xs: 0.75rem;
+    --kw-text-sm: 0.875rem;
+
+    --kw-accent: var(--color-accent);
+    --kw-accent-hover: var(--color-accent-hover);
+    --kw-accent-contrast: var(--color-accent-text);
+    --kw-accent-dim: var(--color-accent-soft);
+    --kw-accent-border: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    --kw-link: var(--color-accent-hover);
+
+    --kw-text-primary: #F5F5F7;
+    --kw-text-white: #FFFFFF;
+    --kw-text-secondary: rgba(245, 245, 247, 0.72);
+    --kw-text-muted: rgba(245, 245, 247, 0.5);
+
+    --kw-surface: rgba(255, 255, 255, 0.06);
+    --kw-surface-hover: rgba(255, 255, 255, 0.10);
+    --kw-border: rgba(255, 255, 255, 0.14);
+    --kw-border-med: rgba(255, 255, 255, 0.2);
+    --kw-hairline: rgba(255, 255, 255, 0.08);
+    --kw-focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-accent) 45%, transparent);
+
+    --kw-radius-sm: 6px;
+    --kw-radius-md: 10px;
+    --kw-radius-lg: 14px;
+    --kw-radius-xl: 18px;
+
+    --kw-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --kw-transition: all 0.18s var(--kw-ease);
+    --kw-transition-fast: 0.15s var(--kw-ease);
+
+    --kw-control-h-sm: 32px;
+    --kw-nav-h: 0px;   /* no site nav bar above the standalone page */
+    --kw-card-bg: var(--color-surface);
+}
+
+/* ── Base controls, Simple panel only ── */
+:where(.etc-simple) :where(button, [type="button"], [type="submit"]) {
+    font-family: inherit;
+    font-size: var(--kw-text-sm);
+    font-weight: 600;
+    line-height: 1;
+    min-height: var(--kw-control-h-sm);
+    padding: 8px 14px;
+    border-radius: var(--kw-radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--kw-transition);
+    user-select: none;
+}
+:where(.etc-simple) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
+    font-family: inherit;
+    font-size: var(--kw-text-sm);
+    color: var(--kw-text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--kw-border-med);
+    border-radius: var(--kw-radius-md);
+    padding: 8px 12px;
+    min-height: var(--kw-control-h-sm);
+    box-sizing: border-box;
+    transition: border-color var(--kw-transition-fast), box-shadow var(--kw-transition-fast), background var(--kw-transition-fast);
+}
+:where(.etc-simple) :where(input, select, textarea)::placeholder { color: var(--kw-text-muted); }
+:where(.etc-simple) :where(input, select, textarea):focus {
+    outline: none;
+    border-color: var(--kw-link);
+    box-shadow: var(--kw-focus-ring);
+    background: rgba(255, 255, 255, 0.08);
+}
+:where(.etc-mode-bar, .etc-simple) :where(button, a, [tabindex]):focus-visible { outline: none; box-shadow: var(--kw-focus-ring); }
+:where(.etc-simple) :where(th) { font-weight: 600; color: var(--kw-text-secondary); font-size: var(--kw-text-xs); letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* ── Layout ── */
+.kw-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.kw-tool { display: grid; gap: 20px; grid-template-columns: 360px minmax(0, 1fr); align-items: start; }
+.kw-tool > .kw-tool-side { position: sticky; top: calc(var(--kw-nav-h) + 14px); display: grid; gap: 16px; align-content: start; }
+.kw-tool > * { min-width: 0; }
+@media (max-width: 960px) { .kw-tool { grid-template-columns: minmax(0, 1fr); } .kw-tool > .kw-tool-side { position: static; } }
+@media (max-width: 860px) { .kw-grid-2 { gap: 12px; } .kw-tool { gap: 12px; } }
+@media (max-width: 820px) { .kw-grid-2 { grid-template-columns: 1fr; } }
+
+/* ── Mode tabs ── */
+.kw-tabbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    min-height: 44px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--color-surface);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--kw-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.kw-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: none;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--kw-text-secondary);
+    font: 400 0.86rem/1 var(--kw-font-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--kw-transition-fast), color var(--kw-transition-fast);
+}
+.kw-tab:hover { background: rgba(255, 255, 255, 0.07); color: var(--kw-text-white); }
+.kw-tab.is-on { background: var(--color-accent); color: var(--color-accent-text); font-weight: 600; }
+.kw-muted { color: var(--kw-text-muted); }
+
+/* ── Panels ── */
+.kw-panel {
+    min-width: 0;
+    padding: 18px 20px;
+    border-radius: var(--kw-radius-xl);
+    background: var(--kw-card-bg);
+    border: 1px solid var(--kw-border);
+    color: var(--kw-text-primary);
+}
+.kw-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.kw-panel-head h2 {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0;
+    font-size: 1rem; font-weight: 700; letter-spacing: 0;
+    color: var(--kw-text-white);
+}
+.kw-eyebrow {
+    display: inline-block;
+    margin-bottom: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--kw-accent);
+}
+
+/* ── KPI tiles ── */
+.kw-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kw-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 14px 16px;
+    border-radius: var(--kw-radius-xl);
+    background: var(--kw-card-bg);
+    border: 1px solid var(--kw-border);
+    color: var(--kw-text-primary);
+}
+.kw-kpi-label { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--kw-text-muted); }
+.kw-kpi b { margin: 4px 0 2px; font-size: 1.9rem; font-weight: 600; line-height: 1.1; color: var(--kw-text-white); font-variant-numeric: tabular-nums; }
+.kw-kpi small { font-size: 0.74rem; color: var(--kw-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kw-kpi.is-alert { border-color: var(--kw-accent-border); }
+.kw-kpi.is-alert b { color: var(--kw-accent); }
+
+/* ── Table ── */
+.kw-table-wrap {
+    overflow-x: auto;
+    border-radius: var(--kw-radius-xl);
+    background: var(--kw-card-bg);
+    border: 1px solid var(--kw-border);
+}
+.kw-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; color: var(--kw-text-primary); }
+.kw-table th, .kw-table td { padding: 11px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--kw-hairline); }
+.kw-table thead th {
+    padding-top: 12px; padding-bottom: 12px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--kw-text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--kw-border);
+    white-space: nowrap;
+}
+.kw-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+.kw-table tbody tr:last-child td { border-bottom: 0; }
+
+/* ── Controls ── */
+.kw-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 40px; padding: 0 16px;
+    border-radius: var(--kw-radius-md);
+    border: 1px solid var(--kw-border-med);
+    background: var(--kw-surface);
+    color: var(--kw-text-primary);
+    font: 500 0.84rem/1 var(--kw-font-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--kw-transition-fast), border-color var(--kw-transition-fast), color var(--kw-transition-fast), opacity var(--kw-transition-fast);
+}
+.kw-btn:hover { background: var(--kw-surface-hover); border-color: rgba(255, 255, 255, 0.28); color: var(--kw-text-white); }
+.kw-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.kw-btn-primary { background: var(--kw-accent); border-color: transparent; color: var(--kw-accent-contrast); font-weight: 600; }
+.kw-btn-primary:hover { background: var(--kw-accent-hover); border-color: transparent; color: var(--kw-accent-contrast); }
+.kw-btn-sm { min-height: 32px; padding: 0 12px; font-size: 0.8rem; }
+.kw-select {
+    min-height: 40px;
+    padding: 0 32px 0 14px;
+    border-radius: var(--kw-radius-md);
+    border: 1px solid var(--kw-border-med);
+    background: rgba(255, 255, 255, 0.06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center / 11px;
+    -webkit-appearance: none; appearance: none;
+    color: var(--kw-text-primary);
+    font: 400 0.82rem var(--kw-font-sans);
+    cursor: pointer;
+}
+.kw-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.kw-field label { font-size: 0.78rem; color: var(--kw-text-secondary); }
+.kw-field :is(input, select, textarea) { width: 100%; min-height: 40px; }
+
+/* ── Chips ── */
+.kw-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 20px; padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem; font-weight: 500; line-height: 1.2;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--kw-text-secondary);
+}
+.kw-chip-gold { background: var(--kw-accent-dim); color: var(--kw-accent); }
