@@ -16,7 +16,7 @@
      the Simple panel.
    Every selector is wrapped in :where() up to the kw-* class, so each rule has the
    specificity it has in Kinder and etc_simple.css overrides it exactly as there.
-   No web font: the standalone page uses the system stack in index.html.
+   The typeface itself is loaded by index.html, as Kinder's _theme.css loads it.
 ============================================================================ */
 
 :where(.etc-mode-bar, .etc-simple) {
@@ -27,7 +27,9 @@
     --color-surface: rgba(14, 14, 18, 0.70);
     --glass-blur: blur(30px) saturate(130%);
 
-    --kw-font-sans: inherit;
+    /* A real stack, not `inherit`: it is used inside `font:` shorthands, where
+       `inherit` would void the whole declaration (size included). */
+    --kw-font-sans: "TASA Explorer", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     --kw-text-xs: 0.75rem;
     --kw-text-sm: 0.875rem;
 

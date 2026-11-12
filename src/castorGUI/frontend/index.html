@@ -41,8 +41,19 @@
     <!-- Page chrome for the standalone build only. Deliberately not in etc.css:
          mounted inside Kinder the page background, font and outer padding belong
          to the host, and the calculator must not reach outside .castor-etc. -->
+    <!-- Kinder's typeface, so standalone reads like mounted. Only a nicety: offline
+         the system stack below takes over and nothing else changes. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=TASA+Explorer:wght@300;400;500;600;700&display=swap">
+
     <style>
-        html { -webkit-font-smoothing: antialiased; }
+        html {
+            -webkit-font-smoothing: antialiased;
+            color-scheme: dark;
+            /* Kinder's fluid root size, which the rem-based sizes in both modes follow. */
+            font-size: clamp(14px, calc(12.5px + 0.25vw), 16px);
+        }
         body {
             margin: 0;
             /* border-box or the 32px of padding lands outside the 100vh and the page
@@ -54,7 +65,7 @@
             min-height: 100vh;
             background: #07061A;   /* Kinder's --kw-bg */
             color: #F5F5F7;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'TASA Explorer', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
         }
         /* Both modes stand in the height left under the mode bar, which etc_simple.js
            measures into --etc-top; the bottom gap is this page's own padding. The

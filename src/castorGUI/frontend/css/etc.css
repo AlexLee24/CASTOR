@@ -11,6 +11,12 @@
    identically on its own. The fallbacks are Kinder's own values, read off
    kinder.astro.ncu.edu.tw on 2026-10-30, so standalone looks like mounted.
    When Kinder's theme moves, update them here.
+
+   Cards, tabs, titles and controls follow Kinder's components (.kw-panel,
+   .kw-tab, .kw-panel-head h2, .kw-select, .kw-btn) so this form matches Simple
+   mode, which is built from them. Kinder's template used to restyle the cards
+   and tabs from outside; those rules now live here (2026-11-12) and its
+   override block can go.
 ============================================================================ */
 
 .castor-etc {
@@ -21,13 +27,18 @@
     --etc-sun:           #8F8FA8;   /* third series — context, so dimmer than the other two */
 
     /* ── Surfaces ──────────────────────────────────────────────────────── */
-    --etc-panel-bg:      var(--kw-glass-bg, rgba(14, 14, 18, 0.70));
+    /* Kinder's panel surface (.kw-panel), so the two modes' cards are one material. */
+    --etc-panel-bg:      var(--kw-card-bg, rgba(14, 14, 18, 0.70));
     --etc-surface-1:     #14141E;
     /* One step brighter than the cards: a dialog floating above them has to read as
        nearer the viewer, and matching their surface makes it look flat instead. */
     --etc-surface-2:     #1c1c28;
     --etc-border-color:  var(--kw-border, rgba(255, 255, 255, 0.14));
-    --etc-border-width:  2px;
+    --etc-border-width:  1px;   /* Kinder's hairline cards */
+    /* Inputs, selects and buttons as Kinder draws them (.kw-select, .kw-field input,
+       .kw-btn), so the Advanced form's controls match Simple mode's. */
+    --etc-control-bg:     rgba(255, 255, 255, 0.06);
+    --etc-control-border: var(--kw-border-med, rgba(255, 255, 255, 0.2));
 
     /* ── Text ──────────────────────────────────────────────────────────── */
     --etc-text-main:     var(--kw-text-primary, #F5F5F7);
@@ -40,16 +51,18 @@
     --etc-warning-bg:    #2a2114;
 
     /* ── Spacing (4px baseline scale) ──────────────────────────────────── */
-    --etc-gap-main:      32px;  /* between the two panels */
+    --etc-gap-main:      20px;  /* between the two panels — Kinder's .kw-tool gap */
     --etc-gap-field:     8px;   /* fields within a group */
     --etc-gap-group:     24px;  /* between sections */
     --etc-gap-card:      16px;  /* metric-card grid gutter */
     --etc-pad-panel:     24px;
-    --etc-pad-card:      24px;
+    --etc-pad-card:      18px 20px;   /* Kinder's .kw-panel padding */
 
-    /* ── Radii ─────────────────────────────────────────────────────────── */
-    --etc-radius-base:   6px;   /* small nested elements */
-    --etc-radius-card:   16px;  /* the two outer "big surface" cards */
+    /* ── Radii (Kinder's 6 / 10 / 14 / 18 scale) ──────────────────────── */
+    --etc-radius-base:    var(--kw-radius-sm, 6px);    /* small nested elements */
+    --etc-radius-control: var(--kw-radius-md, 10px);   /* inputs, selects, buttons */
+    --etc-radius-inset:   var(--kw-radius-lg, 14px);   /* a block nested in a card */
+    --etc-radius-card:    var(--kw-radius-xl, 18px);   /* the two outer "big surface" cards */
 
     /* How tall the two panels stand. Viewport-relative so the results stay on
        screen while the form is edited, but how much sits above the calculator
@@ -94,8 +107,8 @@
     border: var(--etc-border-width) solid var(--etc-border-color);
     border-radius: var(--etc-radius-card);
     padding: var(--etc-pad-card);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    /* No blur of its own: Kinder's panels have none, and the host's page already
+       sets what shows through. */
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -135,7 +148,7 @@
     appearance: none;
     background: transparent;
     border: var(--etc-border-width) solid transparent;
-    border-radius: var(--etc-radius-base);
+    border-radius: 9px;   /* Kinder's .kw-tab */
     padding: 8px 12px;
     color: var(--etc-text-muted);
     font: inherit;
@@ -146,17 +159,19 @@
     transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 .castor-etc .etc-tab:hover { color: var(--etc-text-main); }
+/* The open tab solid amber, as Kinder's tab bar (.kw-tab.is-on) and the mode switch
+   above both forms draw it. */
 .castor-etc .etc-tab.is-active {
-    color: var(--etc-accent);
-    border-color: var(--etc-border-color);
-    background: rgba(255, 255, 255, 0.04);
+    color: var(--kw-accent-contrast, #0C0A1A);
+    border-color: transparent;
+    background: var(--etc-accent);
 }
 
 .castor-etc .etc-action {
     appearance: none;
     background: transparent;
     border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border-radius: var(--etc-radius-control);
     min-width: 40px;
     height: 30px;
     padding: 0 10px;
@@ -180,7 +195,7 @@
     flex: 1 1 auto;
     min-height: 0;
     border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border-radius: var(--etc-radius-inset);
     padding: var(--etc-pad-panel);
     overflow-y: auto;
 }
@@ -191,10 +206,12 @@
 /* ============================================================================
    Fields
 ============================================================================ */
+/* White like every Kinder panel title (.kw-panel-head h2) and Simple mode's; the
+   accent is kept for actions. */
 .castor-etc .etc-section-title {
     margin: 0 0 var(--etc-gap-field);
-    color: var(--etc-accent);
-    font-size: 14px;
+    color: var(--kw-text-white, #FFFFFF);
+    font-size: 1rem;
     font-weight: 700;
 }
 .castor-etc .etc-tabpanel .etc-section-title:not(:first-child) { margin-top: var(--etc-gap-field); }
@@ -209,11 +226,12 @@
     display: block;
     margin-bottom: var(--etc-gap-field);
 }
+/* Kinder's field label (.kw-field label), as Simple mode's are. */
 .castor-etc .etc-field-label {
     display: block;
     margin-bottom: 4px;
-    color: var(--etc-text-muted);
-    font-size: 12px;
+    color: var(--kw-text-secondary, rgba(245, 245, 247, 0.72));
+    font-size: 0.78rem;
 }
 /* A label that shares its line with a small control acting on the same field.
    Where both do not fit, the control drops below rather than squeezing the label. */
@@ -272,8 +290,8 @@
    choices stay in view and either is a single click. Same frame as an input. */
 .castor-etc .etc-segmented {
     display: flex;
-    border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border: var(--etc-border-width) solid var(--etc-control-border);
+    border-radius: var(--etc-radius-control);
     padding: 2px;
     gap: 2px;
 }
@@ -286,7 +304,7 @@
 .castor-etc .etc-segment span {
     display: block;
     padding: 7px 8px;
-    border-radius: 4px;
+    border-radius: 8px;   /* the container's 10 less its 2px padding */
     color: var(--etc-text-muted);
     font-size: 13px;
     font-weight: 600;
@@ -295,9 +313,11 @@
     transition: color 0.15s ease, background-color 0.15s ease;
 }
 .castor-etc .etc-segment:hover span { color: var(--etc-text-main); }
+/* Kinder's segmented filter (.kw-seg-item.is-on): soft white, not the accent, which
+   is kept for the tab bar and the primary action. */
 .castor-etc .etc-segment input:checked + span {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--etc-accent);
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--kw-text-white, #FFFFFF);
 }
 .castor-etc .etc-segment input:focus-visible + span { outline: 2px solid var(--etc-accent-hover); outline-offset: -2px; }
 
@@ -305,10 +325,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border: var(--etc-border-width) solid var(--etc-control-border);
+    border-radius: var(--etc-radius-control);
     padding: 0 10px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--etc-control-bg);
     transition: border-color 0.15s ease;
 }
 .castor-etc .etc-input-wrap:focus-within { border-color: var(--etc-accent); }
@@ -347,20 +367,22 @@
     display: block;
     width: 100%;
     appearance: none;
-    background-color: var(--etc-surface-1);
+    background-color: var(--etc-control-bg);
     background-image: linear-gradient(45deg, transparent 50%, var(--etc-text-muted) 50%),
                       linear-gradient(135deg, var(--etc-text-muted) 50%, transparent 50%);
     background-position: right 15px center, right 10px center;
     background-size: 5px 5px, 5px 5px;
     background-repeat: no-repeat;
-    border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border: var(--etc-border-width) solid var(--etc-control-border);
+    border-radius: var(--etc-radius-control);
     padding: 9px 32px 9px 10px;
     color: var(--etc-text-main);
     font: inherit;
     font-size: 13px;
     cursor: pointer;
 }
+/* The control's background is translucent; an open list needs a solid one. */
+.castor-etc select option { background: var(--etc-surface-1); color: var(--etc-text-main); }
 .castor-etc select:focus { outline: none; border-color: var(--etc-accent); }
 .castor-etc select.is-error { border-color: var(--etc-error); color: var(--etc-error); }
 
@@ -466,16 +488,17 @@
 
 /* ============================================================================
    Calculate button — pinned under the form frame, outside its scroll. Kinder's
-   plain tool button (.kw-btn), rule for rule, at full width.
+   plain tool button (.kw-btn), rule for rule, at full width, and the height of
+   Simple mode's Calculate.
 ============================================================================ */
 .castor-etc .etc-form-footer { margin-top: 16px; }
 .castor-etc .etc-calc {
     appearance: none;
     width: 100%;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 16px;
     border: 1px solid var(--kw-border-med, rgba(255, 255, 255, 0.2));
-    border-radius: var(--etc-radius-base);
+    border-radius: var(--etc-radius-control);
     background: var(--kw-surface, rgba(255, 255, 255, 0.06));
     color: var(--etc-text-main);
     font: inherit;
@@ -492,14 +515,18 @@
     color: var(--kw-text-white, #FFFFFF);
 }
 /* The results on show no longer match the form (or there are none yet): the
-   button takes the accent, since pressing it is the next thing to do. */
+   button becomes Kinder's primary button (.kw-btn-primary), the one Simple mode's
+   Calculate always is, since pressing it is the next thing to do. */
 .castor-etc .etc-calc.is-due {
-    border-color: var(--etc-accent);
-    color: var(--etc-accent);
+    border-color: transparent;
+    background: var(--etc-accent);
+    color: var(--kw-accent-contrast, #0C0A1A);
+    font-weight: 600;
 }
 .castor-etc .etc-calc.is-due:hover {
-    border-color: var(--etc-accent-hover);
-    color: var(--etc-accent-hover);
+    border-color: transparent;
+    background: var(--etc-accent-hover);
+    color: var(--kw-accent-contrast, #0C0A1A);
 }
 .castor-etc .etc-calc:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--etc-accent) 45%, transparent); }
 
@@ -591,16 +618,16 @@
 .castor-etc .etc-alert-error { background: var(--etc-error-bg); color: var(--etc-error); user-select: text; }
 .castor-etc .etc-alert-warning { background: var(--etc-warning-bg); color: var(--etc-warning); }
 
+/* Tiles fill the row, as Kinder's KPI tiles (.kw-kpis) do. */
 .castor-etc .etc-metrics {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--etc-gap-card);
 }
 .castor-etc .etc-metric {
-    flex: 0 0 auto;
-    width: 160px;
+    min-width: 0;
     border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border-radius: var(--etc-radius-control);
     padding: var(--etc-gap-field);
 }
 .castor-etc .etc-metric-label { color: var(--etc-text-muted); font-size: 11px; }
@@ -685,7 +712,7 @@
     resize: vertical;
     padding: 10px;
     border: var(--etc-border-width) solid var(--etc-border-color);
-    border-radius: var(--etc-radius-base);
+    border-radius: var(--etc-radius-control);
     background: rgba(0, 0, 0, 0.25);
     color: var(--etc-text-main);
     /* Monospace on purpose: this is the request as it will be sent, and lining the
@@ -727,6 +754,22 @@
     .castor-etc .etc-form-frame,
     .castor-etc .etc-results-scroll { overflow-y: visible; }
     .castor-etc .etc-hero-value { font-size: 44px; }
+}
+
+/* Phones and narrow tablets, as Kinder's template laid them out: tighter cards,
+   the section tabs on a row of their own (in one row they were squeezed to
+   "Instrument T…"), LOAD / SAVE on the next row at the right. */
+@media (max-width: 860px) {
+    .castor-etc { --etc-gap-main: 12px; --etc-pad-card: 14px 14px; }
+    .castor-etc .etc-tabbar { flex-wrap: wrap; row-gap: 10px; }
+    .castor-etc .etc-tabs {
+        flex-basis: 100%;
+        /* fade at the right edge: more tabs scroll in from there */
+        -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+        mask-image: linear-gradient(90deg, #000 85%, transparent);
+    }
+    .castor-etc .etc-tabbar-actions { margin-left: auto; }
+    .castor-etc .etc-action { height: 40px; }
 }
 
 @media (max-width: 560px) {
