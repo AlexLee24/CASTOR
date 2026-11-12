@@ -6,9 +6,13 @@ instead of each host keeping its own copy that quietly drifts from the others.
 
 ```
 frontend/
-├── etc_body.html      # the UI itself — a plain HTML fragment, shared by every host
-├── css/etc.css        # all styling, scoped under .castor-etc
-├── js/etc.js          # the controller — talks to the engine over HTTP
+├── etc_body.html      # Advanced mode — a plain HTML fragment, shared by every host
+├── etc_simple_body.html # Simple mode — the same kind of fragment
+├── css/etc.css        # Advanced styling, scoped under .castor-etc
+├── css/etc_simple.css # Simple mode and the mode switch
+├── css/kinder_shim.css # Kinder's kw-* components, for a host that is not Kinder
+├── js/etc.js          # Advanced controller — talks to the engine over HTTP
+├── js/etc_simple.js   # Simple controller and the Simple / Advanced switch
 ├── js/plotly.min.js   # vendored charting library (standalone build only)
 ├── img/               # logo and icons, generated from assets/ — do not hand-edit
 └── index.html         # standalone page shell (see server.py)
@@ -42,6 +46,40 @@ Those routes must accept and return exactly what `castor.schema` defines:
 `server.py` is the reference implementation, and is small on purpose — the
 contract is the schema, not the server.
 
+### Simple mode
+
+A host that also offers Simple mode (hardware names, a target and an SNR in; a
+frame length and count out) does three more things:
+
+1. **Include `etc_simple_body.html` too**, and put both fragments under a
+   `[data-etc-mode]` tab bar, each in its own `[data-etc-mode-panel]` wrapper:
+   ```html
+   <div class="etc-page">
+     <div class="etc-mode-bar">
+       <div class="kw-tabbar" role="tablist">
+         <button type="button" class="kw-tab is-on" data-etc-mode="simple">Simple</button>
+         <button type="button" class="kw-tab" data-etc-mode="advanced">Advanced</button>
+       </div>
+     </div>
+     <!-- etc_simple_body.html: it is the "simple" panel itself -->
+     <div class="etc-advanced" data-etc-mode-panel="advanced" hidden><!-- etc_body.html --></div>
+   </div>
+   ```
+   `index.html` is a working example, and Kinder's template is another.
+2. **Add `quickUrl`** to `window.CASTOR_ETC_CONFIG`, a route taking
+   `{goal, site, telescope, camera, filter, ra, dec, mag, fwhm,
+   observing_time_utc}` plus the goal's own fields, under Advanced mode's names:
+   `goal: "solve_time"` (the default) takes `target_snr` and answers with
+   `castorCLI.plan.compute_plan()`'s result, `goal: "solve_snr"` takes
+   `single_exp_time` and `num_exposures` and answers with `compute_snr()`'s.
+   `server.py`'s `calculate_quick` is the reference. Kinder's template names it
+   `window.KINDER_ETC_QUICK_URL` instead, which is still read; Kinder's own route
+   knows only `solve_time` until it calls `castorCLI.plan`.
+3. **Load `css/etc_simple.css` and `js/etc_simple.js`.** Simple mode is built on
+   Kinder's site components (`kw-panel`, `kw-field`, `kw-btn`, …): Kinder's own
+   theme supplies them, and any other host loads `css/kinder_shim.css` before
+   `etc_simple.css`.
+
 The presets route returns the preset document with its key order intact, since
 the first entry in each catalogue is the default. A Python host can serve what
 `server.py` serves with
@@ -67,8 +105,9 @@ doesn't, the fallbacks in `etc.css` apply.
 python src/castorGUI/server.py     # http://127.0.0.1:8600
 ```
 
-`server.py` substitutes `etc_body.html` into `index.html`'s `<!--CASTOR_ETC_BODY-->`
-marker at request time, so editing the partial only needs a browser refresh.
+`server.py` substitutes `etc_body.html` and `etc_simple_body.html` into
+`index.html`'s `<!--CASTOR_ETC_BODY-->` and `<!--CASTOR_ETC_SIMPLE_BODY-->`
+markers at request time, so editing a partial only needs a browser refresh.
 
 ## Desktop
 

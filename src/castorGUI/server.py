@@ -2,9 +2,9 @@
 Standalone host for the frontend/ calculator — the CASTOR-side equivalent of the
 Flask blueprint Kinder mounts it under.
 
-Its only job is to serve the same three routes Kinder serves, with the same paths
-and the same error shape, so frontend/js/etc.js runs unmodified against either
-host and a bug reproduced here reproduces there. It holds no physics and no
+Its only job is to serve the same four routes Kinder serves, with the same paths
+and the same error shape, so frontend/js/etc.js and etc_simple.js run unmodified
+against either host and a bug reproduced here reproduces there. It holds no physics and no
 validation rules of its own: requests go straight into castor.schema and the
 result of run_calculation() straight back out.
 
@@ -27,6 +27,7 @@ from castor import schema  # noqa: E402
 from castor.calculator import run_calculation  # noqa: E402
 from castor.batch_calculator import run_batch_calculation  # noqa: E402
 from castorCLI import presets as preset_reader  # noqa: E402
+from castorCLI import plan as quick_plan  # noqa: E402
 
 def _asset_root() -> Path:
     """Where frontend/ and data/ live at runtime.
@@ -43,6 +44,7 @@ def _asset_root() -> Path:
 FRONTEND_DIR = _asset_root() / "frontend"
 PRESETS_PATH = _asset_root() / "data" / "presets.json"
 BODY_MARKER = "<!--CASTOR_ETC_BODY-->"
+SIMPLE_BODY_MARKER = "<!--CASTOR_ETC_SIMPLE_BODY-->"
 
 class DevStaticFiles(StaticFiles):
     """Static assets that always revalidate.
@@ -77,7 +79,8 @@ def _versioned(shell: str) -> str:
     asked for. This is also the only lever that reaches a browser already holding a
     stale copy.
     """
-    for relative in ("css/etc.css", "js/etc.js", "js/plotly.min.js"):
+    for relative in ("css/etc.css", "css/etc_simple.css", "css/kinder_shim.css",
+                     "js/etc.js", "js/etc_simple.js", "js/plotly.min.js"):
         asset = FRONTEND_DIR / relative
         if asset.is_file():
             shell = shell.replace(relative, f"{relative}?v={int(asset.stat().st_mtime)}")
@@ -96,7 +99,8 @@ def index() -> HTMLResponse:
     """
     shell = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
     body = (FRONTEND_DIR / "etc_body.html").read_text(encoding="utf-8")
-    page = _versioned(shell).replace(BODY_MARKER, body)
+    simple = (FRONTEND_DIR / "etc_simple_body.html").read_text(encoding="utf-8")
+    page = _versioned(shell).replace(SIMPLE_BODY_MARKER, simple).replace(BODY_MARKER, body)
     return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
 
 
@@ -144,6 +148,57 @@ async def calculate(request: Request) -> JSONResponse:
     except ValidationError as exc:
         return _validation_error_response(exc)
     except Exception as exc:  # noqa: BLE001 - a readable message beats a 500 in the UI
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.post("/api/exposure_time_calculator/quick")
+async def calculate_quick(request: Request) -> JSONResponse:
+    """Simple mode: hardware names + target, and either an SNR or the frames.
+
+    goal picks which, under Advanced mode's names: "solve_time" (the default, and all
+    that Kinder's route of the same path knows) takes target_snr and answers with a
+    frame length and count from castorCLI.plan.compute_plan; "solve_snr" takes
+    single_exp_time and num_exposures and answers with the SNR they reach from
+    compute_snr. Presets are read through the same search path the presets route
+    serves, so every name the Simple form can offer is one this route can resolve.
+    """
+    data = await request.json()
+    if not data:
+        return JSONResponse({"error": "No data provided"}, status_code=400)
+    goal = data.get("goal") or "solve_time"
+    if goal not in ("solve_time", "solve_snr"):
+        return JSONResponse({"error": f"Unknown goal {goal!r}: use solve_time or solve_snr."}, status_code=400)
+    try:
+        ra, dec = quick_plan.parse_coordinates(data.get("ra"), data.get("dec"))
+        common = dict(
+            site=data.get("site"),
+            telescope=data.get("telescope") or None,
+            camera=data.get("camera") or None,
+            optic_filter=data.get("filter") or None,
+            ra=ra, dec=dec,
+            mag=float(data["mag"]),
+            observing_time_utc=data.get("observing_time_utc"),
+            fwhm=float(data["fwhm"]),
+        )
+        catalogue = preset_reader.load(*preset_reader.search_path(PRESETS_PATH))
+        if goal == "solve_snr":
+            result = quick_plan.compute_snr(
+                catalogue, **common,
+                single_exp_time=float(data["single_exp_time"]),
+                # Absent means one frame, as in Advanced; 0 is an answer to refuse.
+                num_exposures=float(data.get("num_exposures", 1)),
+            )
+        else:
+            result = quick_plan.compute_plan(catalogue, **common, target_snr=float(data["target_snr"]))
+        return JSONResponse(result)
+    except quick_plan.QuickInputError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except ValidationError as exc:
+        return _validation_error_response(exc)
+    except (KeyError, TypeError, ValueError):
+        wanted = "exposure time" if goal == "solve_snr" else "target SNR"
+        return JSONResponse({"error": f"Fill in the magnitude, {wanted} and seeing."}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
         return JSONResponse({"error": str(exc)}, status_code=400)
 
 

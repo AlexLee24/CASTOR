@@ -130,7 +130,7 @@ src/
 │   ├── schema.py           # Data Contracts & Mutex Validation
 │   ├── moon.py             # Astropy-Based Ephemeris, Lunar & Zodiacal Sky Brightness
 │   └── physics.py          # Pure Mathematical & Optical Physics Engine
-├── castorCLI/          # command line, the preset reader and its provenance check  -> cli.md, presets.md
+├── castorCLI/          # command line, the preset reader, its provenance check, Simple mode's planner  -> cli.md, presets.md
 └── castorGUI/          # browser and desktop UI            -> gui_architecture.md
 ```
 
@@ -139,7 +139,8 @@ presets are deliberately out of scope for `castor/` (§1.3), and a host with its
 hardware database — Kinder is one — has no use for a reader of this repository's
 JSON file. Putting it in the engine would make it dead weight there.
 `castorCLI/provenance.py`, the check that every preset number says where it came
-from, sits beside it for the same reason. A host that writes preset files of its
+from, sits beside it for the same reason, and so does `castorCLI/plan.py`, the
+Simple mode's choice of frame length: it starts from preset names. A host that writes preset files of its
 own instead can have them read beside the shipped one
 ([presets](presets.md#several-files)); the engine sees none of it either way.
 
