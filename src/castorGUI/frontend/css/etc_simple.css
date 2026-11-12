@@ -128,9 +128,11 @@
         align-items: stretch;
         margin-bottom: 0;
     }
-    .etc-simple > .kw-tool-side { position: static; min-height: 0; }
+    .etc-simple > .kw-tool-side { position: static; min-height: 0; grid-template-rows: minmax(0, 1fr); }
     .etc-simple :is(.etc-simple-form, .etc-simple-result) { box-sizing: border-box; }   /* .kw-panel is content-box */
-    .etc-simple-form { display: flex; flex-direction: column; min-height: 0; max-height: 100%; padding: 0; overflow: hidden; }
+    /* The full height, as the Advanced form card stands: with a short form Kinder left
+       the card ending mid-page beside a full-height answer. */
+    .etc-simple-form { display: flex; flex-direction: column; min-height: 0; height: 100%; padding: 0; overflow: hidden; }
     .etc-simple-fields { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px 4px; }
     .etc-simple-actions { flex: none; margin: 0; padding: 10px 20px 14px; border-top: 1px solid var(--kw-hairline); }
     /* Titles stay Kinder's 1rem, the size the Advanced form's use too. */
