@@ -30,7 +30,7 @@
                     <button type="button" class="etc-tab is-active" data-tab="instrument" role="tab" aria-selected="true">Instrument</button>
                     <button type="button" class="etc-tab" data-tab="target" role="tab" aria-selected="false">Target</button>
                     <button type="button" class="etc-tab" data-tab="environment" role="tab" aria-selected="false">Conditions</button>
-                    <button type="button" class="etc-tab" data-tab="options" role="tab" aria-selected="false">Options</button>
+                    <button type="button" class="etc-tab" data-tab="options" role="tab" aria-selected="false">Exposure</button>
                 </div>
                 <div class="etc-tabbar-actions">
                     <button type="button" class="etc-action" id="btn-load" title="Load a saved request (JSON)">LOAD</button>
@@ -422,7 +422,7 @@
                         </label>
                     </div>
 
-                    <!-- ══ Options ══ -->
+                    <!-- ══ Exposure (request section: options) ══ -->
                     <div class="etc-tabpanel" data-panel="options" role="tabpanel" hidden>
                         <!-- Three groups, in the order the questions actually get asked:
                              how long you are spending, when, and only then how the
@@ -682,7 +682,7 @@
                     </div>
                 </div>
 
-                <!-- Revealed only while the Options tab's "Sweep time range" is on. -->
+                <!-- Revealed only while the Exposure tab's "Sweep time range" is on. -->
                 <section class="etc-observing-window" id="observing-window" hidden>
                     <h3 class="etc-section-title">Observing Window</h3>
                     <div class="etc-chart" id="etc-chart"></div>
