@@ -33,9 +33,10 @@
    the same way; a bare field let its margin merge with the next heading's, and the two
    goals ended a few pixels apart. */
 .etc-simple-goal { display: grid; }
-/* The frames pair stays two columns where other pairs stack (Kinder's .kw-grid-2 goes to
-   one below 820px): it swaps with the one-row Target SNR field, and stacking it made
-   everything under the goal jump by a row on each switch. */
+/* Pairs of short values stay two columns where the hardware pairs, whose names are long,
+   stack (Kinder's .kw-grid-2 goes to one below 820px). RA / Dec is one coordinate; the
+   frames pair swaps with the one-row Target SNR field, and stacking it made everything
+   under the goal jump by a row on each switch. */
 .etc-simple-pair.etc-simple-keep { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .etc-simple-keep label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .etc-simple-unit { position: relative; display: block; }
