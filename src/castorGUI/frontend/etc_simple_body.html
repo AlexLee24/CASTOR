@@ -18,20 +18,23 @@
         <form class="kw-panel etc-simple-form" id="etc-simple-form" novalidate>
             <div class="etc-simple-fields">
                 <div class="kw-panel-head"><h2>Setup</h2></div>
+                <!-- Advanced mode's order: site, telescope, camera, filter. Each narrows or
+                     sets a default for the next (the telescope picks its camera), so that is
+                     the order they are read in, side by side or stacked. -->
                 <div class="kw-grid-2 etc-simple-pair">
                     <div class="kw-field">
                         <label for="qs-site">Observatory</label>
                         <select class="kw-select" id="qs-site" name="site"></select>
                     </div>
                     <div class="kw-field">
-                        <label for="qs-camera">Camera</label>
-                        <select class="kw-select" id="qs-camera" name="camera"></select>
+                        <label for="qs-telescope">Telescope</label>
+                        <select class="kw-select" id="qs-telescope" name="telescope"></select>
                     </div>
                 </div>
                 <div class="kw-grid-2 etc-simple-pair">
                     <div class="kw-field">
-                        <label for="qs-telescope">Telescope</label>
-                        <select class="kw-select" id="qs-telescope" name="telescope"></select>
+                        <label for="qs-camera">Camera</label>
+                        <select class="kw-select" id="qs-camera" name="camera"></select>
                     </div>
                     <div class="kw-field">
                         <label for="qs-filter">Filter</label>
