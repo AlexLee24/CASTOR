@@ -790,6 +790,18 @@
     function initTabs() {
         var tabs = root.querySelectorAll('.etc-tab');
         var tabsBar = root.querySelector('.etc-tabs');
+
+        // The edge fade (etc.css .is-clipped) only while tabs are scrolled out to the
+        // right; on a bar that shows them all it would just dim the last one.
+        function markClipped() {
+            tabsBar.classList.toggle('is-clipped',
+                tabsBar.scrollLeft + tabsBar.clientWidth < tabsBar.scrollWidth - 1);
+        }
+        tabsBar.addEventListener('scroll', markClipped, { passive: true });
+        // The bar's own size is what decides, and it changes with the window, the
+        // mode switch and the panel stacking alike: one observer covers them all.
+        if (window.ResizeObserver) { new ResizeObserver(markClipped).observe(tabsBar); }
+        markClipped();
         Array.prototype.forEach.call(tabs, function (tab) {
             tab.addEventListener('click', function () {
                 Array.prototype.forEach.call(tabs, function (other) {

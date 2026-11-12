@@ -128,30 +128,39 @@
 /* ============================================================================
    Tab bar (+ LOAD / SAVE)
 ============================================================================ */
+/* LOAD / SAVE sit beside the tabs while they fit and move to a row of their own,
+   at the right, only when they do not: flex wraps on the tabs' full width, before
+   any shrinking. A breakpoint used to decide instead, and under 860px put them on a
+   second row even with half the bar empty. Alone on a row, the tabs shrink to it
+   and scroll sideways, the only case where they are cut. */
 .castor-etc .etc-tabbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--etc-gap-field);
+    gap: 10px var(--etc-gap-field);
     margin-bottom: 16px;
 }
-/* The tab strip absorbs any shortage of width — it can shrink and, at the very
-   narrow end, scroll sideways. Letting the row wrap instead pushed LOAD/SAVE
-   onto a second line, which read as a stray pair of buttons under the tabs. */
 .castor-etc .etc-tabs {
     display: flex;
     align-items: center;
     gap: var(--etc-gap-field);
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
 }
 .castor-etc .etc-tabs::-webkit-scrollbar { display: none; }
+/* Fade at the right edge while more tabs are scrolled out that way (etc.js sets it). */
+.castor-etc .etc-tabs.is-clipped {
+    -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+    mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
 .castor-etc .etc-tabbar-actions {
     display: flex;
     align-items: center;
     gap: var(--etc-gap-field);
     flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .castor-etc .etc-tab {
@@ -806,22 +815,11 @@
     .castor-etc .etc-form-footer { border-top: 0; }
 }
 
-/* Phones and narrow tablets, as Kinder's template laid them out: the section
-   tabs on a row of their own (in one row they were squeezed to "Instrument T…"),
-   LOAD / SAVE on the next row at the right. */
+/* Phones and narrow tablets: the gap narrows as Kinder's .kw-tool does; the card
+   padding stays 20, as Kinder's .kw-panel does on a phone, so the two forms keep
+   one inset. The tab bar needs no rule here: it wraps by itself (above). */
 @media (max-width: 860px) {
-    /* The gap narrows as Kinder's .kw-tool does; the card padding stays 18/20, as
-       Kinder's .kw-panel does on a phone, so the two forms keep one inset. */
     .castor-etc { --etc-gap-main: 12px; }
-    .castor-etc .etc-tabbar { flex-wrap: wrap; row-gap: 10px; }
-    .castor-etc .etc-tabs {
-        flex-basis: 100%;
-        /* fade at the right edge: more tabs scroll in from there */
-        -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
-        mask-image: linear-gradient(90deg, #000 85%, transparent);
-    }
-    .castor-etc .etc-tabbar-actions { margin-left: auto; }
-    .castor-etc .etc-action { height: 40px; }
 }
 
 @media (max-width: 560px) {
