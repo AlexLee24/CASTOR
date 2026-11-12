@@ -1,10 +1,11 @@
 <!--
     CASTOR ETC — Simple mode, the second shared partial beside etc_body.html.
 
-    Hardware, a target and an SNR in; a frame length and frame count out, from
-    POST quickUrl (castorCLI/plan.py). Written for Kinder and moved here unchanged
-    except for the logo, now drawn by etc_simple.css like etc.css draws the beaver,
-    so this fragment carries no host-specific URL.
+    Hardware and a target in, then Advanced mode's two goals: an SNR in and a frame
+    length and frame count out (solve_time), or the frames in and their SNR out
+    (solve_snr), from POST quickUrl (castorCLI/plan.py). Written for Kinder and moved
+    here; the logo is now drawn by etc_simple.css like etc.css draws the beaver, so
+    this fragment carries no host-specific URL.
 
     Its classes are Kinder's site components (kw-*): mounted in Kinder the site's
     _theme.css styles them, and the standalone shell loads css/kinder_shim.css for
@@ -50,15 +51,34 @@
                         <input type="text" id="qs-dec" name="dec" placeholder="+20:00:00 or 20.0" autocomplete="off" spellcheck="false">
                     </div>
                 </div>
-                <div class="kw-grid-2 etc-simple-pair">
+                <div class="kw-field">
+                    <label for="qs-mag">Magnitude (AB)</label>
+                    <input type="number" id="qs-mag" name="mag" step="any" placeholder="e.g. 19.5">
+                </div>
+
+                <!-- Advanced mode's Exposure Strategy, with its names and its choice: give
+                     the frames and get the SNR, or give the SNR and get the frames. -->
+                <div class="kw-panel-head etc-simple-head"><h2>Exposure Strategy</h2></div>
+                <div class="kw-field">
+                    <span class="etc-simple-label" id="qs-goal-label">Calculation Goal</span>
+                    <div class="etc-simple-seg" role="radiogroup" aria-labelledby="qs-goal-label">
+                        <label><input type="radio" name="goal" value="solve_snr"><span>Solve for SNR</span></label>
+                        <label><input type="radio" name="goal" value="solve_time" checked><span>Solve for Exposures</span></label>
+                    </div>
+                </div>
+                <div class="kw-grid-2 etc-simple-pair" data-qs-goal="solve_snr" hidden>
                     <div class="kw-field">
-                        <label for="qs-mag">Magnitude (AB)</label>
-                        <input type="number" id="qs-mag" name="mag" step="any" placeholder="e.g. 19.5">
+                        <label for="qs-exp">Single Exposure Time (s)</label>
+                        <input type="number" id="qs-exp" name="single_exp_time" step="any" min="0" value="120">
                     </div>
                     <div class="kw-field">
-                        <label for="qs-snr">Target SNR</label>
-                        <input type="number" id="qs-snr" name="target_snr" step="any" min="0" value="10">
+                        <label for="qs-num">Number of Exposures</label>
+                        <input type="number" id="qs-num" name="num_exposures" step="1" min="1" value="1">
                     </div>
+                </div>
+                <div class="kw-field" data-qs-goal="solve_time">
+                    <label for="qs-snr">Target SNR</label>
+                    <input type="number" id="qs-snr" name="target_snr" step="any" min="0" value="10">
                 </div>
 
                 <div class="kw-panel-head etc-simple-head"><h2>When</h2></div>

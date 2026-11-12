@@ -25,6 +25,38 @@
 .etc-simple-form .kw-select { width: 100%; }
 .etc-simple-pair { gap: 12px; }
 .etc-simple-pair .kw-field { min-width: 0; }
+[data-qs-goal][hidden] { display: none !important; }
+/* Calculation Goal: Advanced mode's segmented control (.etc-segmented in etc.css), drawn
+   with Kinder's tokens since this panel is outside .castor-etc. Both choices stay in
+   view and either is one click. */
+.etc-simple-label { font-size: 0.78rem; color: var(--kw-text-secondary); }
+.etc-simple-seg {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    min-height: 40px;
+    box-sizing: border-box;
+    border: 1px solid var(--kw-border-med);
+    border-radius: var(--kw-radius-md);
+}
+.etc-simple-seg label { flex: 1 1 0; position: relative; display: flex; cursor: pointer; }
+.etc-simple-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.etc-simple-seg span {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    border-radius: 8px;   /* the frame's 10 less its 2px padding */
+    color: var(--kw-text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.etc-simple-seg label:hover span { color: var(--kw-text-primary); }
+.etc-simple-seg input:checked + span { background: rgba(255, 255, 255, 0.15); color: var(--kw-text-white); }
+.etc-simple-seg input:focus-visible + span { box-shadow: var(--kw-focus-ring); }
 .etc-simple-form small { font-size: 0.74rem; }
 .etc-simple-caveat {
     margin: -4px 0 14px;
@@ -146,6 +178,7 @@
     .etc-simple-form .etc-simple-head { margin-top: 2px; padding-top: 10px; }
     .etc-simple-form .kw-field { gap: 4px; margin-bottom: 8px; }
     .etc-simple-form .kw-field :is(input, select) { min-height: 34px; }
+    .etc-simple-seg { min-height: 34px; }
     .etc-simple-result { min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; }
     .etc-simple-empty { min-height: 100%; }
     .etc-advanced { margin-bottom: 0; }

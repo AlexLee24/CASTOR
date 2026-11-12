@@ -67,10 +67,14 @@ frame length and count out) does three more things:
    ```
    `index.html` is a working example, and Kinder's template is another.
 2. **Add `quickUrl`** to `window.CASTOR_ETC_CONFIG`, a route taking
-   `{site, telescope, camera, filter, ra, dec, mag, target_snr, fwhm,
-   observing_time_utc}` and answering with `castorCLI.plan.compute_plan()`'s
-   result (`server.py`'s `calculate_quick` is the reference). Kinder's template
-   names it `window.KINDER_ETC_QUICK_URL` instead, which is still read.
+   `{goal, site, telescope, camera, filter, ra, dec, mag, fwhm,
+   observing_time_utc}` plus the goal's own fields, under Advanced mode's names:
+   `goal: "solve_time"` (the default) takes `target_snr` and answers with
+   `castorCLI.plan.compute_plan()`'s result, `goal: "solve_snr"` takes
+   `single_exp_time` and `num_exposures` and answers with `compute_snr()`'s.
+   `server.py`'s `calculate_quick` is the reference. Kinder's template names it
+   `window.KINDER_ETC_QUICK_URL` instead, which is still read; Kinder's own route
+   knows only `solve_time` until it calls `castorCLI.plan`.
 3. **Load `css/etc_simple.css` and `js/etc_simple.js`.** Simple mode is built on
    Kinder's site components (`kw-panel`, `kw-field`, `kw-btn`, …): Kinder's own
    theme supplies them, and any other host loads `css/kinder_shim.css` before

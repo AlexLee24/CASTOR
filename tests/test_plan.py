@@ -1,6 +1,6 @@
 """Simple mode's planner (castorCLI/plan.py) and the route that serves it.
 
-The planner tests are Kinder's own (Kinder_web tests/test_etc_quick.py), moved here
+The compute_plan tests are Kinder's own (Kinder_web tests/test_etc_quick.py), moved here
 with the module, so the copy that now lives in CASTOR is held to what Kinder already
 checked. The target is placed near the zenith over Lulin (RA 22h, Dec +20 at 14:00
 UTC on 2025-09-28).
@@ -11,7 +11,8 @@ import json
 import pytest
 
 from castorCLI import presets
-from castorCLI.plan import PREFERRED_EXPOSURES, QuickInputError, compute_plan, parse_coordinates
+from castorCLI.plan import (PREFERRED_EXPOSURES, QuickInputError, compute_plan, compute_snr,
+                            parse_coordinates)
 
 WHEN = "2025-09-28T14:00:00Z"
 
@@ -84,6 +85,72 @@ def test_bright_star_saturates(catalogue):
     assert result["status"] == "saturated"
 
 
+# ==========================================
+# compute_snr: the frames in, their SNR out
+# ==========================================
+
+def snr(catalogue, **overrides):
+    args = dict(site="lulin", telescope="LOT", camera="Sophia", optic_filter="Sloan_r",
+                ra=330.0, dec=20.0, mag=21.0, single_exp_time=120.0, num_exposures=3,
+                observing_time_utc=WHEN, fwhm=1.4)
+    args.update(overrides)
+    return compute_snr(catalogue, **args)
+
+
+def test_snr_is_what_castor_says_for_those_frames(catalogue):
+    """The answer is Advanced mode's solve_snr on the same request, number for number."""
+    from castor import schema
+    from castor.calculator import run_calculation
+
+    result = snr(catalogue)
+    request = catalogue.resolve("lulin", "LOT", "Sophia", "Sloan_r")
+    request["target"] = {"ra": 330.0, "dec": 20.0, "morphology": {"type": "point"},
+                         "sed": {"type": "flat"}, "brightness": {"type": "ab_mag", "target_mag": 21.0}}
+    request["environment"].update({"total_fwhm": 1.4, "observing_time_utc": WHEN, "auto_calc_background": True})
+    request["instrument"]["throughput_correction"] = 1.0
+    request["options"] = {"type": "solve_snr", "num_exposures": 3, "single_exp_time": 120.0,
+                          "aperture_factor": 0.85,
+                          "sky_annulus": {"inner_factor": 3.0, "outer_factor": 5.0, "estimator": "median"}}
+    core = run_calculation(schema.ObservationRequest.model_validate(request)).core
+
+    assert result["status"] == "ok"
+    assert result["goal"] == "solve_snr"
+    assert result["chosen"]["snr"] == pytest.approx(core.total_snr, rel=1e-12)
+    assert result["chosen"]["single_snr"] == pytest.approx(core.single_snr, rel=1e-12)
+    assert result["chosen"]["total_s"] == 360.0
+
+
+def test_the_same_total_split_into_more_frames_loses_snr(catalogue):
+    """Every row integrates the same 360 s; each extra readout costs SNR."""
+    rows = snr(catalogue)["rows"]
+
+    assert [row["frames"] for row in rows] == sorted(row["frames"] for row in rows)
+    assert all(row["total_s"] == pytest.approx(360.0) for row in rows)
+    assert [row["snr"] for row in rows] == sorted((row["snr"] for row in rows), reverse=True)
+    assert [row["frames"] for row in rows if row.get("chosen")] == [3]
+
+
+def test_frames_longer_than_saturation_are_flagged(catalogue):
+    result = snr(catalogue, mag=9.0, single_exp_time=300.0, num_exposures=1)
+
+    assert result["status"] == "saturated"
+    assert result["chosen"]["saturates"]
+    t_sat = result["conditions"]["saturation_time_s"]
+    assert all(row["saturates"] == (row["exp_s"] >= t_sat) for row in result["rows"])
+
+
+def test_snr_for_a_target_below_the_horizon(catalogue):
+    result = snr(catalogue, ra=150.0)
+    assert result["status"] == "below_horizon"
+    assert result["rows"] == []
+
+
+@pytest.mark.parametrize("change", [{"single_exp_time": 0}, {"num_exposures": 0}, {"num_exposures": 1.5}])
+def test_frames_must_be_real(catalogue, change):
+    with pytest.raises(QuickInputError):
+        snr(catalogue, **change)
+
+
 def test_coordinates_in_either_notation():
     assert parse_coordinates("22:00:00", "+20:00:00") == pytest.approx((330.0, 20.0))
     assert parse_coordinates("330", "20") == pytest.approx((330.0, 20.0))
@@ -132,6 +199,15 @@ def test_the_route_returns_the_planners_answer(catalogue):
     assert body == json.loads(json.dumps(plan(catalogue)))
 
 
+def test_the_route_solves_for_snr_when_asked(catalogue):
+    """goal takes Advanced mode's names; solve_snr posts the frames instead of an SNR."""
+    status, body = quick({**FORM, "ra": "330", "dec": "20", "goal": "solve_snr",
+                          "target_snr": None, "single_exp_time": 120, "num_exposures": 3})
+
+    assert status == 200
+    assert body == json.loads(json.dumps(snr(catalogue)))
+
+
 def test_the_route_reads_the_same_presets_the_form_is_offered(monkeypatch, tmp_path):
     """A profile served by the presets route (here one from CASTOR_PRESETS_PATH) is one
     the quick route can resolve, so no choice in the Simple form is a dead end."""
@@ -160,6 +236,9 @@ def test_the_route_reads_the_same_presets_the_form_is_offered(monkeypatch, tmp_p
     ({"mag": None}, "Fill in the magnitude, target SNR and seeing."),
     ({"site": "nowhere"}, "Unknown profile 'nowhere'"),
     ({"fwhm": 0}, "Seeing must be a positive number"),
+    ({"goal": "solve_snr"}, "Fill in the magnitude, exposure time and seeing."),
+    ({"goal": "solve_snr", "single_exp_time": 60, "num_exposures": 0}, "Number of exposures must be"),
+    ({"goal": "solve_everything"}, "Unknown goal 'solve_everything'"),
 ])
 def test_bad_input_is_a_readable_400(change, message):
     status, body = quick({**FORM, **change})

@@ -1,5 +1,7 @@
-"""The calculator's Simple mode: pick hardware, a target and an SNR, get back how long
-each frame should be and how many to take.
+"""The calculator's Simple mode: pick hardware and a target, then either an SNR, to get
+back how long each frame should be and how many to take (compute_plan), or the frames
+themselves, to get back the SNR they reach (compute_snr). The two goals are Advanced
+mode's solve_time and solve_snr, and the route takes them under the same names.
 
 CASTOR answers "how many frames of t seconds reach this SNR" (solve_time), but t is an input:
 someone who only wants an observing plan has no basis for choosing it. This module chooses it.
@@ -9,8 +11,9 @@ comes from castor.calculator.run_calculation. The only arithmetic done here is f
 single-frame time that just reaches the target, from the noise budget CASTOR reports, and that
 answer is then checked by running CASTOR on it like every other row.
 
-Written for Kinder (app/blueprints/astronomy_tools/etc_quick.py in Kinder_web) and moved here
-unchanged so the two web hosts serve one copy, as they already do for the Advanced form. It
+compute_plan was written for Kinder (app/blueprints/astronomy_tools/etc_quick.py in
+Kinder_web) and moved here so the two web hosts serve one copy, as they already do for the
+Advanced form; compute_snr was added here, and the two share their request assembly. It
 lives beside the CLI rather than in castor/ because it resolves presets, which the engine
 deliberately knows nothing about. Hosts expose it as POST /api/exposure_time_calculator/quick
 (see castorGUI/server.py).
@@ -89,16 +92,15 @@ def _single_frame_time(noise, probe_exp, target_snr):
     return (t2 * b + math.sqrt((t2 * b) ** 2 + 4 * qa * t2 * r)) / (2 * qa)
 
 
-def compute_plan(catalogue, *, site, telescope, camera, optic_filter, ra, dec, mag,
-                 target_snr, observing_time_utc, fwhm):
-    """Run CASTOR over the frame lengths that make sense and pick one. Returns a JSON-ready dict."""
+def _setup(catalogue, site, telescope, camera, optic_filter, ra, dec, mag, observing_time_utc, fwhm):
+    """The preset request both goals share, and a runner that adds the options to it.
+
+    Returns (labels, caveats, run), where run(options) answers one CASTOR request."""
     from castor import schema
     from castor.calculator import run_calculation
     from castorCLI.main import ASSUMPTIONS
     from castorCLI import presets
 
-    if not (target_snr and target_snr > 0):
-        raise QuickInputError('Target SNR must be a positive number.')
     if not (fwhm and fwhm > 0):
         raise QuickInputError('Seeing must be a positive number of arcseconds.')
 
@@ -121,23 +123,41 @@ def compute_plan(catalogue, *, site, telescope, camera, optic_filter, ra, dec, m
         data['options'] = {**data.get('options', {}), **options}
         return run_calculation(schema.ObservationRequest.model_validate(data))
 
+    return labels, caveats, run
+
+
+def _conditions(response, fwhm):
+    """The sky at the requested time, as the result panel's condition cards show it."""
+    eph = response.ephemeris
+    return {
+        'target_elevation_deg': eph.target_elevation_deg,
+        'airmass': response.diagnostics.airmass,
+        'moon_elevation_deg': eph.moon_elevation_deg,
+        'moon_illumination': (1 + math.cos(math.radians(eph.moon_phase_angle_deg))) / 2,
+        'moon_separation_deg': eph.moon_separation_deg,
+        'fwhm_arcsec': fwhm,
+        'saturation_time_s': float(response.core.saturation_time_limit),
+        'sky_mag_arcsec2': response.diagnostics.sky_surface_brightness,
+    }
+
+
+def compute_plan(catalogue, *, site, telescope, camera, optic_filter, ra, dec, mag,
+                 target_snr, observing_time_utc, fwhm):
+    """Run CASTOR over the frame lengths that make sense and pick one. Returns a JSON-ready dict."""
+    if not (target_snr and target_snr > 0):
+        raise QuickInputError('Target SNR must be a positive number.')
+    labels, caveats, run = _setup(catalogue, site, telescope, camera, optic_filter,
+                                  ra, dec, mag, observing_time_utc, fwhm)
+
     probe = run({'type': 'solve_snr', 'num_exposures': 1, 'single_exp_time': _PROBE_EXP_S})
     eph = probe.ephemeris
     t_sat = float(probe.core.saturation_time_limit)
 
     result = {
+        'goal': 'solve_time',
         'labels': labels,
         'caveats': caveats,
-        'conditions': {
-            'target_elevation_deg': eph.target_elevation_deg,
-            'airmass': probe.diagnostics.airmass,
-            'moon_elevation_deg': eph.moon_elevation_deg,
-            'moon_illumination': (1 + math.cos(math.radians(eph.moon_phase_angle_deg))) / 2,
-            'moon_separation_deg': eph.moon_separation_deg,
-            'fwhm_arcsec': fwhm,
-            'saturation_time_s': t_sat,
-            'sky_mag_arcsec2': probe.diagnostics.sky_surface_brightness,
-        },
+        'conditions': _conditions(probe, fwhm),
         'target_snr': target_snr,
         'readout_overhead_s': READOUT_OVERHEAD_S,
         'single_frame_time_s': None,
@@ -180,4 +200,60 @@ def compute_plan(catalogue, *, site, telescope, camera, optic_filter, ra, dec, m
     result['rows'] = rows
     result['recommended'] = recommended
     result['status'] = 'impractical' if recommended['total_s'] > IMPRACTICAL_TOTAL_S else 'ok'
+    return result
+
+
+# How a fixed total is re-cut in the comparison compute_snr returns: one frame, a few, and
+# enough short ones to show what the extra readouts cost.
+_SPLITS = (1, 2, 3, 5, 10, 20)
+
+
+def compute_snr(catalogue, *, site, telescope, camera, optic_filter, ra, dec, mag,
+                single_exp_time, num_exposures, observing_time_utc, fwhm):
+    """The SNR that num_exposures frames of single_exp_time seconds reach (Advanced's
+    solve_snr), and the same total integration split into other frame counts beside it,
+    since a frame count is what an observer can still change once the time is set.
+    Returns a JSON-ready dict."""
+    if not (single_exp_time and single_exp_time > 0):
+        raise QuickInputError('Single exposure time must be a positive number of seconds.')
+    if not (num_exposures and num_exposures >= 1 and float(num_exposures).is_integer()):
+        raise QuickInputError('Number of exposures must be a whole number, 1 or more.')
+    num_exposures = int(num_exposures)
+    labels, caveats, run = _setup(catalogue, site, telescope, camera, optic_filter,
+                                  ra, dec, mag, observing_time_utc, fwhm)
+
+    def row(t, n):
+        resp = run({'type': 'solve_snr', 'num_exposures': n, 'single_exp_time': float(t)})
+        return resp, {'exp_s': t, 'frames': n, 'total_s': t * n,
+                      'elapsed_s': (t + READOUT_OVERHEAD_S) * n,
+                      'snr': resp.core.total_snr, 'single_snr': resp.core.single_snr,
+                      'saturates': t >= float(resp.core.saturation_time_limit)}
+
+    asked, chosen = row(float(single_exp_time), num_exposures)
+    chosen['chosen'] = True
+    eph = asked.ephemeris
+    result = {
+        'goal': 'solve_snr',
+        'labels': labels,
+        'caveats': caveats,
+        'conditions': _conditions(asked, fwhm),
+        'readout_overhead_s': READOUT_OVERHEAD_S,
+        'chosen': chosen,
+        'rows': [],
+        'snr_ceiling': asked.core.snr_ceiling,
+        'warnings': [w for w in asked.flags.warnings],
+    }
+    if eph.target_elevation_deg <= 0:
+        result['status'] = 'below_horizon'
+        return result
+
+    total = chosen['total_s']
+    rows = [chosen]
+    for n in _SPLITS:
+        t = total / n
+        if n == num_exposures or t < 1:
+            continue
+        rows.append(row(t, n)[1])
+    result['rows'] = sorted(rows, key=lambda r: r['frames'])
+    result['status'] = 'saturated' if chosen['saturates'] else 'ok'
     return result

@@ -153,37 +153,51 @@ async def calculate(request: Request) -> JSONResponse:
 
 @app.post("/api/exposure_time_calculator/quick")
 async def calculate_quick(request: Request) -> JSONResponse:
-    """Simple mode: hardware names + target + SNR in, a frame length and count out.
+    """Simple mode: hardware names + target, and either an SNR or the frames.
 
-    The same request and response as Kinder's route of the same path, so etc_simple.js
-    runs unmodified against either host. The plan itself is castorCLI.plan's. Presets
-    are read through the same search path the presets route serves, so every name the
-    Simple form can offer is one this route can resolve.
+    goal picks which, under Advanced mode's names: "solve_time" (the default, and all
+    that Kinder's route of the same path knows) takes target_snr and answers with a
+    frame length and count from castorCLI.plan.compute_plan; "solve_snr" takes
+    single_exp_time and num_exposures and answers with the SNR they reach from
+    compute_snr. Presets are read through the same search path the presets route
+    serves, so every name the Simple form can offer is one this route can resolve.
     """
     data = await request.json()
     if not data:
         return JSONResponse({"error": "No data provided"}, status_code=400)
+    goal = data.get("goal") or "solve_time"
+    if goal not in ("solve_time", "solve_snr"):
+        return JSONResponse({"error": f"Unknown goal {goal!r}: use solve_time or solve_snr."}, status_code=400)
     try:
         ra, dec = quick_plan.parse_coordinates(data.get("ra"), data.get("dec"))
-        result = quick_plan.compute_plan(
-            preset_reader.load(*preset_reader.search_path(PRESETS_PATH)),
+        common = dict(
             site=data.get("site"),
             telescope=data.get("telescope") or None,
             camera=data.get("camera") or None,
             optic_filter=data.get("filter") or None,
             ra=ra, dec=dec,
             mag=float(data["mag"]),
-            target_snr=float(data["target_snr"]),
             observing_time_utc=data.get("observing_time_utc"),
             fwhm=float(data["fwhm"]),
         )
+        catalogue = preset_reader.load(*preset_reader.search_path(PRESETS_PATH))
+        if goal == "solve_snr":
+            result = quick_plan.compute_snr(
+                catalogue, **common,
+                single_exp_time=float(data["single_exp_time"]),
+                # Absent means one frame, as in Advanced; 0 is an answer to refuse.
+                num_exposures=float(data.get("num_exposures", 1)),
+            )
+        else:
+            result = quick_plan.compute_plan(catalogue, **common, target_snr=float(data["target_snr"]))
         return JSONResponse(result)
     except quick_plan.QuickInputError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     except ValidationError as exc:
         return _validation_error_response(exc)
     except (KeyError, TypeError, ValueError):
-        return JSONResponse({"error": "Fill in the magnitude, target SNR and seeing."}, status_code=400)
+        wanted = "exposure time" if goal == "solve_snr" else "target SNR"
+        return JSONResponse({"error": f"Fill in the magnitude, {wanted} and seeing."}, status_code=400)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"error": str(exc)}, status_code=400)
 
