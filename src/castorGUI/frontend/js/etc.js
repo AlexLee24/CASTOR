@@ -1501,9 +1501,18 @@
                 ? input.name.replace('batch.', 'batch_time.')
                 : input.name;
             var value = lookup(data, path);
-            if (value === undefined || value === null) { continue; }
+            if (value === undefined) { continue; }
 
-            if (input.type === 'checkbox') {
+            if (value === null) {
+                // An explicit null is a value, not a gap (#50): zodiacal_share is null
+                // on purpose in u' and z'. Skipping it left the previous band's number
+                // in the field, which was then posted. An empty field posts nothing,
+                // which is how the form already says null. Only for fields that can
+                // be empty; a null parent (sky_annulus: null) still leaves its
+                // children alone, since lookup stops there and returns undefined.
+                if (input.type !== 'number' && input.type !== 'text') { continue; }
+                input.value = '';
+            } else if (input.type === 'checkbox') {
                 input.checked = Boolean(value);
             } else if (input.type === 'radio') {
                 input.checked = input.value === value;
