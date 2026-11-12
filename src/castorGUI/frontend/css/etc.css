@@ -604,6 +604,7 @@
     padding: var(--etc-gap-field);
 }
 .castor-etc .etc-metric-label { color: var(--etc-text-muted); font-size: 11px; }
+.castor-etc .etc-metric-note { margin-top: 2px; color: var(--etc-text-muted); font-size: 11px; }
 .castor-etc .etc-metric-value {
     display: flex;
     align-items: baseline;
