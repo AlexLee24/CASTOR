@@ -29,6 +29,29 @@
 .etc-simple-pair { gap: 0 12px; }
 .etc-simple-pair .kw-field { min-width: 0; }
 [data-qs-goal][hidden] { display: none !important; }
+/* Both goals' fields sit in a grid, so each field's bottom margin stays inside its group
+   the same way; a bare field let its margin merge with the next heading's, and the two
+   goals ended a few pixels apart. */
+.etc-simple-goal { display: grid; }
+/* The frames pair stays two columns where other pairs stack (Kinder's .kw-grid-2 goes to
+   one below 820px): it swaps with the one-row Target SNR field, and stacking it made
+   everything under the goal jump by a row on each switch. */
+.etc-simple-pair.etc-simple-keep { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.etc-simple-keep label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.etc-simple-unit { position: relative; display: block; }
+.etc-simple-unit input { width: 100%; padding-right: 28px; appearance: textfield; -moz-appearance: textfield; }
+.etc-simple-unit input::-webkit-outer-spin-button,
+.etc-simple-unit input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.etc-simple-unit::after {
+    content: attr(data-unit);
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    color: var(--kw-text-muted);
+    font-size: 0.72rem;
+    pointer-events: none;
+}
 /* Calculation Goal: Advanced mode's segmented control (.etc-segmented in etc.css), drawn
    with Kinder's tokens since this panel is outside .castor-etc. Both choices stay in
    view and either is one click. */

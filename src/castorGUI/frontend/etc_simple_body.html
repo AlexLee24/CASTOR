@@ -66,19 +66,26 @@
                         <label><input type="radio" name="goal" value="solve_time" checked><span>Solve for Exposures</span></label>
                     </div>
                 </div>
-                <div class="kw-grid-2 etc-simple-pair" data-qs-goal="solve_snr" hidden>
+                <!-- One row at every width, like the single Target SNR field it swaps with, so
+                     switching the goal never moves what is below. The unit sits in the field,
+                     as Advanced shows it, which keeps the labels short enough for a phone. -->
+                <div class="kw-grid-2 etc-simple-pair etc-simple-keep etc-simple-goal" data-qs-goal="solve_snr" hidden>
                     <div class="kw-field">
-                        <label for="qs-exp">Single Exposure Time (s)</label>
-                        <input type="number" id="qs-exp" name="single_exp_time" step="any" min="0" value="120">
+                        <label for="qs-exp">Single Exposure Time</label>
+                        <span class="etc-simple-unit" data-unit="s">
+                            <input type="number" id="qs-exp" name="single_exp_time" step="any" min="0" value="120">
+                        </span>
                     </div>
                     <div class="kw-field">
                         <label for="qs-num">Number of Exposures</label>
                         <input type="number" id="qs-num" name="num_exposures" step="1" min="1" value="1">
                     </div>
                 </div>
-                <div class="kw-field" data-qs-goal="solve_time">
-                    <label for="qs-snr">Target SNR</label>
-                    <input type="number" id="qs-snr" name="target_snr" step="any" min="0" value="10">
+                <div class="etc-simple-goal" data-qs-goal="solve_time">
+                    <div class="kw-field">
+                        <label for="qs-snr">Target SNR</label>
+                        <input type="number" id="qs-snr" name="target_snr" step="any" min="0" value="10">
+                    </div>
                 </div>
 
                 <div class="kw-panel-head etc-simple-head"><h2>When</h2></div>
