@@ -56,8 +56,11 @@
     --etc-gap-field:     8px;   /* fields within a group */
     --etc-gap-group:     24px;  /* between sections */
     --etc-gap-card:      16px;  /* metric-card grid gutter */
-    --etc-pad-card:      18px 20px;   /* Kinder's .kw-panel padding */
-    --etc-pad-x:         20px;        /* the same card's side padding, alone */
+    /* One inset on all four sides of a card. Kinder's .kw-panel has 18 top and bottom
+       against 20 at the sides, which shows as soon as a button sits in a corner:
+       Calculate stood 20px from the side and 14-18px from the bottom. */
+    --etc-pad:           20px;
+    --etc-pad-card:      var(--etc-pad);
     /* The field metrics of Simple mode's form (.kw-field, as etc_simple.css tightens
        it on a desktop): control height, label-to-control gap, field-to-field gap. */
     --etc-control-h:     34px;
@@ -156,7 +159,11 @@
     background: transparent;
     border: var(--etc-border-width) solid transparent;
     border-radius: 9px;   /* Kinder's .kw-tab */
-    padding: 8px 12px;
+    /* Kinder's .kw-tab height, which LOAD / SAVE share: of unequal heights the
+       shorter is centred, and its corner ends up further from the card's top
+       edge than from its side. */
+    min-height: 34px;
+    padding: 0 12px;
     color: var(--etc-text-muted);
     font: inherit;
     font-size: 13px;
@@ -180,7 +187,7 @@
     border: var(--etc-border-width) solid var(--etc-border-color);
     border-radius: var(--etc-radius-control);
     min-width: 40px;
-    height: 30px;
+    height: 34px;
     padding: 0 10px;
     color: var(--etc-text-muted);
     font: inherit;
@@ -204,13 +211,13 @@
 .castor-etc .etc-panel-form { padding: 0; overflow: hidden; }
 .castor-etc .etc-panel-form > .etc-tabbar {
     margin: 0;
-    padding: 14px var(--etc-pad-x) 10px;
+    padding: var(--etc-pad) var(--etc-pad) 10px;
     border-bottom: 1px solid var(--etc-hairline);
 }
 .castor-etc .etc-form-frame {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 14px var(--etc-pad-x) 4px;
+    padding: 14px var(--etc-pad) 4px;
     overflow-y: auto;
     overscroll-behavior: contain;
 }
@@ -520,7 +527,7 @@
 ============================================================================ */
 .castor-etc .etc-form-footer {
     flex: none;
-    padding: 10px var(--etc-pad-x) 14px;
+    padding: 10px var(--etc-pad) var(--etc-pad);
     border-top: 1px solid var(--etc-hairline);
 }
 .castor-etc .etc-calc {
@@ -794,10 +801,9 @@
     .castor-etc { --etc-control-h: 40px; --etc-label-gap: 6px; --etc-field-space: 14px; }
     .castor-etc .etc-divider { margin: 6px 0 14px; }
     .castor-etc .etc-section-title { margin-bottom: 12px; }
-    /* Simple's form is a plain card here too: 18px top and bottom, and Calculate
-       under the last field with no hairline, since nothing scrolls past it. */
-    .castor-etc .etc-panel-form > .etc-tabbar { padding-top: 18px; }
-    .castor-etc .etc-form-footer { padding: 10px var(--etc-pad-x) 18px; border-top: 0; }
+    /* Simple's form is a plain card here too: Calculate under the last field with
+       no hairline, since nothing scrolls past it. */
+    .castor-etc .etc-form-footer { border-top: 0; }
 }
 
 /* Phones and narrow tablets, as Kinder's template laid them out: the section
