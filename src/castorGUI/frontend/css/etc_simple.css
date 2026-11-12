@@ -23,7 +23,10 @@
 .etc-simple-form .kw-panel-head h2 { font-size: 1rem; margin: 0 0 12px; color: var(--kw-text-white); }
 .etc-simple-form .etc-simple-head { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--kw-hairline); }
 .etc-simple-form .kw-select { width: 100%; }
-.etc-simple-pair { gap: 12px; }
+/* No row gap: each field brings its own bottom margin, and once the pair stacks on a
+   narrow window a 12px row gap on top of it put 26px inside a pair against 14px
+   between pairs, so RA and Dec read as further apart than Dec and the magnitude. */
+.etc-simple-pair { gap: 0 12px; }
 .etc-simple-pair .kw-field { min-width: 0; }
 [data-qs-goal][hidden] { display: none !important; }
 /* Calculation Goal: Advanced mode's segmented control (.etc-segmented in etc.css), drawn
