@@ -107,8 +107,9 @@ class BandSky(BaseModel):
     runs 21.44 in g', 20.92 in r' and 20.04 in i' — 1.4 magnitudes apart, which is
     a factor of 3.8 in background flux, so a single site-wide figure is wrong for
     at least two bands whichever one it is. Extinction is band-dependent for the
-    same reason and may be given here too, though Lulin's is not yet measured well
-    enough to state.
+    same reason and is given here too: Lulin's five Sloan bands carry one each,
+    from an SLT night whose field rose and set through the meridian
+    (validation/slt_dz936.py), with the site's single figure as the fallback.
 
     `mu_dark` here is the *local* baseline (airglow and light pollution) with the
     interplanetary part split back out; `zodiacal_share` is what fraction of the

@@ -20,16 +20,19 @@ near zenith, and requested SNR 20.
 
 | Band | Asymptotic SNR ceiling | Exposures CASTOR now returns | Outcome |
 |---|---:|---:|---|
-| g' | 29.78 | 7 | reaches SNR 20 |
-| r' | 18.46 | unreachable | ceiling 18.46 < 20, reported unreachable |
-| i' | 8.27 | unreachable | ceiling 8.27 < 20, reported unreachable |
+| g' | 30.06 | 7 | reaches SNR 20 |
+| r' | 20.27 | 148 | reaches SNR 20 |
+| i' | 9.33 | unreachable | ceiling 9.33 < 20, reported unreachable |
 
-The r' request sits above its own ceiling: the response now returns
+The i' request sits above its own ceiling: the response returns
 `target_reachable = false`, `required_exposures = null`, `total_snr` = the
-ceiling, and a warning, rather than the six frames / SNR 14.44 the square-root
-law used to claim. The i' target is farther beyond its ceiling. The g' target is
-reachable and now takes 7 frames — enough to actually clear SNR 20 —
-where the old solver returned 4 and reached only 17.35.
+ceiling, and a warning. r' was the case that exposed the bug — the square-root
+law claimed six frames / SNR 14.44 against a ceiling of 18.46 — and it sat above
+its ceiling until r' carried its own measured extinction (0.07 for the site's
+0.17, 2026-11, `slt_dz936.py`). Its ceiling is now 20.27, just over the
+request, and clearing it takes 148 frames: what standing just under a
+correlated floor costs. The g' target takes 7 frames — enough to
+actually clear SNR 20 — where the old solver returned 4 and reached only 17.35.
 
 LOT is the control: Sophia's preset has `background_flatness_fraction = 0`, so
 the ceiling is infinite, the inverse collapses to the exact square-root law, and

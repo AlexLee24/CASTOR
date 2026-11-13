@@ -208,8 +208,9 @@ Each of these is asserted by a test, so it either stays true or announces itself
   degenerate with the airmass term and inflates every k. The band that faded
   most is the band inflated most, which is what identifies it as weather. The
   *ordering* survives — extinction falls towards the red on every cut — and no
-  absolute value does, so presets.json keeps the site-wide 0.17 and `test_slt.py`
-  asserts the per-band values stay out. Calibrated against SkyMapper DR4, not
+  absolute value does, so `test_slt.py` asserts that night's per-band values
+  stay out. (The per-band k presets.json now carries came later, from a field
+  that rose and set — see the SLT + DZ936 finding below.) Calibrated against SkyMapper DR4, not
   Pan-STARRS DR2 — this field's declination (-32.8°) is outside PS1's
   footprint — so it carries an uncorrected systematic on top of the fit error
   from the two systems' natural photometric bands not being identical.
@@ -225,9 +226,25 @@ Each of these is asserted by a test, so it either stays true or announces itself
   Apogee model, 2048x2048 at 13.5um — but the frames themselves are 3056x3056
   at 12um, U9000's geometry exactly. The name is stale, not the hardware; only
   the pixel geometry, read straight from the detector, can be trusted. Both
-  retired cameras are now in `presets.json` (`SLT_DZ936`, `SLT_U9000`) so
-  frames from those eras can still be reduced, sourced from Andor's own iKon
-  brochure and a U9000 datasheet Lulin hosts itself.
+  older cameras are in `presets.json` (`SLT_DZ936`, `SLT_U9000`) so frames
+  from those eras can still be reduced, sourced from Andor's own iKon brochure
+  and a U9000 datasheet Lulin hosts itself. The DZ936 went back on SLT in Nov
+  2026 as a stand-in for the DU934P, and is now checked on its own frames:
+
+- **SLT + DZ936, 2026-11-10: the night that finally measured extinction.**
+  AT2026afqt, 139 frames; the field rose to the meridian (X 1.107) and set to
+  4.9, so the rising and setting branches separate the airmass term from any
+  drift — what SN2024ggi's setting-only nights could not. They agree (0.01 in
+  g'r', 0.05 elsewhere): k = 0.44 / 0.16 / 0.07 / 0.04 / 0.05 in u'g'r'i'z',
+  now on each filter in presets.json with 0.17 as the fallback. The same night
+  measured u' and z' sky for the first time (22.73 and 18.71; both had the
+  site-wide 21.5, z' 2.8 mag too dark), the DZ936's read noise (5.92, not the
+  brochure's 7.0), and SLT's focal length (3.523 m, not 3.414; both cameras'
+  plate scales agree). Field-star scatter matches the noise model within ~10%
+  where it is well measured. Not in presets.json: the camera's band response
+  (counts 0.78 / 1.23 / 1.20 / 0.98 / 0.62 of predicted), because the file can
+  key a band's throughput by telescope but not by camera (QUESTIONS.md 19).
+  `slt_dz936.py`, `test_slt_dz936.py`.
 
 - **SOPHIA's dark current at -80°C is now bounded by a real dark frame, not
   guessed.** 20 real -80°C, 300s frames (QUESTIONS.md 6) — no bias frame to
@@ -253,7 +270,7 @@ Each of these is asserted by a test, so it either stays true or announces itself
 
 ## Open questions
 
-**[QUESTIONS.md](QUESTIONS.md)** is the single index: seventeen items, two of
+**[QUESTIONS.md](QUESTIONS.md)** is the single index: nineteen items, two of
 them already marked CLOSED, each labelled with who can close it — the
 observatory, a night of telescope time, us, or a decision. Nothing open is
 recorded only here, in a `GUESS` row, or in an xfail reason; if it is open, it
