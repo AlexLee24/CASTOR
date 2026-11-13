@@ -50,7 +50,7 @@
           "telescope": {
             "primary_mirror_diameter": 0.406,
             "secondary_mirror_diameter": 0.12,
-            "focal_length": 3.414,
+            "focal_length": 3.523,
             "optical_throughput": 0.234
           }
         }
@@ -78,12 +78,12 @@
           }
         },
         "SLT_DZ936": {
-          "name": "SLT camera, 2021-2022 (Andor iKon-L 936)",
+          "name": "SLT camera, 2021-2022 and stand-in since Nov 2026 (Andor iKon-L 936)",
           "camera": {
             "pixel_pitch": 13.5,
             "quantum_efficiency": 0.9,
             "dark_current_rate": 0.00013,
-            "readout_noise": 7.0,
+            "readout_noise": 5.92,
             "full_well_capacity": 100000
           }
         },
@@ -108,7 +108,8 @@
           },
           "environment": {
             "mu_dark": 21.26,
-            "zodiacal_share": 0.267
+            "zodiacal_share": 0.267,
+            "extinction_coeff": 0.07
           },
           "telescope": {
             "LOT": {
@@ -126,6 +127,10 @@
             "filter_bandwidth": 64.8,
             "filter_transmission": 1.0
           },
+          "environment": {
+            "mu_dark": 22.73,
+            "extinction_coeff": 0.44
+          },
           "telescope": {
             "SLT": {
               "optical_throughput": 0.101
@@ -141,7 +146,8 @@
           },
           "environment": {
             "mu_dark": 21.79,
-            "zodiacal_share": 0.274
+            "zodiacal_share": 0.274,
+            "extinction_coeff": 0.16
           },
           "telescope": {
             "LOT": {
@@ -161,7 +167,8 @@
           },
           "environment": {
             "mu_dark": 20.2,
-            "zodiacal_share": 0.137
+            "zodiacal_share": 0.137,
+            "extinction_coeff": 0.04
           },
           "telescope": {
             "LOT": {
@@ -178,6 +185,10 @@
             "central_wavelength": 962.1,
             "filter_bandwidth": 278.0,
             "filter_transmission": 0.998
+          },
+          "environment": {
+            "mu_dark": 18.71,
+            "extinction_coeff": 0.05
           },
           "telescope": {
             "SLT": {

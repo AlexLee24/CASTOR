@@ -8,8 +8,9 @@ and a validation test; the observatory's FITS files remain ignored.
 |---|---|---|
 | LOT r' per-star SNR | 261 stars below 60 ke- give median observed/predicted SNR **1.011**, bootstrap 95% CI 0.980–1.050; no resolved flux, colour, or detector-radius trend | End-to-end residuals |
 | LOT r' colour term | `+0.0182 mag per mag` in Pan-STARRS g-r (95% CI +0.0036 to +0.0423); only 1.5% across the central 90% colour range, far too small to explain the r' throughput excess | Colour term |
-| Correlated-noise inverse audit | Fixed: solve-for-time now inverts the full stacked-SNR relation and reports SLT r' AB=20 SNR 20 as **unreachable** (ceiling **18.46**) instead of the old six-frame / SNR 14.44 answer | Solve-for-time flatness |
-| Forward performance | Under the stated standard scene, one-hour SNR=5 limits are LOT g/r/i = **23.91/23.84/23.04**, SLT = **21.84/21.36/20.51** AB mag | Forward performance |
+| Correlated-noise inverse audit | Fixed: solve-for-time now inverts the full stacked-SNR relation; the case that exposed it, SLT r' AB=20 SNR 20, was reported **unreachable** (ceiling 18.46) instead of the old six-frame / SNR 14.44 answer, and with r' carrying its measured extinction now clears a ceiling of **20.27** in 148 frames; i' (ceiling 9.33) is the unreachable case | Solve-for-time flatness |
+| Forward performance | Under the stated standard scene, one-hour SNR=5 limits are LOT g/r/i = **23.92/23.94/23.17**, SLT = **21.84/21.46/20.65** AB mag | Forward performance |
+| SLT + DZ936 (2026-11-10) | First night on the stand-in camera; field rose and set, so **per-band extinction** finally measured (u' 0.44 → z' 0.05, branches agree); u'/z' sky measured (22.73 / 18.71, z' was 2.8 mag too dark); read noise 5.92; SLT focal length 3.523 m. The camera's band response (u' 0.78, z' 0.62 of predicted) is recorded, not yet in presets | SLT + DZ936 |
 | Extended-source noise | NGC 3621 SLT r': the fixed model (RN 9.28 e- + 2% flatness) tracks measured aperture noise to **~1%** to 12"; the shipped RN-3.3 model ran 1.5–3.2x low | Extended-source noise |
 
 Four further figures draw data the tables only summarise: the
@@ -51,7 +52,7 @@ SLT carries a measured 2% correlated background residual. Sophia currently
 carries zero, meaning unmeasured rather than absent, so the long-integration
 LOT/SLT gap is partly a model-completeness gap. The atlas is also conditional
 on one pointing, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms), 120 s frames, the top-hat passbands and the
-site-wide extinction fallback. It is a planning baseline, not an empirical
+per-band extinction from one night (2026-11-10). It is a planning baseline, not an empirical
 limiting-magnitude claim.
 
 ## Recommended order from here

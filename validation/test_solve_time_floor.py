@@ -6,7 +6,8 @@ that never reached its own target (validation question 17). The solver now takes
 the asymptotic ceiling from `calculate_flatness_snr_ceiling` and the response
 expresses an unreachable target explicitly. These tests pin both halves of the
 fixed contract on the SLT/DU934P r' preset, whose measured 2% flatness fraction
-sets a ceiling near 18.5.
+sets a ceiling near 20 for this target (18.5 until r' carried its own measured
+extinction, 0.07 for the site's 0.17: less light lost, a higher ceiling).
 """
 
 from castor import schema
@@ -55,7 +56,7 @@ def test_reachable_target_actually_reaches_the_snr_it_was_asked_for():
 
 def test_unreachable_target_is_reported_not_faked():
     """A target above the ceiling is flagged, not answered with a wrong count."""
-    request = _slt_r_request(target_snr=20.0)
+    request = _slt_r_request(target_snr=25.0)
     response = run_calculation(request)
 
     assert response.core.target_reachable is False

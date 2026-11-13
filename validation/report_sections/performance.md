@@ -14,12 +14,12 @@ Lulin, no lunar term, and each filter's current preset sky and throughput.
 
 | Telescope | Band | SNR=5, 120 s | SNR=5, 1 h | SNR=5, 4 h | SNR=10, 1 h |
 |---|---|---:|---:|---:|---:|
-| LOT | g' | 22.03 | 23.91 | 24.66 | 23.15 |
-| LOT | r' | 21.98 | 23.84 | 24.60 | 23.09 |
-| LOT | i' | 21.17 | 23.04 | 23.79 | 22.28 |
-| SLT | g' | 20.82 | 21.84 | 21.91 | 21.08 |
-| SLT | r' | 20.60 | 21.36 | 21.40 | 20.61 |
-| SLT | i' | 19.97 | 20.51 | 20.54 | 19.76 |
+| LOT | g' | 22.05 | 23.92 | 24.67 | 23.16 |
+| LOT | r' | 22.08 | 23.94 | 24.70 | 23.19 |
+| LOT | i' | 21.31 | 23.17 | 23.93 | 22.41 |
+| SLT | g' | 20.82 | 21.84 | 21.92 | 21.08 |
+| SLT | r' | 20.69 | 21.46 | 21.50 | 20.71 |
+| SLT | i' | 20.09 | 20.65 | 20.67 | 19.89 |
 
 The one-hour curves show the expected aperture advantage of LOT. They also
 show the consequence of model completeness: SLT carries a measured 2%

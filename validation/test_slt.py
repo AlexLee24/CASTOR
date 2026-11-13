@@ -4,10 +4,12 @@ Companion to test_lulin.py, which does the same job for LOT. Where these
 disagree with presets.json, presets.json is what is wrong — every number
 asserted here came out of real frames, and `slt.py` records how.
 
-Note what is asserted about extinction: that it is *absent* from presets.json.
-The night produced a k per band and the k is not trustworthy; slt.py's
-WHY_NO_EXTINCTION has the evidence. These tests pin both halves of that — the
-ordering, which survives, and the absence of the values, which must.
+Note what is asserted about extinction: that *this night's* k is absent from
+presets.json. The night produced a k per band and the k is not trustworthy;
+slt.py's WHY_NO_EXTINCTION has the evidence. These tests pin both halves of
+that — the ordering, which survives, and the absence of the values, which must.
+The per-band k presets.json does carry came from a later night that rose and
+set through the meridian (slt_dz936.py), and test_slt_dz936.py pins those.
 """
 import pytest
 
@@ -87,14 +89,17 @@ def test_this_nights_extinction_did_not_reach_presets_json(shipped, band):
     The fit produces a k per band and it is not usable: the sky faded 0.1-0.4
     mag between the two halves of the night at matched airmass, and because the
     target was setting, that fade is degenerate with the airmass term. See
-    slt.WHY_NO_EXTINCTION. Every band therefore still inherits the site's
-    fallback, and this test exists so that reinstating the values silently is
-    not possible.
+    slt.WHY_NO_EXTINCTION. This test exists so that reinstating those values
+    silently is not possible.
+
+    Every band does now carry a k of its own, but from 2026-11-10, a night whose
+    field rose and set through the meridian so the two branches could be
+    compared (slt_dz936.py). The tolerance is the one this night's own fit
+    error allows; none of the five lands inside it.
     """
     environment = _resolved(shipped, band)["environment"]
-    site = shipped.profile(PROFILE).environment.extinction_coeff
-    assert environment["extinction_coeff"] == site
-    assert environment["extinction_coeff"] != pytest.approx(slt.MEASURED[band]["k"], abs=0.001)
+    measured = slt.MEASURED[band]
+    assert abs(environment["extinction_coeff"] - measured["k"]) > measured["k_err"]
 
 
 def test_the_fade_is_what_disqualified_the_extinction():

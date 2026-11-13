@@ -45,8 +45,8 @@ PROVENANCE = {
     "lulin.environment.location.latitude_deg": (23.47, DOCUMENT, "site pages give 23.469447; frame SITELAT 23.4686"),
     "lulin.environment.location.longitude_deg": (120.87, DOCUMENT, "site pages give 120.872624; frame SITELONG 120.8736"),
     "lulin.environment.location.elevation_m": (2862.0, DOCUMENT, "site pages and frame SITEELEV agree"),
-    "lulin.environment.mu_dark": (21.5, GUESS, "fallback only; g'r'i' measured on their filters, all down one sightline"),
-    "lulin.environment.extinction_coeff": (0.17, GUESS, "three sources disagree; see QUESTIONS.md 4"),
+    "lulin.environment.mu_dark": (21.5, GUESS, "fallback only; all five Sloan bands now carry their own (g'r'i' from LOT, u'z' from SLT + DZ936)"),
+    "lulin.environment.extinction_coeff": (0.17, GUESS, "fallback only; three sources disagree (QUESTIONS.md 4), and every Sloan band now carries its own from the 2026-11-10 SLT night — slt_dz936.py"),
     "lulin.median_seeing_fwhm": (1.4, GUESS, "no source, but 123 frames give a median FWHM of 1.34\""),
 
     # ---- Lulin, LOT ---------------------------------------------------------
@@ -58,7 +58,7 @@ PROVENANCE = {
     # ---- Lulin, SLT ---------------------------------------------------------
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
-    "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
+    "lulin.telescopes.SLT.focal_length": (3.523, MEASURED, "frame FOCALLEN 3522.8 mm; plate solutions agree on both cameras: DZ936 0.790\"/pix at 13.5 um (3.525 m), DU934P 0.76\"/pix at 13 um (3.528 m). The 3.414 it replaces was f/8.4 x 0.406 m from the site pages, 3% short — slt_dz936.py"),
     "lulin.telescopes.SLT.optical_throughput": (0.234, MEASURED, "geometric mean of the SLT bands below; method and fit in slt.py, QUESTIONS.md 5"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
@@ -81,12 +81,14 @@ PROVENANCE = {
     # cameras on the same telescope: Andor DZ936 (2021-04 to 2022-03), then
     # Apogee Alta U9000 (2022-06 onward, labelled "U42" in some headers until
     # 2022-10 — see below), then the current Andor DU934P-BEX2-DD (SLT_DU934P,
-    # 2023-06 on). Retired, so not selectable for planning new observations,
-    # but recorded so historical frames from those two eras can be reduced.
+    # 2023-06 on). Recorded so historical frames from those eras can be
+    # reduced. The DZ936 went back on SLT in Nov 2026 while the DU934P's
+    # shutter is repaired, so it is in use again and its read noise is now
+    # measured on its own frames (slt_dz936.py).
     "lulin.cameras.SLT_DZ936.pixel_pitch": (13.5, DOCUMENT, "frame headers (DETECTOR=E2V CCD42-40) match Andor's iKon-L 936 datasheet exactly"),
     "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the current SLT_DU934P's DU934P-BEX2-DD"),
     "lulin.cameras.SLT_DZ936.dark_current_rate": (0.00013, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor at -80C, matching frame headers' CCD-TEMP"),
-    "lulin.cameras.SLT_DZ936.readout_noise": (7.0, DOCUMENT, "Andor iKon series brochure, iKon-L 936 High Sensitivity output at 1MHz; readout speed not in the headers, assumed"),
+    "lulin.cameras.SLT_DZ936.readout_noise": (5.92, MEASURED, "frame RMSNOISE header, 2026-11 frames; the u' 150 s frames' own sky noise (6 e-/pix of sky) implies 5.7 — slt_dz936.py. Andor's brochure figure, 7.0, assumed a 1 MHz readout the headers never stated"),
     "lulin.cameras.SLT_DZ936.full_well_capacity": (100000, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor"),
     "lulin.cameras.SLT_U9000.pixel_pitch": (12.0, DOCUMENT, "Lulin's own hosted datasheet (lulin.ncu.edu.tw/.../U9000.pdf) and frame headers agree"),
     "lulin.cameras.SLT_U9000.quantum_efficiency": (0.64, DOCUMENT, "Lulin's own hosted datasheet, peak QE at 550nm"),
@@ -115,9 +117,16 @@ PROVENANCE = {
     "lulin.filters.Sloan_g.environment.mu_dark": (21.79, DERIVED, "21.44 measured (7 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
     "lulin.filters.Sloan_r.environment.mu_dark": (21.26, DERIVED, "20.92 measured (12 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
     "lulin.filters.Sloan_i.environment.mu_dark": (20.20, DERIVED, "20.04 measured (7 nights, ecliptic +16/galactic +21) minus zodiacal_share via skycalc.AT_LULIN"),
+    "lulin.filters.Sloan_u.environment.mu_dark": (22.73, MEASURED, "SLT + DZ936, 2026-11-10, moon down, astronomical night, X < 1.6, 35 frames; ecliptic -19/galactic -48. Total sky, not split: no zodiacal_share, SkyMapper u zero point with no colour term — slt_dz936.py"),
+    "lulin.filters.Sloan_z.environment.mu_dark": (18.71, MEASURED, "SLT + DZ936, 2026-11-10, moon down, astronomical night, X < 1.6, 13 frames; ecliptic -19/galactic -48. Total sky, not split: no zodiacal_share. Replaces the site-wide 21.5 fallback, 2.8 mag too dark — slt_dz936.py"),
     "lulin.filters.Sloan_g.environment.zodiacal_share": (0.274, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
     "lulin.filters.Sloan_r.environment.zodiacal_share": (0.267, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
     "lulin.filters.Sloan_i.environment.zodiacal_share": (0.137, DERIVED, "skycalc.AT_LULIN, SkyCalc's Paranal zodiacal+starlight share rescaled to Lulin's measured total"),
+    "lulin.filters.Sloan_u.environment.extinction_coeff": (0.44, MEASURED, "SLT + DZ936, 2026-11-10, ZP-airmass fit over X 1.11-2.94, rising 0.38 / setting 0.43, rms 0.024; one night — slt_dz936.py"),
+    "lulin.filters.Sloan_g.environment.extinction_coeff": (0.16, MEASURED, "SLT + DZ936, 2026-11-10, X 1.11-2.49, rising 0.162 / setting 0.153, rms 0.007; one night — slt_dz936.py"),
+    "lulin.filters.Sloan_r.environment.extinction_coeff": (0.07, MEASURED, "SLT + DZ936, 2026-11-10, X 1.11-2.55, rising 0.062 / setting 0.073, rms 0.005; one night — slt_dz936.py"),
+    "lulin.filters.Sloan_i.environment.extinction_coeff": (0.04, MEASURED, "SLT + DZ936, 2026-11-10, X 1.11-2.62, rising 0.093 / setting 0.042, rms 0.013; branches disagree most here — slt_dz936.py"),
+    "lulin.filters.Sloan_z.environment.extinction_coeff": (0.05, MEASURED, "SLT + DZ936, 2026-11-10, X 1.11-2.69, rising 0.082 / setting 0.052, rms 0.014; one night — slt_dz936.py"),
     "lulin.filters.Sloan_g.telescope.LOT.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
     "lulin.filters.Sloan_r.telescope.LOT.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
     "lulin.filters.Sloan_i.telescope.LOT.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),

@@ -192,7 +192,25 @@ the telescope's and has been for twenty years. Absent an answer, the honest
 default is the weaker reading: `lulin_prototype.py`'s comparison stays what
 README.md already calls it — "weakly corroborated," not confirmed.
 
-## 4. What is the extinction in each band? — OBSERVE
+## 4. What is the extinction in each band? — CLOSED for one night
+
+**2026-11-10 delivered it.** SLT + DZ936, AT2026afqt: the field rose from X 1.64
+to the meridian (1.107, ~15:45 UTC) and set to 4.9, so airmass stopped tracking
+time — the first condition asked for below. The night was photometric and the
+check asked for below passes: the rising and setting branches give the same k
+to 0.01 in g'r' and 0.05 in u'i'z'.
+
+| | u' | g' | r' | i' | z' |
+|---|---|---|---|---|---|
+| k, both branches | 0.443 | 0.158 | 0.071 | 0.038 | 0.051 |
+| rising only | 0.381 | 0.162 | 0.062 | 0.093 | 0.082 |
+| setting only | 0.433 | 0.153 | 0.073 | 0.042 | 0.052 |
+
+Each Sloan filter in `presets.json` now carries its k (rounded to 0.01); 0.17
+stays as the site fallback. One night: whether Lulin's extinction moves night to
+night is not known, and a second rising-and-setting night is what would say.
+`slt_dz936.py`, `test_slt_dz936.py`. What follows is the history of the
+attempts that could not.
 
 **Attempted and failed, on a night that had everything except photometric
 conditions.** SLT/SN2024ggi, 2024-04-14: 241 frames, five bands, airmass 1.81
@@ -734,6 +752,29 @@ colour-camera frames. Until then ATBD §5.3 states the limitation.
 without the fix: `noise.single.signal / sqrt(noise.single.flatness_variance)` is
 S/F (ATBD 4.3.6), and a caller can compare it with `target_snr` before trusting
 `required_exposures`.
+
+## 19. A band's throughput cannot depend on the camera — BUILD
+
+**Found 2026-11-13**, on the DZ936's first night back on SLT (`slt_dz936.py`).
+Measured counts above the atmosphere against what CASTOR predicts for SLT +
+DZ936: u' 0.78, g' 1.23, r' 1.20, i' 0.98, z' 0.62. presets.json stores a band's
+throughput per telescope (`Sloan_z.telescope.SLT`) and a camera's QE as one
+number for every band, so there is nowhere to put a response that belongs to
+one camera on one telescope: writing it on SLT would move every DU934P
+prediction too. `test_slt_dz936.py` asserts the values are absent.
+
+**Two complications before building anything.** g' and r' come out *above*
+prediction, which a per-band QE cannot express (it would need QE > 1): part of
+the gap is SLT's own band throughput, fitted in `slt.py` on a night whose zero
+point is uncertain by up to 15%, and part is the catalogue (PS1 here, SkyMapper
+there). Only z' (and less surely u') is clearly the camera.
+
+**What closes it.** A camera-keyed band override — most simply nested under the
+telescope one, `Sloan_z.telescope.SLT.camera.SLT_DZ936.optical_throughput`,
+holding the implied optical train for that pair — in `castorCLI/presets.py`,
+the GUI's `applyRig`, `castor check` and docs/presets.md together, since Kinder
+serves the file as-is. Meanwhile SLT + DZ936 predictions in z' are ~1.6x
+optimistic in source counts and in u' ~1.3x.
 
 ---
 

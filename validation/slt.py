@@ -131,8 +131,9 @@ CLOUDY_WINDOW_UTC = ("2024-04-14T14:34", "2024-04-14T15:32")
 #:
 #: What survives: extinction falls monotonically towards the red, which every
 #: cut of this dataset agrees on and which the LOT 18-night fit could not even
-#: get the sign of. What does not: any absolute value. presets.json therefore
-#: keeps the site-wide 0.17 fallback, and QUESTIONS.md 4 stays open.
+#: get the sign of. What does not: any absolute value, so none of these went
+#: into presets.json. The per-band k it does carry came from 2026-11-10, a
+#: field that rose and set (slt_dz936.py), which closed QUESTIONS.md 4.
 WHY_NO_EXTINCTION = {
     "fade_at_matched_airmass_mag": {"u": 0.351, "g": 0.398, "r": 0.165,
                                     "i": 0.110, "z": 0.138},
