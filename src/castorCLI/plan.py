@@ -55,22 +55,41 @@ def _set_default(data, dotted, value):
     node.setdefault(parts[-1], value)
 
 
+def _looks_sexagesimal(text, letters):
+    return any(c in text for c in ': ') or any(c in text.lower() for c in letters)
+
+
 def parse_coordinates(ra_text, dec_text):
-    """RA/Dec as typed: degrees, or sexagesimal (RA in hours) with ':' or spaces."""
-    from astropy.coordinates import SkyCoord
+    """RA/Dec as typed: degrees, or sexagesimal with ':' or spaces (RA in hours).
+
+    Each coordinate's unit is read from its own text. Deciding both from either one
+    read a decimal RA beside a sexagesimal Dec as hours: 150.5 with -2:30:00 became
+    150.5 h, which wraps to 97.5 deg, a different part of the sky and no error.
+    """
+    from astropy.coordinates import Angle
     import astropy.units as u
 
     ra_text = str(ra_text or '').strip()
     dec_text = str(dec_text or '').strip()
     if not ra_text or not dec_text:
         raise QuickInputError('Enter the target RA and Dec.')
-    sexagesimal = any(c in ra_text for c in ': hms') or any(c in dec_text for c in ': dms')
+    bad = QuickInputError('Could not read the coordinates. Use degrees (e.g. 150.12, 2.21) '
+                          'or hh:mm:ss / dd:mm:ss.')
+    # 'd' or '°' in an RA says degrees (150d30m); any other separator says hours.
+    ra_in_degrees = any(c in ra_text.lower() for c in 'd°')
+    ra_hours = not ra_in_degrees and _looks_sexagesimal(ra_text, 'hms')
     try:
-        coord = SkyCoord(ra_text, dec_text, unit=(u.hourangle, u.deg) if sexagesimal else (u.deg, u.deg))
+        ra = Angle(ra_text, unit=u.hourangle if ra_hours else u.deg)
+        dec = Angle(dec_text, unit=u.deg)
     except Exception:
-        raise QuickInputError('Could not read the coordinates. Use degrees (e.g. 150.12, 2.21) '
-                              'or hh:mm:ss / dd:mm:ss.')
-    return float(coord.ra.deg), float(coord.dec.deg)
+        raise bad
+    if ra_hours and not 0 <= ra.hour < 24:
+        raise QuickInputError('RA in hours must be from 0 to 24.')
+    if not ra_hours and not 0 <= ra.deg < 360:
+        raise QuickInputError('RA in degrees must be from 0 to 360.')
+    if not -90 <= dec.deg <= 90:
+        raise QuickInputError('Dec must be from -90 to +90 degrees.')
+    return float(ra.deg), float(dec.deg)
 
 
 def _single_frame_time(noise, probe_exp, target_snr):
@@ -78,11 +97,13 @@ def _single_frame_time(noise, probe_exp, target_snr):
 
     From CASTOR's own single-frame budget at the probe length: signal a·t, a per-frame
     variance b·t + r (source, sky and dark grow with t; readout does not) and the flatness
-    term c·t². Solving (a·t)² = T²(b·t + r + c·t²) for t.
+    term c·t². Scintillation belongs with b: its fraction falls as t^-1/2, so its variance
+    (sigma·a·t)² grows as t. Solving (a·t)² = T²(b·t + r + c·t²) for t.
     """
     t0 = probe_exp
     a = noise['signal'] / t0
-    b = (noise['source_variance'] + noise['sky_variance'] + noise['dark_variance']) / t0
+    b = (noise['source_variance'] + noise['sky_variance'] + noise['dark_variance']
+         + noise.get('scintillation_variance', 0.0)) / t0
     r = noise['readout_variance']
     c = noise['flatness_variance'] / t0 ** 2
     t2 = target_snr ** 2
@@ -138,6 +159,7 @@ def _conditions(response, fwhm):
         'fwhm_arcsec': fwhm,
         'saturation_time_s': float(response.core.saturation_time_limit),
         'sky_mag_arcsec2': response.diagnostics.sky_surface_brightness,
+        'sun_elevation_deg': eph.sun_elevation_deg,
     }
 
 
@@ -169,6 +191,9 @@ def compute_plan(catalogue, *, site, telescope, camera, optic_filter, ra, dec, m
 
     if eph.target_elevation_deg <= 0:
         result['status'] = 'below_horizon'
+        return result
+    if eph.sun_elevation_deg > 0:
+        result['status'] = 'daylight'
         return result
 
     usable = ([t for t in PREFERRED_EXPOSURES if t < t_sat]
@@ -245,6 +270,9 @@ def compute_snr(catalogue, *, site, telescope, camera, optic_filter, ra, dec, ma
     }
     if eph.target_elevation_deg <= 0:
         result['status'] = 'below_horizon'
+        return result
+    if eph.sun_elevation_deg > 0:
+        result['status'] = 'daylight'
         return result
 
     total = chosen['total_s']

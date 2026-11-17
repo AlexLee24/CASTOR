@@ -327,9 +327,11 @@ def test_each_snr_is_exactly_its_noise_blocks_signal_over_root_variance(mock_moo
     assert noise.total.signal / np.sqrt(noise.total.total_variance) == response.core.total_snr
     for block in (noise.single, noise.total):
         assert min(block.source_variance, block.sky_variance, block.dark_variance,
-                   block.readout_variance, block.flatness_variance) > 0
+                   block.readout_variance, block.flatness_variance,
+                   block.scintillation_variance) > 0
         summed = (block.source_variance + block.sky_variance + block.dark_variance
-                  + block.readout_variance + block.flatness_variance)
+                  + block.readout_variance + block.flatness_variance
+                  + block.scintillation_variance)
         assert summed == pytest.approx(block.total_variance, rel=1e-12)
         assert block.num_pixels_background == pytest.approx(
             response.diagnostics.num_pixels_aperture + response.diagnostics.num_pixels_sky_estimate,
@@ -351,26 +353,29 @@ def test_total_time_is_the_frames_actually_counted(mock_moon, base_request):
     assert (given.noise.total.exp_time, given.noise.total.num_exposures) == (1500.0, 5)
 
 @pytest.mark.parametrize("zenith_deg", [0.0, 30.0, 60.0, 88.0, 89.0, 95.0, 125.0])
-def test_airmass_is_the_clamped_secant_the_extinction_used(monkeypatch, base_request, zenith_deg):
+def test_airmass_is_the_clamped_kasten_young_the_extinction_used(monkeypatch, base_request, zenith_deg):
     monkeypatch.setattr("castor.moon.get_moon_and_target_geometry",
                         lambda *a, **k: (0.0, 90.0, 45.0, zenith_deg))
     response = run_calculation(base_request)
 
+    z = min(zenith_deg, 90.0)
     assert response.diagnostics.airmass == pytest.approx(
-        1.0 / math.cos(math.radians(min(zenith_deg, 89.0))), rel=1e-12)
+        1.0 / (math.cos(math.radians(z)) + 0.50572 * (96.07995 - z) ** -1.6364), rel=1e-12)
     assert response.ephemeris.target_elevation_deg == pytest.approx(90.0 - zenith_deg)
 
 def test_a_target_below_the_horizon_says_so_beside_its_clamped_airmass(monkeypatch, base_request):
     """The clamp keeps the maths finite by reporting an unobservable target as a
-    very faint one: 35° below the horizon comes back as airmass 57 (LESSONS.md).
-    The elevation is reported unclamped so a caller can tell the two apart."""
+    very faint one: 35° below the horizon comes back as the horizon's airmass, about
+    38 (LESSONS.md). The elevation is reported unclamped and a warning says so, so a
+    caller can tell the two apart."""
     monkeypatch.setattr("castor.moon.get_moon_and_target_geometry",
                         lambda *a, **k: (0.0, 90.0, 45.0, 125.0))
     response = run_calculation(base_request)
 
     assert response.ephemeris.target_elevation_deg == pytest.approx(-35.0)
-    assert response.diagnostics.airmass == pytest.approx(57.2987, rel=1e-5)
+    assert response.diagnostics.airmass == pytest.approx(37.92, rel=1e-3)
     assert response.core.total_snr > 0   # still a number, which is the trap
+    assert any("below the horizon" in w for w in response.flags.warnings)
 
 def test_the_sky_reported_is_mu_dark_when_nothing_is_layered_on(mock_moon, base_request):
     """auto_calc_background off and no zodiacal_share: mu_sky is mu_dark, untouched."""
@@ -421,7 +426,10 @@ def test_the_ephemeris_matches_astropy_at_the_requested_instant(base_request):
     assert response.ephemeris.moon_phase_angle_deg == pytest.approx(float(alpha), abs=1e-9)
     assert response.ephemeris.moon_separation_deg == pytest.approx(float(rho), abs=1e-9)
     assert response.diagnostics.airmass == pytest.approx(
-        1.0 / math.cos(math.radians(min(float(z_target), 89.0))), rel=1e-12)
+        float(physics.calculate_airmass(min(max(float(z_target), 0.0), 90.0))), rel=1e-12)
+    assert response.ephemeris.sun_elevation_deg == pytest.approx(
+        float(moon.get_sun_elevation("2026-01-15T16:00:00", env.location.longitude_deg,
+                                     env.location.latitude_deg, env.location.elevation_m)), abs=1e-9)
     assert '"ephemeris"' in response.model_dump_json()
 
 def test_the_flatness_ceiling_can_be_read_off_the_single_frame(mock_moon, base_request):
@@ -462,3 +470,55 @@ def test_an_unreachable_target_has_no_stack_to_report(mock_moon, base_request):
     single = response.noise.single
     assert single.signal / math.sqrt(single.total_variance) == response.core.single_snr
     json.loads(response.model_dump_json())
+
+@pytest.mark.parametrize("sun_deg, says", [(10.0, "Sun is up"), (-10.0, "Twilight"), (-30.0, None)])
+def test_the_sun_is_reported_and_warned_about(mock_moon, monkeypatch, base_request, sun_deg, says):
+    """The sky model is a night sky. A daytime or twilight request still answers,
+    but says the sky it assumed is too dark."""
+    monkeypatch.setattr("castor.moon.get_sun_elevation", lambda *a, **k: sun_deg)
+    response = run_calculation(base_request)
+
+    assert response.ephemeris.sun_elevation_deg == sun_deg
+    sun_lines = [w for w in response.flags.warnings if "Sun" in w or "Twilight" in w]
+    if says is None:
+        assert sun_lines == []
+    else:
+        assert len(sun_lines) == 1 and says in sun_lines[0]
+
+def test_a_readout_clip_below_the_full_well_sets_saturation(mock_moon, base_request):
+    """A 16-bit converter can clip before the well fills (LOT/SOPHIA: 60292 e- against
+    150000). Saturation time scales with whichever ceiling is lower."""
+    well_only = run_calculation(base_request)
+    assert well_only.diagnostics.saturation_level == base_request.instrument.camera.full_well_capacity
+
+    base_request.instrument.camera.readout_saturation_level = 40000.0
+    clipped = run_calculation(base_request)
+    assert clipped.diagnostics.saturation_level == 40000.0
+    assert clipped.core.saturation_time_limit == pytest.approx(
+        well_only.core.saturation_time_limit * 40000.0 / 100000.0, rel=1e-12)
+    # Only saturation moves: the photometry is the same.
+    assert clipped.core.total_snr == well_only.core.total_snr
+
+    base_request.instrument.camera.readout_saturation_level = 500000.0
+    assert run_calculation(base_request).diagnostics.saturation_level == 100000.0
+
+def test_scintillation_is_charged_and_can_be_switched_off(mock_moon, base_request):
+    on = run_calculation(base_request)
+    assert on.diagnostics.scintillation_fraction > 0
+    assert on.noise.single.scintillation_variance == pytest.approx(
+        (on.diagnostics.scintillation_fraction * on.noise.single.signal) ** 2, rel=1e-12)
+
+    base_request.environment.scintillation_coefficient = 0.0
+    off = run_calculation(base_request)
+    assert off.diagnostics.scintillation_fraction == 0.0
+    assert off.noise.single.scintillation_variance == 0.0
+    assert off.core.single_snr > on.core.single_snr
+
+def test_an_offset_time_is_the_same_instant_in_utc(base_request):
+    """observing_time_utc may arrive with any offset; it is one instant. Formatting
+    it without converting read 00:00+08:00 as 00:00 UTC, eight hours off."""
+    base_request.environment.observing_time_utc = datetime(2026, 1, 15, 16, 0, tzinfo=timezone.utc)
+    utc = run_calculation(base_request)
+    base_request.environment.observing_time_utc = datetime.fromisoformat("2026-01-16T00:00:00+08:00")
+    offset = run_calculation(base_request)
+    assert offset.ephemeris == utc.ephemeris

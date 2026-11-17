@@ -63,7 +63,8 @@
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.001,
             "readout_noise": 7.9,
-            "full_well_capacity": 150000
+            "full_well_capacity": 150000,
+            "readout_saturation_level": 60292
           }
         },
         "SLT_DU934P": {

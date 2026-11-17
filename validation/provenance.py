@@ -67,6 +67,7 @@ PROVENANCE = {
     "lulin.cameras.Sophia.dark_current_rate": (0.001, DERIVED, "datasheet 0.00025 at -90C, halving-interval scaled to -80C (4.5-5.9C/halving, same method used for ASI2600MC); consistent with 20 real -80C dark frames, whose frame-to-frame variance came in below read-noise-squared (upper limit, not a detection) — QUESTIONS.md 6"),
     "lulin.cameras.Sophia.readout_noise": (7.9, MEASURED, "photon transfer curve over 123 frames; datasheet -152 1 MHz port says 8.5"),
     "lulin.cameras.Sophia.full_well_capacity": (150000, DOCUMENT, "datasheet -152, single pixel typical; 100000 was the 13.5 um -132 column"),
+    "lulin.cameras.Sophia.readout_saturation_level": (60292, MEASURED, "16-bit ADC: 65535 ADU x 0.92 e-/ADU; 15 stars on the end-to-end frames clip there (endtoend.py). Bias offset not subtracted"),
 
     # ---- Lulin, Andor iKon-M DU934P-BEX2-DD ---------------------------------
     "lulin.cameras.SLT_DU934P.pixel_pitch": (13.0, DOCUMENT, "datasheet and the SLT page, 13 x 13 um"),
