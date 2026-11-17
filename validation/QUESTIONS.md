@@ -737,48 +737,53 @@ S/F (ATBD 4.3.6), and a caller can compare it with `target_snr` before trusting
 
 ---
 
-## 19. SLT is 30-40% more efficient in g' and r' than question 5 measured — PARTLY CLOSED
+## 19. SLT is 30-70% more efficient than question 5 measured; QE per band — PARTLY CLOSED
 
 **Measured (2026-11-18), with Kinder's own photometry** (`validation/slt_2026.py`).
-Kinder ran AutoPhOT on calibrated frames with PSF photometry against Pan-STARRS DR2.
-Its zero point inverts directly to the implied optical train. Results on two
-cameras over three nights:
+Kinder ran AutoPhOT on calibrated frames with PSF photometry against Pan-STARRS
+DR2, and its zero point inverts to T_sys. Two corrections went into that
+inversion:
 
-| band | DU934P 2026-10-04 | DZ936 2026-11-09/16 | 2024-04-14 (question 5) |
-|---|---|---|---|
-| g' | 0.398 | 0.418 | 0.323 |
-| r' | 0.658 | 0.671 | 0.474 |
-| i' | 0.598 | 0.416 | 0.373 |
-| z' | 0.187 | 0.090 | 0.122 |
+- **Gain.** The pixels are not what AutoPhOT took them for. Lulin's reduction
+  divides back to ADU (`BUNIT adu`), and only an older version kept electrons.
+  AutoPhOT read LOT's 0.92 but fell back to 1 for SLT's `'0.95 [electrons/ADU]'`.
+- **QE per band** (new: `filters.*.camera` in presets.json). These values are
+  read off Andor's published curves: BV for the DZ936, BEX2-DD for the DU934P.
 
-**g' and r' are now in presets.json** (0.408, 0.665). The two cameras agree to 5%
-there, which makes these numbers properties of the telescope, not of either
-camera. The same method run on a year of LOT/SOPHIA frames (SN2025wny) lands
-within 4–8% of LOT's 14-night presets, which checks the method. The 2024 night
-was calibrated against SkyMapper with no colour term, and its transparency
-drifted by about 15%. Both are reasons it could read low; a 30–40% gap is more
-than either explains.
+| band | QE DZ936 / DU934P | optics via DU934P (2026-10-04) | via DZ936 (2026-11-09/16) | preset now | 2024-04-14 |
+|---|---|---|---|---|---|
+| u' | 0.19 / 0.42 | — | — | 0.205 (2024 T_sys 0.086) | 0.101 at flat QE |
+| g' | 0.87 / 0.90 | 0.409 | 0.411 | **0.41** | 0.323 |
+| r' | 0.95 / 0.91 | 0.669 | 0.604 | **0.636** | 0.474 |
+| i' | 0.82 / 0.935 | 0.591 | 0.434 (1 frame) | **0.512** | 0.373 |
+| z' | 0.33 / 0.50 | 0.347 | 0.232 (1 frame) | **0.29** | 0.122 |
 
-**i' and z' are not changed.** They differ by camera: the DZ936 is a BV sensor,
-and its QE falls in the red; the DU934P is deep-depletion. presets.json gives
-each camera one flat `quantum_efficiency`, so a single number per band cannot
-serve both cameras. Closing this needs a QE per band, which is question 13's
-problem on the SLT side.
+**g' is the clean check.** Through each camera's own QE, the two cameras give
+the same telescope to 0.5%. In i' and z', band QE shrinks the gap between
+cameras from 1.6× and 2.3× (flat QE) to 1.4× and 1.5×. The rest probably comes
+from the single DZ936 frame in each of those bands.
+
+**The method was checked on LOT:** on a year of SOPHIA frames (SN2025wny) it
+lands within 2–8% of LOT's 14-night presets.
+
+**Same camera against itself:** the DU934P's 2026 T_sys is 1.3–1.7× its
+2024-04-14 value. That night was calibrated against SkyMapper with no colour
+term, and its transparency drifted by about 15%. Both are reasons it could read
+low; together they still fall short of the difference.
 
 **The camera history was wrong.** "DU934P, 2023-present" no longer holds.
 Calibrated_Science has DZ936 frames from 2026-03-17 to 2026-11-16 and DU934P
-frames from 2026-07-12 to 2026-11-02, so both cameras were in use in 2026, and
-the DZ936 is the one on the telescope now. The cameras' names say so, and the
-DZ936 is listed first.
+frames from 2026-07-12 to 2026-11-02. The DZ936 is the one on the telescope now.
 
-**No coating loss.** LOT's best frames per night *rise* from 2025-11 (r' 0.58)
-to 2026-09/10 (0.62–0.65). The mirror was probably cleaned or recoated in
-between.
+**No coating loss.** LOT's best nights *rise* from 2025-11 to 2026-09/10.
 
-**Still a guess:** k = 0.17 in every band. One 2026-11-16 SLT night gives slopes
-of about 0.16 in g' and 0.09 in r'. Using r' = 0.09 would lower r' by about 10%.
-That does not close the gap to 2024, but it is the next thing to measure
-(question 4).
+**Still open:**
+- k = 0.17 in every band is a guess. One SLT night gives slopes of about 0.16
+  in g' and 0.09 in r' (question 4).
+- u' has no 2026 measurement.
+- i' and z' on the DZ936 rest on one frame each.
+- SOPHIA's QE is still one flat number (question 13). LOT's band values were
+  derived with it, so they stay consistent.
 
 ## Traps
 

@@ -51,7 +51,7 @@
             "primary_mirror_diameter": 0.406,
             "secondary_mirror_diameter": 0.12,
             "focal_length": 3.414,
-            "optical_throughput": 0.263
+            "optical_throughput": 0.38
           }
         }
       },
@@ -118,7 +118,15 @@
               "optical_throughput": 0.568
             },
             "SLT": {
-              "optical_throughput": 0.665
+              "optical_throughput": 0.636
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.95
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.91
             }
           }
         },
@@ -131,7 +139,15 @@
           },
           "telescope": {
             "SLT": {
-              "optical_throughput": 0.101
+              "optical_throughput": 0.205
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.19
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.42
             }
           }
         },
@@ -151,7 +167,15 @@
               "optical_throughput": 0.313
             },
             "SLT": {
-              "optical_throughput": 0.408
+              "optical_throughput": 0.41
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.87
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.9
             }
           }
         },
@@ -171,7 +195,15 @@
               "optical_throughput": 0.312
             },
             "SLT": {
-              "optical_throughput": 0.373
+              "optical_throughput": 0.512
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.82
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.935
             }
           }
         },
@@ -184,7 +216,15 @@
           },
           "telescope": {
             "SLT": {
-              "optical_throughput": 0.122
+              "optical_throughput": 0.29
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.33
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.5
             }
           }
         }
