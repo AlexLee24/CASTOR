@@ -59,7 +59,7 @@ PROVENANCE = {
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
     "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
-    "lulin.telescopes.SLT.optical_throughput": (0.234, MEASURED, "geometric mean of the SLT bands below; method and fit in slt.py, QUESTIONS.md 5"),
+    "lulin.telescopes.SLT.optical_throughput": (0.263, MEASURED, "geometric mean of the SLT bands below (g' r' from 2026, u' i' z' from 2024); QUESTIONS.md 5 and 19"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
@@ -75,18 +75,21 @@ PROVENANCE = {
     "lulin.cameras.SLT_DU934P.dark_current_rate": (0.017, DOCUMENT, "datasheet BEX2-DD at -80 C; operating temperature assumed"),
     "lulin.cameras.SLT_DU934P.readout_noise": (9.3, MEASURED, "datasheet's 3.3 assumed the 0.05 MHz port; the delivered calibrated frames carry ~9.3, measured twice independently on the NGC 3621 stack (8.9 differencing unregistered frames, 9.3 from the half-stack difference) — validation/data/raw/_extended_2026-09-02/RESULT.md"),
     "lulin.cameras.SLT_DU934P.full_well_capacity": (130000, DOCUMENT, "datasheet, BEX2-DD"),
+    "lulin.cameras.SLT_DU934P.readout_saturation_level": (71302, DERIVED, "16-bit ADC x the 1.088 e-/ADU most 2026 frames were calibrated with; frames at gain 2 clip past the 130000 e- well instead"),
     "lulin.cameras.SLT_DU934P.background_flatness_fraction": (0.02, MEASURED, "NGC 3621 stack, SLT r' 2024-04-12, six aperture radii fit sigma^2 = N_pix*(sky+RN^2) + (f*N_pix)^2 with f = 2.0% of the per-frame background; the night was cloudy, so this is an upper limit, not a floor a clear night would also hit — validation/data/raw/_extended_2026-09-02/RESULT.md"),
 
     # ---- Lulin, SLT's two retired cameras (great-nas archive, 2021-2022) ----
     # SLT's raw nightly archive (Lulin_Observation_data/SLT) spans three
     # cameras on the same telescope: Andor DZ936 (2021-04 to 2022-03), then
     # Apogee Alta U9000 (2022-06 onward, labelled "U42" in some headers until
-    # 2022-10 — see below), then the current Andor DU934P-BEX2-DD (SLT_DU934P,
-    # 2023-06 on). Retired, so not selectable for planning new observations,
-    # but recorded so historical frames from those two eras can be reduced.
+    # 2022-10 — see below), then the Andor DU934P-BEX2-DD (SLT_DU934P,
+    # 2023-06 on). The DZ936 came back in 2026: Calibrated_Science has it from
+    # 2026-03-17 to 2026-11-16 beside the DU934P (2026-07-12 to 2026-11-02),
+    # and it is the camera on the telescope now (QUESTIONS.md 19).
     "lulin.cameras.SLT_DZ936.pixel_pitch": (13.5, DOCUMENT, "frame headers (DETECTOR=E2V CCD42-40) match Andor's iKon-L 936 datasheet exactly"),
-    "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the current SLT_DU934P's DU934P-BEX2-DD"),
+    "lulin.cameras.SLT_DZ936.quantum_efficiency": (0.90, DOCUMENT, "Andor iKon series brochure, iKon-L QE curve, BV sensor peak ~500-700nm; assumed BV not BEX2-DD - no deep-depletion suffix in the header's camera name, unlike the SLT_DU934P's DU934P-BEX2-DD"),
     "lulin.cameras.SLT_DZ936.dark_current_rate": (0.00013, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor at -80C, matching frame headers' CCD-TEMP"),
+    "lulin.cameras.SLT_DZ936.readout_saturation_level": (62258, MEASURED, "2026 frame headers: SATURATE = 62258.2 = 65535 ADU x 0.95 e-/ADU"),
     "lulin.cameras.SLT_DZ936.readout_noise": (7.0, DOCUMENT, "Andor iKon series brochure, iKon-L 936 High Sensitivity output at 1MHz; readout speed not in the headers, assumed"),
     "lulin.cameras.SLT_DZ936.full_well_capacity": (100000, DOCUMENT, "Andor iKon series brochure, iKon-L 936 BV sensor"),
     "lulin.cameras.SLT_U9000.pixel_pitch": (12.0, DOCUMENT, "Lulin's own hosted datasheet (lulin.ncu.edu.tw/.../U9000.pdf) and frame headers agree"),
@@ -136,8 +139,8 @@ PROVENANCE = {
     # caught). optical_throughput here is implied_optical_train = T_sys /
     # (QE * filter_transmission), same convention as LOT's rows above.
     "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.101, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.086; +/- 0.015 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
-    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.323, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.274; +/- 0.012 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
-    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.474, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.401; +/- 0.019 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
+    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.408, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, 2026-10-04 (DU934P, 0.398) and 2026-11-09/16 (DZ936, 0.418), k=0.17; 2024-04-14 gave 0.323 against SkyMapper with no colour term — QUESTIONS.md 19"),
+    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.665, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, 2026-10-04 (DU934P, 0.658) and 2026-11-09/16 (DZ936, 0.671), k=0.17; 2024-04-14 gave 0.474 against SkyMapper with no colour term — QUESTIONS.md 19"),
     "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.373, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.317; +/- 0.021 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
     "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.122, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.104; +/- 0.006 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
 

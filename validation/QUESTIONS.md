@@ -737,6 +737,49 @@ S/F (ATBD 4.3.6), and a caller can compare it with `target_snr` before trusting
 
 ---
 
+## 19. SLT is 30-40% more efficient in g' and r' than question 5 measured — PARTLY CLOSED
+
+**Measured (2026-11-18), with Kinder's own photometry** (`validation/slt_2026.py`).
+Kinder ran AutoPhOT on calibrated frames with PSF photometry against Pan-STARRS DR2.
+Its zero point inverts directly to the implied optical train. Results on two
+cameras over three nights:
+
+| band | DU934P 2026-10-04 | DZ936 2026-11-09/16 | 2024-04-14 (question 5) |
+|---|---|---|---|
+| g' | 0.398 | 0.418 | 0.323 |
+| r' | 0.658 | 0.671 | 0.474 |
+| i' | 0.598 | 0.416 | 0.373 |
+| z' | 0.187 | 0.090 | 0.122 |
+
+**g' and r' are now in presets.json** (0.408, 0.665). The two cameras agree to 5%
+there, which makes these numbers properties of the telescope, not of either
+camera. The same method run on a year of LOT/SOPHIA frames (SN2025wny) lands
+within 4–8% of LOT's 14-night presets, which checks the method. The 2024 night
+was calibrated against SkyMapper with no colour term, and its transparency
+drifted by about 15%. Both are reasons it could read low; a 30–40% gap is more
+than either explains.
+
+**i' and z' are not changed.** They differ by camera: the DZ936 is a BV sensor,
+and its QE falls in the red; the DU934P is deep-depletion. presets.json gives
+each camera one flat `quantum_efficiency`, so a single number per band cannot
+serve both cameras. Closing this needs a QE per band, which is question 13's
+problem on the SLT side.
+
+**The camera history was wrong.** "DU934P, 2023-present" no longer holds.
+Calibrated_Science has DZ936 frames from 2026-03-17 to 2026-11-16 and DU934P
+frames from 2026-07-12 to 2026-11-02, so both cameras were in use in 2026, and
+the DZ936 is the one on the telescope now. The cameras' names say so, and the
+DZ936 is listed first.
+
+**No coating loss.** LOT's best frames per night *rise* from 2025-11 (r' 0.58)
+to 2026-09/10 (0.62–0.65). The mirror was probably cleaned or recoated in
+between.
+
+**Still a guess:** k = 0.17 in every band. One 2026-11-16 SLT night gives slopes
+of about 0.16 in g' and 0.09 in r'. Using r' = 0.09 would lower r' by about 10%.
+That does not close the gap to 2024, but it is the next thing to measure
+(question 4).
+
 ## Traps
 
 Not open questions. Recorded because each one looks like a source and is not, and

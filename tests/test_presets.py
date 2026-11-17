@@ -196,7 +196,7 @@ def test_unknown_profile_lists_what_there_is(shipped):
 
 @pytest.mark.parametrize("kwargs, expected", [
     ({"telescope": "LOT-1m"}, "LOT, SLT"),
-    ({"camera": "sophia"}, "Sophia, SLT_DU934P"),
+    ({"camera": "sophia"}, "Sophia, SLT_DZ936"),
     ({"optic_filter": "r"}, "Sloan_r, Sloan_u"),
 ])
 def test_unknown_catalogue_entry_lists_what_there_is(shipped, kwargs, expected):

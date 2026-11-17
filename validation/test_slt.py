@@ -12,11 +12,15 @@ ordering, which survives, and the absence of the values, which must.
 import pytest
 
 import slt
+import slt_2026
 from castor import physics
 from castorCLI import presets
 
 PROFILE = "lulin"
 BANDS = ["u", "g", "r", "i", "z"]
+#: bands presets.json now takes from Kinder's 2026 photometry (slt_2026.py, QUESTIONS.md 19); the rest are 2024-04-14
+BANDS_2026 = ["g", "r"]
+BANDS_2024 = [b for b in BANDS if b not in BANDS_2026]
 
 
 @pytest.fixture(scope="module")
@@ -114,7 +118,7 @@ def test_the_fade_is_what_disqualified_the_extinction():
     assert excess["z"] < 0.05
 
 
-@pytest.mark.parametrize("band", BANDS)
+@pytest.mark.parametrize("band", BANDS_2024)
 def test_preset_throughput_reproduces_the_measured_total(shipped, band):
     """The loop closes: what the file stores, multiplied back out by the engine's
     own chain, has to return the T_sys the photometry measured.
@@ -130,7 +134,7 @@ def test_preset_throughput_reproduces_the_measured_total(shipped, band):
     assert reassembled == pytest.approx(slt.MEASURED[band]["throughput"], rel=0.02)
 
 
-@pytest.mark.parametrize("band", BANDS)
+@pytest.mark.parametrize("band", BANDS_2024)
 def test_the_file_stores_the_optical_train_not_the_total(shipped, band):
     """And states which of the two conventions the number is in."""
     instrument = _resolved(shipped, band)["instrument"]
@@ -145,7 +149,7 @@ def test_the_file_stores_the_optical_train_not_the_total(shipped, band):
 def test_the_telescope_fallback_is_the_geometric_mean_of_its_bands(shipped):
     """A band with no measurement of its own falls back to the telescope's number,
     so that number has to represent the set rather than any one member."""
-    optical = [slt.MEASURED[b]["optical"] for b in BANDS]
+    optical = [slt_2026.preset_value(b) if b in BANDS_2026 else slt.MEASURED[b]["optical"] for b in BANDS]
     geometric_mean = 1.0
     for value in optical:
         geometric_mean *= value
@@ -222,3 +226,32 @@ def test_the_committed_zero_points_reproduce_the_degeneracy():
         result = ext.fit_band(df, band, drift=True)
         assert result is not None
         assert result["corr_k"] >= 0.9      # k not identified, every band
+
+
+# ==========================================
+# 2026: Kinder's own photometry (slt_2026.py)
+# ==========================================
+
+@pytest.mark.parametrize("band", BANDS_2026)
+def test_g_and_r_are_the_2026_measurement(shipped, band):
+    """Both 2026 cameras agree to 5% in g' and r', so the band number is the telescope's, not a camera's."""
+    both = slt_2026.SLT_2026[band]
+    assert abs(both["SLT_DU934P"] - both["SLT_DZ936"]) / both["SLT_DZ936"] < 0.05
+    for camera in both:
+        resolved = shipped.resolve(PROFILE, telescope="SLT", camera=camera, optic_filter=slt.FILTER_OF[band])
+        assert resolved["instrument"]["telescope"]["optical_throughput"] == pytest.approx(slt_2026.preset_value(band), abs=0.002)
+
+
+@pytest.mark.parametrize("band", BANDS_2026)
+def test_2026_is_well_above_2024_not_within_its_drift(band):
+    """2024-04-14 was calibrated against SkyMapper with no colour term and carries ~15% transparency
+    drift; 2026 is 27-40% higher on two cameras and three nights against Pan-STARRS."""
+    assert slt_2026.preset_value(band) / slt.MEASURED[band]["optical"] > 1.25
+
+
+@pytest.mark.parametrize("band", ["g", "r", "i"])
+def test_the_same_method_reproduces_lot(shipped, band):
+    """The check on the method: on LOT, whose presets came from 14 photometric nights, it lands within 10%."""
+    stored = shipped.resolve(PROFILE, telescope="LOT", camera="Sophia",
+                             optic_filter=slt.FILTER_OF[band])["instrument"]["telescope"]["optical_throughput"]
+    assert slt_2026.LOT_2026[band]["median"] == pytest.approx(stored, rel=0.10)
