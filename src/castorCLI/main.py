@@ -474,6 +474,12 @@ def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
                         f"{profile_id}: filter {filter_id!r} overrides telescope "
                         f"{telescope_id!r}, which this profile does not list — it applies to nothing"
                     )
+            for camera_id in (entry.camera or {}):
+                if camera_id not in set(profile.cameras):
+                    problems.append(
+                        f"{profile_id}: filter {filter_id!r} gives a QE for camera "
+                        f"{camera_id!r}, which this profile does not list — it applies to nothing"
+                    )
 
         for telescope_id in (profile.telescopes or {None}):
             for camera_id in (profile.cameras or {None}):

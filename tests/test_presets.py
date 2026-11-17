@@ -558,3 +558,26 @@ def test_a_name_holding_the_qualifier_is_refused(tmp_path, profiles):
 
     with pytest.raises(presets.PresetError, match="separates a profile from a key"):
         presets.load(path)
+
+
+def test_a_band_carries_each_cameras_own_qe(shipped):
+    """FilterEntry.camera: the selected camera's QE in the selected band, and only that camera's."""
+    def qe(camera, band):
+        return shipped.resolve("lulin", "SLT", camera, band)["instrument"]["camera"]["quantum_efficiency"]
+    assert (qe("SLT_DZ936", "Sloan_z"), qe("SLT_DU934P", "Sloan_z")) == (0.33, 0.5)
+    assert (qe("SLT_DZ936", "Sloan_r"), qe("SLT_DU934P", "Sloan_r")) == (0.95, 0.91)
+    # a camera the band names no QE for keeps its own flat number
+    assert qe("Sophia", "Sloan_z") == shipped.resolve("lulin", "LOT", "Sophia")["instrument"]["camera"]["quantum_efficiency"]
+
+
+def test_a_band_qe_must_be_a_fraction(tmp_path):
+    bad = {"profiles": {"x": {"name": "X", "cameras": {"C": {"name": "C", "camera": {
+        "pixel_pitch": 9.0, "quantum_efficiency": 0.8, "dark_current_rate": 0.0, "readout_noise": 3.0,
+        "full_well_capacity": 50000}}},
+        "filters": {"V": {"name": "V", "optic_filter": {"central_wavelength": 550.0, "filter_bandwidth": 88.0,
+                                                          "filter_transmission": 0.9},
+                          "camera": {"C": {"quantum_efficiency": 1.4}}}}}}}
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(bad))
+    with pytest.raises((presets.PresetError, ValidationError)):
+        presets.load(path)

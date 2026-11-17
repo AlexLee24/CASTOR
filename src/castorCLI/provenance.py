@@ -117,6 +117,7 @@ def walk(profiles: Mapping[str, Any]) -> dict[str, Any]:
         <profile>.telescopes.<id>.<field>      (and cameras, filters)
         <profile>.filters.<id>.environment.<field>
         <profile>.filters.<id>.telescope.<telescope id>.<field>
+        <profile>.filters.<id>.camera.<camera id>.<field>
 
     Keys outside those sections — names, caveats, a host's own display
     metadata — carry no numbers CASTOR reads and are not walked.
@@ -124,7 +125,7 @@ def walk(profiles: Mapping[str, Any]) -> dict[str, Any]:
     The order is fixed by section, not by how the file happens to be written.
     Profiles, entries and fields come in file order, but within a profile it is
     always environment, median seeing, telescopes, cameras, filters, and within
-    a filter its own fields, then its environment, then its telescope overrides.
+    a filter its own fields, then its environment, then its telescope and camera overrides.
     """
     out = {}
     sections = (("telescopes", "telescope"), ("cameras", "camera"), ("filters", "optic_filter"))
@@ -152,6 +153,10 @@ def walk(profiles: Mapping[str, Any]) -> dict[str, Any]:
                 for tel_key, tel_value in (entry.get("telescope") or {}).items():
                     for key, value in tel_value.items():
                         out[f"{profile_id}.{catalogue}.{entry_id}.telescope.{tel_key}.{key}"] = value
+                # camera, keyed the same way by camera (FilterEntry.camera): that sensor's QE in this band
+                for cam_key, cam_value in (entry.get("camera") or {}).items():
+                    for key, value in cam_value.items():
+                        out[f"{profile_id}.{catalogue}.{entry_id}.camera.{cam_key}.{key}"] = value
     return out
 
 def check(profiles: Mapping[str, Any], table: Mapping[str, Any]) -> list[Problem]:

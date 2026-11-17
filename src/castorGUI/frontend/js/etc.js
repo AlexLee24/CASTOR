@@ -1147,6 +1147,7 @@
         }
 
         applyRig(profile, entry);
+        applyCameraBand(profile, entry);
     }
 
     /* The selected telescope's own numbers, then whatever the chosen filter (entry)
@@ -1165,6 +1166,20 @@
             var measured = ((entry && entry.telescope) || {})[telescopeId];
             if (measured) { applyFragment('instrument.telescope', measured); }
         }
+    }
+
+    /* The selected camera's own numbers, then its QE in the chosen filter's band,
+       keyed by camera as the band's throughput is keyed by telescope (castorCLI/
+       presets.py, FilterEntry.camera). Run when the filter or the camera changes:
+       without re-applying the camera first, a band that names no QE would keep the
+       previous band's. */
+    function applyCameraBand(profile, entry) {
+        var cameraId = el('select-camera').value;
+        var cam = ((profile && profile.cameras) || {})[cameraId];
+        if (!cam) { return; }
+        applyFragment('instrument.camera', cam.camera);
+        var band = ((entry && entry.camera) || {})[cameraId];
+        if (band) { applyFragment('instrument.camera', band); }
     }
 
     function showCaveat(profile) {
@@ -1238,6 +1253,10 @@
                     // The telescope's slice only: the filter's sky stays as it is.
                     if (kind === 'telescopes') {
                         applyRig(profiles()[profileSelect.value], catalogue('filters')[el('select-filter').value]);
+                    }
+                    // The camera's slice: its QE in the band already chosen.
+                    if (kind === 'cameras') {
+                        applyCameraBand(profiles()[profileSelect.value], catalogue('filters')[el('select-filter').value]);
                     }
                     collapseDetails(panel);
                 } else {

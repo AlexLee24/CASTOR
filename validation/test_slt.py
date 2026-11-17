@@ -19,7 +19,7 @@ from castorCLI import presets
 PROFILE = "lulin"
 BANDS = ["u", "g", "r", "i", "z"]
 #: bands presets.json now takes from Kinder's 2026 photometry (slt_2026.py, QUESTIONS.md 19); the rest are 2024-04-14
-BANDS_2026 = ["g", "r"]
+BANDS_2026 = ["g", "r", "i", "z"]
 BANDS_2024 = [b for b in BANDS if b not in BANDS_2026]
 
 
@@ -149,7 +149,10 @@ def test_the_file_stores_the_optical_train_not_the_total(shipped, band):
 def test_the_telescope_fallback_is_the_geometric_mean_of_its_bands(shipped):
     """A band with no measurement of its own falls back to the telescope's number,
     so that number has to represent the set rather than any one member."""
-    optical = [slt_2026.preset_value(b) if b in BANDS_2026 else slt.MEASURED[b]["optical"] for b in BANDS]
+    optical = [slt_2026.preset_value(b) if b in BANDS_2026 else
+               slt.implied_optical_throughput(b, _resolved(shipped, b)["instrument"]["camera"]["quantum_efficiency"],
+                                              _resolved(shipped, b)["instrument"]["optic_filter"]["filter_transmission"])
+               for b in BANDS]
     geometric_mean = 1.0
     for value in optical:
         geometric_mean *= value
@@ -233,20 +236,29 @@ def test_the_committed_zero_points_reproduce_the_degeneracy():
 # ==========================================
 
 @pytest.mark.parametrize("band", BANDS_2026)
-def test_g_and_r_are_the_2026_measurement(shipped, band):
-    """Both 2026 cameras agree to 5% in g' and r', so the band number is the telescope's, not a camera's."""
-    both = slt_2026.SLT_2026[band]
-    assert abs(both["SLT_DU934P"] - both["SLT_DZ936"]) / both["SLT_DZ936"] < 0.05
-    for camera in both:
+def test_griz_are_the_2026_measurement(shipped, band):
+    for camera in ("SLT_DU934P", "SLT_DZ936"):
         resolved = shipped.resolve(PROFILE, telescope="SLT", camera=camera, optic_filter=slt.FILTER_OF[band])
         assert resolved["instrument"]["telescope"]["optical_throughput"] == pytest.approx(slt_2026.preset_value(band), abs=0.002)
 
 
+def test_the_cameras_agree_in_g_once_each_has_its_own_qe():
+    """g' is where both cameras have plenty of frames: through each camera's band QE they give one telescope."""
+    both = slt_2026.SLT_OPTICS_2026["g"]
+    assert abs(both["SLT_DU934P"] - both["SLT_DZ936"]) / both["SLT_DZ936"] < 0.02
+
+
+@pytest.mark.parametrize("band", ["i", "z"])
+def test_band_qe_explains_most_of_the_red_gap_between_cameras(band):
+    """Flat QE left the DU934P 1.6x (i') and 2.3x (z') above the DZ936; band QE brings both to 1.4-1.5x."""
+    t, o = slt_2026.SLT_TSYS_2026[band], slt_2026.SLT_OPTICS_2026[band]
+    assert o["SLT_DU934P"] / o["SLT_DZ936"] < t["SLT_DU934P"] / t["SLT_DZ936"]
+
+
 @pytest.mark.parametrize("band", BANDS_2026)
-def test_2026_is_well_above_2024_not_within_its_drift(band):
-    """2024-04-14 was calibrated against SkyMapper with no colour term and carries ~15% transparency
-    drift; 2026 is 27-40% higher on two cameras and three nights against Pan-STARRS."""
-    assert slt_2026.preset_value(band) / slt.MEASURED[band]["optical"] > 1.25
+def test_the_same_camera_measures_well_above_2024(band):
+    """DU934P against DU934P: 2026 T_sys is 1.3-1.7x the 2024-04-14 night (SkyMapper, no colour term, ~15% drift)."""
+    assert slt_2026.SLT_TSYS_2026[band]["SLT_DU934P"] / slt.MEASURED[band]["throughput"] > 1.25
 
 
 @pytest.mark.parametrize("band", ["g", "r", "i"])

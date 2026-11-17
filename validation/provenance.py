@@ -59,7 +59,7 @@ PROVENANCE = {
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
     "lulin.telescopes.SLT.secondary_mirror_diameter": (0.12, GUESS, "not published"),
     "lulin.telescopes.SLT.focal_length": (3.414, DERIVED, "site pages, f/8.4 on 0.406 m"),
-    "lulin.telescopes.SLT.optical_throughput": (0.263, MEASURED, "geometric mean of the SLT bands below (g' r' from 2026, u' i' z' from 2024); QUESTIONS.md 5 and 19"),
+    "lulin.telescopes.SLT.optical_throughput": (0.38, MEASURED, "geometric mean of the SLT bands below; QUESTIONS.md 5 and 19"),
 
     # ---- Lulin, SOPHIA (e2v CCD230-42) --------------------------------------
     "lulin.cameras.Sophia.pixel_pitch": (15.0, DOCUMENT, "datasheet and frame XPIXSZ"),
@@ -138,11 +138,26 @@ PROVENANCE = {
     # affected and rejected — see the -1.17 mag single-frame outlier this
     # caught). optical_throughput here is implied_optical_train = T_sys /
     # (QE * filter_transmission), same convention as LOT's rows above.
-    "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.101, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.086; +/- 0.015 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
-    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.408, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, 2026-10-04 (DU934P, 0.398) and 2026-11-09/16 (DZ936, 0.418), k=0.17; 2024-04-14 gave 0.323 against SkyMapper with no colour term — QUESTIONS.md 19"),
-    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.665, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, 2026-10-04 (DU934P, 0.658) and 2026-11-09/16 (DZ936, 0.671), k=0.17; 2024-04-14 gave 0.474 against SkyMapper with no colour term — QUESTIONS.md 19"),
-    "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.373, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.317; +/- 0.021 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
-    "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.122, MEASURED, "slt.py MEASURED, 2024-04-14, T_sys 0.104; +/- 0.006 is the fit alone - see slt.py on the transparency drift, which adds ~15%"),
+    "lulin.filters.Sloan_u.telescope.SLT.optical_throughput": (0.205, MEASURED, "slt.py MEASURED, 2024-04-14 (DU934P), T_sys 0.086 / band QE 0.42; no 2026 u' measurement yet"),
+    "lulin.filters.Sloan_g.telescope.SLT.optical_throughput": (0.41, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, gain-corrected to e- (frames are ADU), k=0.17, divided by each camera's band QE; DU934P 2026-10-04, DZ936 2026-11-09/16: 0.409 / 0.411 — slt_2026.py, QUESTIONS.md 19"),
+    "lulin.filters.Sloan_r.telescope.SLT.optical_throughput": (0.636, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, gain-corrected to e- (frames are ADU), k=0.17, divided by each camera's band QE; DU934P 2026-10-04, DZ936 2026-11-09/16: 0.669 / 0.604 — slt_2026.py, QUESTIONS.md 19"),
+    "lulin.filters.Sloan_i.telescope.SLT.optical_throughput": (0.512, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, gain-corrected to e- (frames are ADU), k=0.17, divided by each camera's band QE; DU934P 2026-10-04, DZ936 2026-11-09/16: 0.591 / 0.434 (one DZ936 frame) — slt_2026.py, QUESTIONS.md 19"),
+    "lulin.filters.Sloan_z.telescope.SLT.optical_throughput": (0.29, MEASURED, "Kinder AutoPhOT PSF zeropoints vs Pan-STARRS, gain-corrected to e- (frames are ADU), k=0.17, divided by each camera's band QE; DU934P 2026-10-04, DZ936 2026-11-09/16: 0.347 / 0.232 (one DZ936 frame) — slt_2026.py, QUESTIONS.md 19"),
+
+    # ---- SLT cameras, QE per band ------------------------------------------
+    # Read off Andor's published QE curves (iKon-L 936 'BV' for the DZ936, iKon-M 934 'BEX2-DD' for the DU934P;
+    # the same curves in Lulin's own copy of the 934 sheet), averaged over each Sloan band; about +/-0.03.
+    # Each camera's flat quantum_efficiency stays as the fallback for bands with no entry.
+    "lulin.filters.Sloan_u.camera.SLT_DZ936.quantum_efficiency": (0.19, DOCUMENT, "Andor iKon-L 936 specifications, BV curve averaged over Sloan u'"),
+    "lulin.filters.Sloan_u.camera.SLT_DU934P.quantum_efficiency": (0.42, DOCUMENT, "Andor iKon-M 934 specifications (and Lulin's copy), BEX2-DD curve averaged over Sloan u'"),
+    "lulin.filters.Sloan_g.camera.SLT_DZ936.quantum_efficiency": (0.87, DOCUMENT, "Andor iKon-L 936 specifications, BV curve averaged over Sloan g'"),
+    "lulin.filters.Sloan_g.camera.SLT_DU934P.quantum_efficiency": (0.9, DOCUMENT, "Andor iKon-M 934 specifications (and Lulin's copy), BEX2-DD curve averaged over Sloan g'"),
+    "lulin.filters.Sloan_r.camera.SLT_DZ936.quantum_efficiency": (0.95, DOCUMENT, "Andor iKon-L 936 specifications, BV curve averaged over Sloan r'"),
+    "lulin.filters.Sloan_r.camera.SLT_DU934P.quantum_efficiency": (0.91, DOCUMENT, "Andor iKon-M 934 specifications (and Lulin's copy), BEX2-DD curve averaged over Sloan r'"),
+    "lulin.filters.Sloan_i.camera.SLT_DZ936.quantum_efficiency": (0.82, DOCUMENT, "Andor iKon-L 936 specifications, BV curve averaged over Sloan i'"),
+    "lulin.filters.Sloan_i.camera.SLT_DU934P.quantum_efficiency": (0.935, DOCUMENT, "Andor iKon-M 934 specifications (and Lulin's copy), BEX2-DD curve averaged over Sloan i'"),
+    "lulin.filters.Sloan_z.camera.SLT_DZ936.quantum_efficiency": (0.33, DOCUMENT, "Andor iKon-L 936 specifications, BV curve averaged over Sloan z'"),
+    "lulin.filters.Sloan_z.camera.SLT_DU934P.quantum_efficiency": (0.5, DOCUMENT, "Andor iKon-M 934 specifications (and Lulin's copy), BEX2-DD curve averaged over Sloan z'"),
 
     # ---- VLT / FORS2 --------------------------------------------------------
     # Never the default, and nobody here observes with it. It did lack a site
