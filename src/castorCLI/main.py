@@ -160,7 +160,7 @@ def _mark_modified(labels: dict[str, str], preset_instrument: dict[str, Any],
     """
     marked = dict(labels)
     for section, preset_values in preset_instrument.items():
-        if section in marked and getattr(request.instrument, section).model_dump() != preset_values:
+        if section in marked and getattr(request.instrument, section).model_dump(exclude_none=True) != preset_values:
             marked[section] = f"{marked[section]} (modified)"
     return marked
 

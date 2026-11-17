@@ -1,4 +1,5 @@
 import math
+from datetime import timezone
 import numpy as np
 
 from castor import schema
@@ -57,6 +58,24 @@ def _noise_components(
         **{field: float(value) for field, value in terms._asdict().items()}
     )
 
+# Sun altitudes the sky model stops describing: below ASTRONOMICAL_NIGHT_DEG the
+# sky is the night sky mu_dark + moon + zodiacal light; between it and the
+# horizon twilight adds scattered sunlight the model leaves out; above the
+# horizon it is day.
+ASTRONOMICAL_NIGHT_DEG = -18.0
+
+
+def sun_warnings(sun_elevation_deg: float) -> list[str]:
+    """The warning, if any, that the Sun's altitude puts on a night-sky result."""
+    if sun_elevation_deg > 0.0:
+        return [f"The Sun is up (elevation {sun_elevation_deg:.1f}°): the daytime sky is not "
+                "modelled, so the sky is far brighter and the SNR far lower than shown."]
+    if sun_elevation_deg > ASTRONOMICAL_NIGHT_DEG:
+        return [f"Twilight (Sun at {sun_elevation_deg:.1f}°): scattered sunlight is not modelled, "
+                "so the sky is brighter and the SNR lower than shown."]
+    return []
+
+
 def run_calculation(request: schema.ObservationRequest) -> schema.ObservationResponse:
     """
     CASTOR core calculation pipeline.
@@ -67,17 +86,26 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     env = request.environment
     opt = request.options
 
-    alpha, rho, z_moon, z_target = moon.get_moon_and_target_geometry(
+    obs_time_iso = env.observing_time_utc.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+    geometry = moon.get_moon_and_target_geometry(
         target_ra=tgt.ra,
         target_dec=tgt.dec,
-        obs_time_utc=env.observing_time_utc.strftime('%Y-%m-%dT%H:%M:%S'),
+        obs_time_utc=obs_time_iso,
         lon=env.location.longitude_deg,
         lat=env.location.latitude_deg,
         elevation=env.location.elevation_m
     )
-    
-    # Clamp the zenith angle to keep airmass from tending to infinity
-    z_target_safe = min(float(z_target), 89.0)
+    alpha, rho, z_moon, z_target = geometry
+    sun_elevation = float(moon.get_sun_elevation(
+        obs_time_utc=obs_time_iso,
+        lon=env.location.longitude_deg,
+        lat=env.location.latitude_deg,
+        elevation=env.location.elevation_m
+    ))
+
+    # Kasten & Young is finite at the horizon; the clamp only keeps a target
+    # below it inside the formula's domain (and away from negative zenith noise).
+    z_target_safe = min(max(float(z_target), 0.0), 90.0)
     airmass = float(physics.calculate_airmass(z_target_safe))
     
     # auto_calc_background only decides whether to layer the real-time moon/geometry
@@ -86,12 +114,13 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     if env.auto_calc_background:
         mu_sky = moon.calculate_sky_brightness(
             target_ra=tgt.ra, target_dec=tgt.dec,
-            obs_time_utc=env.observing_time_utc.strftime('%Y-%m-%dT%H:%M:%S'),
+            obs_time_utc=obs_time_iso,
             mu_dark=env.mu_dark,
             extinction_coeff=env.extinction_coeff,
             lon=env.location.longitude_deg, lat=env.location.latitude_deg,
             elevation=env.location.elevation_m,
-            zodiacal_share=env.zodiacal_share
+            zodiacal_share=env.zodiacal_share,
+            geometry=geometry
         )
     else:
         # zodiacal_share is independent of the moon: it completes mu_dark into
@@ -167,6 +196,12 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         case _:
             raise ValueError("Unknown target morphology")
 
+    # Scintillation of one frame of t_single, charged per frame (ATBD 4.3.1b).
+    scint = float(physics.calculate_scintillation_fraction(
+        inst.telescope.primary_mirror_diameter, airmass, env.location.elevation_m,
+        opt.single_exp_time, env.scintillation_coefficient
+    ))
+
     single_snr = float(physics.calculate_single_snr(
         source_count_rate=source_rate,
         sky_count_rate=sky_rate,
@@ -175,7 +210,8 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         num_pixels_aperture=n_pix,
         single_exp_time=opt.single_exp_time,
         num_pixels_sky_estimate=n_est,
-        background_flatness_fraction=inst.camera.background_flatness_fraction
+        background_flatness_fraction=inst.camera.background_flatness_fraction,
+        scintillation_fraction=scint
     ))
 
     # The flatness floor does not average down, so the stack has a hard SNR
@@ -195,7 +231,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             total_snr = float(physics.calculate_total_snr(
                 source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
                 n_pix, opt.single_exp_time, total_exp_time, n_exp, n_est,
-                inst.camera.background_flatness_fraction
+                inst.camera.background_flatness_fraction, scint
             ))
             final_req_exposures = None # req_exposures isn't returned in SolveForSNR mode
             target_reachable = None    # no target is solved for in this mode
@@ -225,7 +261,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
                 total_snr = float(physics.calculate_total_snr(
                     source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
                     n_pix, opt.single_exp_time, total_exp_time, final_req_exposures, n_est,
-                    inst.camera.background_flatness_fraction
+                    inst.camera.background_flatness_fraction, scint
                 ))
 
         case _:
@@ -236,16 +272,19 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
     # so signal / sqrt(total_variance) gives back each SNR exactly.
     single_noise = physics.calculate_single_noise_components(
         source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
-        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction
+        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction, scint
     )
     total_noise = None if total_exp_time is None else physics.calculate_total_noise_components(
         source_rate, sky_rate, inst.camera.dark_current_rate, inst.camera.readout_noise,
         n_pix, opt.single_exp_time, total_exp_time, num_exposures, n_est,
-        inst.camera.background_flatness_fraction
+        inst.camera.background_flatness_fraction, scint
     )
 
+    saturation_level = float(physics.calculate_saturation_level(
+        inst.camera.full_well_capacity, inst.camera.readout_saturation_level
+    ))
     t_sat = float(physics.calculate_saturation_time(
-        inst.camera.full_well_capacity, peak_rate, sky_rate, inst.camera.dark_current_rate
+        saturation_level, peak_rate, sky_rate, inst.camera.dark_current_rate
     ))
 
     # k is the caller's choice of how far background must outweigh read noise. It
@@ -256,8 +295,15 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
         background_dominance_factor=opt.background_dominance_factor
     ))
 
-    if airmass > 2.0:
+    target_elevation = 90.0 - float(z_target)
+    if target_elevation <= 0.0:
+        warnings.append(
+            f"Target is below the horizon (elevation {target_elevation:.1f}°): "
+            "it cannot be observed at this time, whatever the SNR says."
+        )
+    elif airmass > 2.0:
         warnings.append("Airmass > 2.0: Extinction model accuracy may degrade.")
+    warnings.extend(sun_warnings(sun_elevation))
 
     return schema.ObservationResponse(
         core=schema.CoreResult(
@@ -285,7 +331,9 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             num_pixels_aperture=n_pix,
             num_pixels_sky_estimate=n_est,
             airmass=airmass,
-            sky_surface_brightness=float(mu_sky)
+            sky_surface_brightness=float(mu_sky),
+            saturation_level=saturation_level,
+            scintillation_fraction=scint
         ),
         flags=schema.SystemFlags(
             is_saturated=bool(opt.single_exp_time > t_sat),
@@ -301,6 +349,7 @@ def run_calculation(request: schema.ObservationRequest) -> schema.ObservationRes
             target_elevation_deg=90.0 - float(z_target),
             moon_elevation_deg=90.0 - float(z_moon),
             moon_phase_angle_deg=float(alpha),
-            moon_separation_deg=float(rho)
+            moon_separation_deg=float(rho),
+            sun_elevation_deg=sun_elevation
         )
     )

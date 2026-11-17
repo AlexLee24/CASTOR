@@ -248,7 +248,11 @@ class PresetFile(BaseModel):
         selection = self._selection(profile_id, telescope, camera, optic_filter)
         for section, (_, _, entry) in selection.items():
             if entry is not None:
-                instrument[section] = getattr(entry, section).model_dump()
+                # An optional hardware field the entry leaves unset (None) is left out
+                # rather than sent as null: the request's own default is the same
+                # None, and the browser form, which posts nothing for an empty field,
+                # then builds the identical request.
+                instrument[section] = getattr(entry, section).model_dump(exclude_none=True)
 
         # The chosen filter has the last word on anything that depends on the band.
         # Applied after the site and the rig so it overrides them, and only for the

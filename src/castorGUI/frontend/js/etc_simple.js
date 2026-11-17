@@ -280,7 +280,7 @@
         var labels = data.labels || {};
         var setup = [labels.telescope, labels.camera, labels.optic_filter].filter(Boolean).join(' · ');
 
-        if (data.goal === 'solve_snr' && data.status !== 'below_horizon') {
+        if (data.goal === 'solve_snr' && data.status !== 'below_horizon' && data.status !== 'daylight') {
             var mine = data.chosen;
             var ceiling = data.snr_ceiling;
             html += hero('Expected SNR', esc(mine.snr.toFixed(1)),
@@ -300,6 +300,11 @@
             html += hero('Not observable', 'The target is below the horizon',
                 'Altitude ' + Math.round(c.target_elevation_deg) + '° at this time.',
                 'Try another time, or check the coordinates.', true);
+        } else if (data.status === 'daylight') {
+            alerts = [];    // the hero already says it; the engine's sun warning would repeat it
+            html += hero('Not observable', 'The Sun is up',
+                'Sun altitude ' + Math.round(c.sun_elevation_deg) + '° at this time.',
+                'The sky model is a night sky. Pick a time after astronomical twilight (Sun below −18°).', true);
         } else if (data.status === 'saturated') {
             html += hero('Too bright', 'Saturates in under 1 s',
                 'The brightest pixel fills in ' + c.saturation_time_s.toFixed(2) + ' s with ' + esc(setup) + '.',

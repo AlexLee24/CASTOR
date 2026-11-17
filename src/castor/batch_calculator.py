@@ -43,13 +43,14 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     if not time_series_iso:
         raise ValueError("Time series expansion resulted in an empty array. Check start and end times.")
 
-    alpha_arr, rho_arr, z_moon_arr, z_target_arr = moon.get_moon_and_target_geometry(
+    geometry = moon.get_moon_and_target_geometry(
         target_ra=tgt.ra, target_dec=tgt.dec,
         obs_time_utc=time_series_iso,
         lon=env.location.longitude_deg, lat=env.location.latitude_deg,
         elevation=env.location.elevation_m
     )
-    
+    alpha_arr, rho_arr, z_moon_arr, z_target_arr = geometry
+
     # Daylight is a plotting concern only, so it is fetched separately rather than
     # threaded through the photometry path — see moon.get_sun_elevation.
     sun_elev_arr = moon.get_sun_elevation(
@@ -58,7 +59,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         elevation=env.location.elevation_m
     )
 
-    z_target_safe = np.clip(z_target_arr, 0.0, 89.0)
+    z_target_safe = np.clip(z_target_arr, 0.0, 90.0)
     airmass_arr = physics.calculate_airmass(z_target_safe)
     
     mu_sky_arr = moon.calculate_sky_brightness(
@@ -67,7 +68,8 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         extinction_coeff=env.extinction_coeff,
         lon=env.location.longitude_deg, lat=env.location.latitude_deg,
         elevation=env.location.elevation_m,
-        zodiacal_share=env.zodiacal_share
+        zodiacal_share=env.zodiacal_share,
+        geometry=geometry
     )
 
     eff_area = float(physics.calculate_effective_area(inst.telescope.primary_mirror_diameter, inst.telescope.secondary_mirror_diameter))
@@ -118,9 +120,14 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         case _:
             raise ValueError("Unknown target morphology")
 
+    scint_arr = physics.calculate_scintillation_fraction(
+        inst.telescope.primary_mirror_diameter, airmass_arr, env.location.elevation_m,
+        opt.single_exp_time, env.scintillation_coefficient
+    )
+
     single_snr_arr = physics.calculate_single_snr(
         source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
-        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction
+        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction, scint_arr
     )
 
     # Stays None for solve_snr, where "how many exposures" is an input rather than
@@ -139,7 +146,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             total_snr_arr = physics.calculate_total_snr(
                 source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
                 n_pix, opt.single_exp_time, total_exp_time, n_exp, n_est,
-                inst.camera.background_flatness_fraction
+                inst.camera.background_flatness_fraction, scint_arr
             )
 
         case schema.BatchSolveForTime(target_snr=t_snr):
@@ -159,7 +166,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
             total_snr_reachable = physics.calculate_total_snr(
                 source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
                 n_pix, opt.single_exp_time, total_exp_time_arr, req_exp_ceil_arr, n_est,
-                inst.camera.background_flatness_fraction
+                inst.camera.background_flatness_fraction, scint_arr
             )
             # Unreachable timestamps report the asymptotic ceiling as their best
             # SNR and an empty (None) exposure count.
@@ -174,16 +181,18 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
     # is that step's SNR exactly.
     single_noise = physics.calculate_single_noise_components(
         source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
-        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction
+        n_pix, opt.single_exp_time, n_est, inst.camera.background_flatness_fraction, scint_arr
     )
     total_noise = physics.calculate_total_noise_components(
         source_rate_arr, sky_rate_arr, inst.camera.dark_current_rate, inst.camera.readout_noise,
         n_pix, opt.single_exp_time, total_exp_time, num_exposures, n_est,
-        inst.camera.background_flatness_fraction
+        inst.camera.background_flatness_fraction, scint_arr
     )
 
     t_sat_arr = physics.calculate_saturation_time(
-        inst.camera.full_well_capacity, peak_rate_arr, sky_rate_arr, inst.camera.dark_current_rate
+        physics.calculate_saturation_level(
+            inst.camera.full_well_capacity, inst.camera.readout_saturation_level
+        ), peak_rate_arr, sky_rate_arr, inst.camera.dark_current_rate
     )
 
     # The same k a single request takes, applied at every step: t_opt moves with

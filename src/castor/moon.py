@@ -312,9 +312,14 @@ def calculate_sky_brightness(
     lat: float = 23.47,
     elevation: float = 2862.0,
     zodiacal_share: float | None = None,
+    geometry: tuple | None = None,
 ) -> Numeric:
     """
     Calculate total sky surface brightness including lunar contribution.
+
+    `geometry` is the (alpha, rho, z_moon, z_target) a caller already has from
+    `get_moon_and_target_geometry` for this same time and place; passing it
+    saves computing the ephemeris a second time. None computes it here.
 
     `zodiacal_share` adds a third, pointing-dependent term on top of the moon
     and `mu_dark` — see `calculate_zodiacal_brightness_nl`. `None` (the default)
@@ -326,9 +331,11 @@ def calculate_sky_brightness(
     float
         Total sky surface brightness [mag/arcsec^2].
     """
-    alpha, rho, z_moon, z_target = get_moon_and_target_geometry(
-        target_ra, target_dec, obs_time_utc, lon, lat, elevation
-    )
+    if geometry is None:
+        geometry = get_moon_and_target_geometry(
+            target_ra, target_dec, obs_time_utc, lon, lat, elevation
+        )
+    alpha, rho, z_moon, z_target = geometry
 
     B_moon_nl = krisciunas_schaefer_1991(alpha, rho, z_moon, z_target, k_ext_v=extinction_coeff)
 

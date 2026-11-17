@@ -162,6 +162,7 @@ This profile encapsulates all hardware-specific parameters and is subdivided int
 | `readout_noise` | $\text{RON}$ | e-/pix | Electronic noise introduced during the readout phase. |
 | `full_well_capacity` | $\text{FWC}$ | e- | Maximum electron capacity per pixel before saturation. |
 | `background_flatness_fraction` | $f_{\text{flat}}$ | dimensionless | Flat-field/background-gradient residual as a fraction of the per-frame background level. Default 0.0 (not modelled). |
+| `readout_saturation_level` | $N_{\text{clip}}$ | e-, optional | Count where the readout clips or leaves its linear range, when that comes before the full well — a 16-bit converter's 65535 ADU × gain. `None` (the default) leaves the full well as the only ceiling (§4.3.4). |
 
 #### 3.1.3 Filter Schema
 
@@ -204,6 +205,7 @@ This profile defines the physical environment, geometric constraints, and atmosp
 | `mu_dark` | $\mu_{\text{dark}}$ | mag/arcsec² | Intrinsic surface brightness of the moonless night sky, and the baseline every $\mu_{\text{sky}}$ is built on (§4.1.1). Where `zodiacal_share` accompanies it, this is the *local* component only — airglow and light pollution — with zodiacal light and scattered starlight split back out; where it does not, this is the whole moonless sky, undecomposed. |
 | `zodiacal_share` | - | dimensionless, optional | Fraction of the *original, undecomposed* moonless-sky measurement `mu_dark` was split from that was zodiacal light and scattered starlight, at this site's own reference sightline. `None` (the default, and the value for every site without this measurement) means not modelled: `mu_dark` is the whole sky and §4.1.1's $Flux_{\text{zodi}}$ term is zero. |
 | `extinction_coeff` | $k_{\text{ext}}$ | mag/airmass | Atmospheric attenuation per unit airmass. |
+| `scintillation_coefficient` | $C_{\text{scint}}$ | dimensionless | Young's scintillation coefficient (§4.3.1b). Default 0.09; 0 switches scintillation off. |
 | `total_fwhm` | $FWHM_{\text{tot}}$ | arcsec | Required stellar image FWHM; definition and caller responsibilities in §4.1.2. |
 
 ### 3.4 Calculation Options (`options`)
@@ -229,11 +231,13 @@ This section details the mathematical models used to process the inputs from Sta
 This stage translates raw observational and environmental parameters into physical characteristics and optical efficiencies.
 
 **4.1.1 Observing Geometry and Environment**
-The airmass ($X$) is approximated using the secant of the zenith angle ($z$), derived from the target's ephemeris and observer location:
+The airmass ($X$) follows Kasten & Young (1989), from the zenith angle ($z$, in degrees) of the target's ephemeris at the observer's location:
 
-$$X \approx \sec(z) = \frac{1}{\cos(z)}$$
+$$X = \frac{1}{\cos(z) + 0.50572\,(96.07995 - z)^{-1.6364}}$$
 
-The zenith angle is clamped to $z \le 89^\circ$ first, so $X$ stays finite (at most about 57). A target below the horizon therefore gets a large airmass rather than an error. The response reports both sides of that: the clamped $X$ as `diagnostics.airmass`, and the unclamped elevation $90^\circ - z$ as `ephemeris.target_elevation_deg`.
+It agrees with the plane-parallel $\sec(z)$ to 0.3% up to $z = 60^\circ$ and 1.3% at $75^\circ$, but stays finite at the horizon (about 38 at $z = 90^\circ$) where the secant diverges. It is 0.9997 at the zenith, which moves the extinction by well under a millimagnitude. The zenith angle is clamped to $0 \le z \le 90^\circ$ first, so a target below the horizon gets the horizon's airmass rather than an error. The response reports both sides of that: the clamped $X$ as `diagnostics.airmass`, and the unclamped elevation $90^\circ - z$ as `ephemeris.target_elevation_deg`, with a warning in `flags.warnings`.
+
+The Sun's altitude is reported as `ephemeris.sun_elevation_deg`. Every sky term below describes a night sky; above $-18^\circ$ (astronomical twilight) scattered sunlight brightens it and is not modelled, and above $0^\circ$ it is day. Either case adds a warning: the result stands, but on a sky darker than the real one.
 
 The total sky surface brightness ($\mu_{\text{sky}}$) accounts for the local dark-sky flux, a pointing-dependent zodiacal-light term where `zodiacal_share` is supplied, and, when `auto_calc_background` is enabled, the real-time contribution from the moon:
 
@@ -360,6 +364,8 @@ The Total SNR ($\text{SNR}_{\text{total}}$) aggregates the signal across the tot
 
 $$\text{SNR}_{\text{total}} = \frac{Rate_{\text{src}} \cdot t_{\text{total}}}{\sqrt{Rate_{\text{src}} \cdot t_{\text{total}} + N_{\text{bkg}} \cdot Rate_{\text{sky}} \cdot t_{\text{total}} + N_{\text{exp}} \cdot N_{\text{bkg}} \cdot (R_{\text{dark}} \cdot t_{\text{single}} + \text{RON}^2) + V_{\text{flat}}(t_{\text{total}})}}$$
 
+Both denominators also carry the scintillation variance $V_{\text{scint}}$ of §4.3.1b: $(\sigma_{\text{scint}} \cdot Rate_{\text{src}} \cdot t_{\text{single}})^2$ in the single frame and $N_{\text{exp}}$ times that in the stack. With `scintillation_coefficient = 0` it is zero, and the expressions are exactly the ones above.
+
 $N_{\text{est}}$ appears in both places because each frame is sky-subtracted with its own estimate: stacking averages those estimates down at exactly the rate it averages down everything else. $V_{\text{flat}}$ does not follow that rule — see 4.3.1a for why it is evaluated at $t_{\text{single}}$ in one expression and $t_{\text{total}}$ in the other.
 
 **4.3.1a Background Flatness Variance ($V_{\text{flat}}$)**
@@ -377,6 +383,20 @@ deliberately built on $N_{\text{pix}}$ alone, not $N_{\text{bkg}}$: the residual
 Because a single flat field and a single night's background gradient apply identically to every frame of a stack, $f_{\text{flat}}$ does not shrink with more frames the way dark current and readout noise do — the fraction left behind in the final stack is set by the stack's total accumulated background, not by how it was split into exposures. So $V_{\text{flat}}$ is evaluated at $t_{\text{single}}$ in $\text{SNR}_{\text{single}}$ and at $t_{\text{total}}$ in $\text{SNR}_{\text{total}}$, entering once rather than $N_{\text{exp}}$ times.
 
 At 1.5" aperture radius this term was undetectable against the noise floor; at 12" it made the predicted SNR optimistic by a factor of 2 — see §5.3. $f_{\text{flat}} = 0$ (the default) recovers the equations of 4.3.1 exactly as they were before this term existed.
+
+That holds for a stack taken on the same pixels. A dithered stack moves the target across the flat between frames, so part of the residual decorrelates and averages down; the dither pattern is not an input, and the model keeps the undithered case, which is the pessimistic one. The 2% measured for SLT/DU934P came from undithered frames.
+
+**4.3.1b Scintillation ($V_{\text{scint}}$)**
+
+The atmosphere also focuses and defocuses the starlight itself. Its fractional effect on one exposure follows Young (1967), as restated by Osborn et al. (2015, MNRAS 452, 1707):
+
+$$\sigma_{\text{scint}} = C_{\text{scint}} \cdot D^{-2/3} \cdot X^{1.75} \cdot e^{-h/8000\,\text{m}} \cdot (2\,t_{\text{single}})^{-1/2}$$
+
+with $D$ the aperture in centimetres, $X$ the airmass (§4.1.1) and $h$ the site's elevation. $C_{\text{scint}} = 0.09$ is Young's coefficient; Osborn et al. find the median over measured turbulence profiles about 1.5 times higher, so the default is the gentle end. The variance it adds to one frame is
+
+$$V_{\text{scint}} = (\sigma_{\text{scint}} \cdot Rate_{\text{src}} \cdot t_{\text{single}})^2$$
+
+It is independent from frame to frame, so a stack is charged $N_{\text{exp}}$ of them and it averages down like photon noise: no ceiling, unlike $V_{\text{flat}}$. What it caps is a single frame, at $1/\sigma_{\text{scint}}$ — about 400 for SLT at $X = 2$ in 15 s, about 900 for LOT at $X = 1.2$ — which a faint target never approaches and bright-star photometry does. The response reports $\sigma_{\text{scint}}$ as `diagnostics.scintillation_fraction`.
 
 **4.3.2 Cost of the Sky Estimate ($N_{\text{est}}$)**
 
@@ -408,9 +428,17 @@ $$N_{\text{exp}} = \frac{\text{SNR}_{\text{target}}^2 \left( 1/\text{SNR}_{\text
 $\text{SNR}_{\text{ceil}}$ is the asymptotic ceiling the stack approaches as $N_{\text{exp}} \to \infty$: signal and flatness noise both grow with total integration time, so their ratio is fixed and no exposure count crosses it. When $f_{\text{flat}} = 0$ the ceiling is infinite and the expression collapses to the square-root law above. When $\text{SNR}_{\text{target}} \ge \text{SNR}_{\text{ceil}}$ the denominator is non-positive — the target is unreachable at any exposure count — and CASTOR reports that state (`target_reachable = false`, `required_exposures = null`, and $\text{SNR}_{\text{total}}$ set to the ceiling) instead of returning a frame count that never meets the request.
 
 **4.3.4 Saturation Limit**
-To ensure the detector operates within its linear regime, the saturation time limit ($t_{\text{sat}}$) evaluates how long it takes for a single pixel to reach its Full Well Capacity (FWC) under the combined flux of the target peak, sky, and dark current:
+To ensure the detector operates within its linear regime, the saturation time limit ($t_{\text{sat}}$) evaluates how long it takes for a single pixel to reach its saturation level $N_{\text{sat}}$ under the combined flux of the target peak, sky, and dark current:
 
-$$t_{\text{sat}} = \frac{\text{FWC}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
+$$N_{\text{sat}} = \min(\text{FWC},\ N_{\text{clip}}), \qquad t_{\text{sat}} = \frac{N_{\text{sat}}}{Rate_{\text{peak}} + Rate_{\text{sky}} + R_{\text{dark}}}$$
+
+$N_{\text{clip}}$ is `readout_saturation_level`: the readout chain often clips before the well fills. LOT/SOPHIA's 16-bit converter tops out at $65535 \times 0.92 = 60292\ \text{e}^-$ against a $150000\ \text{e}^-$ well, and the end-to-end frames clip exactly there (§5.3). Without it the frame lengths offered for bright stars were 2.5 times too long. $N_{\text{sat}}$ is reported as `diagnostics.saturation_level`.
+
+$Rate_{\text{peak}}$ is the point source's flux on the central pixel with the star centred on it, the Gaussian PSF integrated over that pixel:
+
+$$Rate_{\text{peak}} = Rate_{\text{src,total}} \cdot \text{erf}\!\left(\frac{S_{\text{pix}}}{2\sqrt{2}\,\sigma}\right)^{2}, \qquad \sigma = \frac{FWHM_{\text{tot}}}{2\sqrt{2\ln 2}}$$
+
+The small-pixel form $S_{\text{pix}}^2 / (2\pi\sigma^2)$ it replaced overstated the peak by 15% at SLT's 0.79"/pix under 1.4" seeing and 30% under 1.0", and exceeds 1 once the pixel is wider than the PSF.
 
 **4.3.5 Background/Read Noise Crossover Time**
 $t_{\text{opt}}$ is the single-exposure integration time at which background shot noise (sky + dark current) reaches $k$ times the fixed per-frame readout noise, per pixel — at $k = 1$, the point where it just overtakes it. Beyond this point read noise costs less than the penalty $p$ that $k$ leaves (below), which bounds what lengthening a single exposure can still gain per unit of *total* integration time; once that is small, it becomes more efficient to add exposures than to keep extending one. The API retains the historical name `optimal_exposure_time`, but this is a crossover, not a recommended exposure length: saturation, tracking, cosmic rays, overhead, and the observing strategy also matter. $k$ is the standard-deviation ratio between the two noise sources:
@@ -450,7 +478,9 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 
 ### 5.1 Environmental and Geometric Approximations
 
-* **Airmass Approximation:** The airmass ($X$) assumes a plane-parallel atmosphere modeled via the secant approximation ($X \approx \sec(z)$). This approximation holds well for small to medium zenith angles ($z \lesssim 60^\circ$) but degrades at extreme horizons due to atmospheric curvature.
+* **Airmass Approximation:** The airmass ($X$) is Kasten & Young's (1989) fit, which follows the atmosphere's curvature to the horizon. Extinction coefficients fitted against $\sec(z)$ carry a matching difference of at most 0.3% in $X$ below $z = 60^\circ$.
+
+* **Night Sky Only:** The sky is moonless baseline, zodiacal light and moon. Twilight and daylight are not modelled; the Sun's altitude is reported and warned about (§4.1.1), and Simple mode declines to plan with the Sun up.
 
 * **Lunar Contribution Exclusion:** The dynamic computation of moon flux relies on the Krisciunas and Schaefer model. Its detailed mathematical formulation is omitted from the core text because it is a standard formula.
 
@@ -468,11 +498,11 @@ While the Exposure Time Calculator (ETC) is designed to provide robust and effic
 
 ### 5.3 Detector and Noise Limitations
 
-* **Linear Regime Operation:** The saturation time limit ($t_{\text{sat}}$) assumes a linear response up to the Full Well Capacity ($\text{FWC}$). Non-linear behaviors or charge transfer inefficiencies near saturation limits are not dynamically modeled.
+* **Linear Regime Operation:** The saturation time limit ($t_{\text{sat}}$) assumes a linear response up to $N_{\text{sat}}$, the lower of the Full Well Capacity ($\text{FWC}$) and the readout clip `readout_saturation_level` where one is given (§4.3.4). The clip is taken as 65535 ADU × gain with no bias offset subtracted, so it is the upper end. Non-linear behaviors or charge transfer inefficiencies near saturation limits are not dynamically modeled.
 
 * **Constant Dark and Readout Noise:** Sensor parameters such as dark current rate ($R_{\text{dark}}$) and readout noise ($\text{RON}$) are treated as constant detector specifications across the entire array, omitting potential spatial variations or thermal fluctuations during long-term observations.
 
-* **Photon Noise Only, Partially Closed for Flat-Fielding:** Every other noise term modeled here scales with photon or electron counts; scintillation and PSF instability do not, and they set a floor the model cannot reach. Measured against 314 stars on fifteen LOT/SOPHIA $r'$ frames (2025-11-06), predictions track the observed scatter to within 8% across seven flux bins spanning $2$ to $260\ \text{ke}^-$ (`validation/test_endtoend.py`). An apparent shortfall above $60\ \text{ke}^-$ that grew with brightness — obs/pred as low as 0.22 for the brightest stars — turned out to be a validation artifact, not a gap in this model: those frames' 16-bit readout saturates at $65535\ \text{ADU} \times 0.92\ \text{e}^-/\text{ADU} = 60292\ \text{e}^-$ peak-pixel count, far below the $150000\ \text{e}^-$ Full Well Capacity this preset carries, and stars riding that ceiling were not excluded. Once stars peaking above $50000\ \text{e}^-$ are dropped, the same bins agree with prediction to within 8%, comparable to the fainter ones. Flat-field and background-gradient residual is no longer entirely outside the model: $V_{\text{flat}}$ (§4.3.1a) carries it when `background_flatness_fraction` is set, measured at 2.0% of the background on the one camera it has been checked against (SLT/DU934P). It defaults to 0.0 (not modelled) for every other preset, and the measured value is itself an upper limit from a cloudy night, not a floor a clear one would also hit.
+* **Photon Noise Only, Partially Closed for Flat-Fielding:** Every other noise term modeled here scales with photon or electron counts. Scintillation does not, and is now modelled separately (§4.3.1b, Young's formula); PSF instability is not modelled and sets a floor the model cannot reach. Measured against 314 stars on fifteen LOT/SOPHIA $r'$ frames (2025-11-06), predictions track the observed scatter to within 8% across seven flux bins spanning $2$ to $260\ \text{ke}^-$ (`validation/test_endtoend.py`). An apparent shortfall above $60\ \text{ke}^-$ that grew with brightness — obs/pred as low as 0.22 for the brightest stars — turned out to be a validation artifact, not a gap in this model: those frames' 16-bit readout saturates at $65535\ \text{ADU} \times 0.92\ \text{e}^-/\text{ADU} = 60292\ \text{e}^-$ peak-pixel count, far below the $150000\ \text{e}^-$ Full Well Capacity this preset carries, and stars riding that ceiling were not excluded. Once stars peaking above $50000\ \text{e}^-$ are dropped, the same bins agree with prediction to within 8%, comparable to the fainter ones. Flat-field and background-gradient residual is no longer entirely outside the model: $V_{\text{flat}}$ (§4.3.1a) carries it when `background_flatness_fraction` is set, measured at 2.0% of the background on the one camera it has been checked against (SLT/DU934P). It defaults to 0.0 (not modelled) for every other preset, and the measured value is itself an upper limit from a cloudy night, not a floor a clear one would also hit.
 
 * **Cost of the Sky Estimate:** That same measurement is where $N_{\text{est}}$ (§4.3.2) comes from. Without it the engine ran 13% optimistic at $k_{\text{ap}} = 3$ (observed/predicted 0.868); with it, 1.011. The correction was not fitted — its size follows from the aperture and annulus geometry alone, and the two agree to better than a percent.
 

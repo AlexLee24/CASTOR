@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from numpy.typing import NDArray
 from typing import NamedTuple, TypeAlias
@@ -24,6 +25,8 @@ __all__ = [
     "calculate_peak_pixel_rate",
 
     "calculate_background_flatness_variance",
+    "calculate_scintillation_fraction",
+    "calculate_saturation_level",
     "NoiseTerms",
     "calculate_single_noise_components",
     "calculate_total_noise_components",
@@ -44,20 +47,38 @@ PLANCK_CONSTANT_CGS = 6.62607015e-27  # erg·s
 SPEED_OF_LIGHT_CGS = 2.99792458e10    # cm/s
 ARCSEC_PER_RADIAN = 206264.80624709636 # 180 * 3600 / pi
 
+# math.erf over arrays as well as scalars; numpy has no erf of its own and
+# scipy is not a dependency.
+_erf_ufunc = np.vectorize(math.erf, otypes=[float])
+
+
+def _erf(x: Numeric) -> Numeric:
+    result = _erf_ufunc(x)
+    return float(result) if np.ndim(result) == 0 else result
+
 # ==========================================
 # Stage 2: Physical & Environmental Conversions
 # ==========================================
 
 def calculate_airmass(zenith_angle_deg: Numeric) -> Numeric:
     """
-    Calculate airmass using the secant approximation of the zenith angle.
+    Calculate airmass from the zenith angle with Kasten & Young (1989).
 
-    Corresponds to ATBD Section 4.1.1: X ≈ sec(z) = 1 / cos(z).
+    Corresponds to ATBD Section 4.1.1:
+        X = 1 / (cos z + 0.50572 * (96.07995 - z)^-1.6364),  z in degrees
+
+    The plane-parallel secant this replaced is within 0.3% of it up to z = 60
+    and 1.3% at 75, but diverges at the horizon where the real atmosphere's
+    curvature keeps the path finite: 11.5 against 10.3 at z = 85, and 57 against
+    26 at z = 89. Kasten & Young stays finite (about 38) at z = 90, so the
+    caller's clamp only has to keep z inside [0, 90]. At the zenith it gives
+    0.9997 rather than exactly 1, an extinction difference of well under a
+    millimagnitude.
 
     Parameters
     ----------
     zenith_angle_deg : Numeric
-        Zenith angle in degrees [deg].
+        Zenith angle in degrees [deg], 0 to 90.
 
     Returns
     -------
@@ -65,7 +86,7 @@ def calculate_airmass(zenith_angle_deg: Numeric) -> Numeric:
         Airmass (X) [dimensionless].
     """
     zenith_rad = np.radians(zenith_angle_deg)
-    return 1.0 / np.cos(zenith_rad)
+    return 1.0 / (np.cos(zenith_rad) + 0.50572 * (96.07995 - zenith_angle_deg) ** -1.6364)
 
 def calculate_effective_area(
     primary_mirror_diameter: Numeric, 
@@ -368,7 +389,7 @@ def _calculate_base_electron_rate(
     extinction_coeff : Numeric
         Atmospheric attenuation per unit airmass [mag/airmass].
     airmass : Numeric
-        Approximated secant of the zenith angle [dimensionless].
+        Airmass of the target, from calculate_airmass [dimensionless].
     filter_bandwidth : Numeric
         Effective spectral bandwidth [nm].
     effective_area : Numeric
@@ -520,13 +541,15 @@ def calculate_peak_pixel_rate(
     Numeric
         Peak photoelectron count rate on the central pixel [e-/s/pix].
     """
-    # For a Gaussian PSF, FWHM = 2 * sqrt(2 * ln(2)) * sigma
-    # The fraction of total flux falling into a central pixel (approximated for small pixels)
-    # is (S_pixel^2) / (2 * pi * sigma^2).
-    
-    sigma_squared = (total_fwhm ** 2.0) / (8.0 * np.log(2.0))
-    peak_fraction = (pixel_scale ** 2.0) / (2.0 * np.pi * sigma_squared)
-    
+    # For a Gaussian PSF, FWHM = 2 * sqrt(2 * ln(2)) * sigma. The fraction of the
+    # flux on the central pixel, with the star centred on it, is the Gaussian
+    # integrated over that square: erf(S / (2 * sqrt(2) * sigma))^2. The
+    # small-pixel approximation S^2 / (2 * pi * sigma^2) this replaced overstated
+    # it by 15% at SLT's 0.79"/pix under 1.4" seeing and 30% under 1.0", and can
+    # exceed 1 when the pixel is wider than the PSF.
+    sigma = total_fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    half_width = pixel_scale / (2.0 * np.sqrt(2.0) * sigma)
+    peak_fraction = _erf(half_width) ** 2.0
     return source_count_rate * peak_fraction
 
 # ==========================================
@@ -580,6 +603,63 @@ def calculate_background_flatness_variance(
     background_electrons = sky_count_rate * exp_time
     return (background_flatness_fraction * background_electrons * num_pixels_aperture) ** 2.0
 
+# Young (1967) as restated by Osborn et al. (2015, MNRAS 452, 1707), eq. 7: the
+# fractional scintillation of one exposure. 0.09 is Young's coefficient for a
+# typical site; Osborn et al. find the median over real turbulence profiles
+# about 1.5 times higher, so the default is the gentle end, not the pessimistic.
+SCINTILLATION_COEFFICIENT_YOUNG = 0.09
+# Scale height of the turbulence that drives scintillation [m] (Young 1967).
+SCINTILLATION_SCALE_HEIGHT_M = 8000.0
+
+
+def calculate_scintillation_fraction(
+    primary_mirror_diameter: Numeric,
+    airmass: Numeric,
+    site_elevation_m: Numeric,
+    single_exp_time: Numeric,
+    coefficient: Numeric = SCINTILLATION_COEFFICIENT_YOUNG
+) -> Numeric:
+    """
+    Calculate the fractional scintillation noise of one exposure (Young 1967).
+
+    Corresponds to ATBD Section 4.3.1b:
+        sigma_scint = C * D^(-2/3) * X^1.75 * exp(-h / 8000 m) * (2 t)^(-1/2)
+    with D the aperture in centimetres, X the airmass, h the site's elevation
+    and t the single-frame exposure in seconds.
+
+    Unlike every other term this is not counting noise: it is the atmosphere
+    focusing and defocusing the starlight itself, so its standard deviation is
+    a fixed fraction of the signal. It is independent from frame to frame and
+    averages down over a stack like photon noise does, so it sets no ceiling;
+    what it caps is the SNR of one frame, at 1 / sigma_scint. That cap is in
+    the hundreds for a small telescope at moderate airmass (SLT, X = 2, 15 s:
+    about 400), so it matters for bright-star photometry and timing work and
+    is invisible at the SNR of a faint transient.
+
+    Parameters
+    ----------
+    primary_mirror_diameter : Numeric
+        Telescope aperture (D) [m].
+    airmass : Numeric
+        Airmass of the target (X) [dimensionless].
+    site_elevation_m : Numeric
+        Observatory elevation above sea level (h) [m].
+    single_exp_time : Numeric
+        Integration time of one frame (t) [s].
+    coefficient : Numeric
+        Young's C [dimensionless]. 0 switches the term off.
+
+    Returns
+    -------
+    Numeric
+        Fractional scintillation of one frame's signal (sigma_scint) [dimensionless].
+    """
+    diameter_cm = primary_mirror_diameter * 100.0
+    return (coefficient * diameter_cm ** (-2.0 / 3.0) * airmass ** 1.75
+            * np.exp(-site_elevation_m / SCINTILLATION_SCALE_HEIGHT_M)
+            / np.sqrt(2.0 * single_exp_time))
+
+
 class NoiseTerms(NamedTuple):
     """
     The signal behind one SNR and every variance term that divides it.
@@ -609,8 +689,10 @@ class NoiseTerms(NamedTuple):
         Read noise, N_exp * N_bkg * RON² [e-²].
     flatness_variance : Numeric
         Background flatness term, V_flat(t) of ATBD 4.3.1a [e-²].
+    scintillation_variance : Numeric
+        Scintillation, N_exp * (sigma_scint * Rate_src * t_single)², ATBD 4.3.1b [e-²].
     total_variance : Numeric
-        The variance the SNR divides by [e-²]. It equals the sum of the five
+        The variance the SNR divides by [e-²]. It equals the sum of the six
         terms above to rounding, but is evaluated in the order the SNR always has
         been, so it, not that sum, is the one to take a square root of.
     num_pixels_background : Numeric
@@ -623,6 +705,7 @@ class NoiseTerms(NamedTuple):
     dark_variance: Numeric
     readout_variance: Numeric
     flatness_variance: Numeric
+    scintillation_variance: Numeric
     total_variance: Numeric
     num_pixels_background: Numeric
 
@@ -634,7 +717,8 @@ def calculate_single_noise_components(
     num_pixels_aperture: Numeric,
     single_exp_time: Numeric,
     num_pixels_sky_estimate: Numeric = 0.0,
-    background_flatness_fraction: Numeric = 0.0
+    background_flatness_fraction: Numeric = 0.0,
+    scintillation_fraction: Numeric = 0.0
 ) -> NoiseTerms:
     """
     Calculate the signal and each noise variance term of a single exposure frame.
@@ -675,10 +759,13 @@ def calculate_single_noise_components(
     # Summed as one expression, in the order it had before the terms were
     # returned, so that every SNR stays the same to the last bit. Adding the
     # aperture-summed terms below would round differently.
+    # Scintillation goes last, so with it switched off (0.0) every bit is as before.
+    scintillation_variance = (scintillation_fraction * signal) ** 2.0
     total_variance = (
         source_variance
         + background_pixels * (sky_variance_pixel + dark_variance_pixel + readout_variance_pixel)
         + flatness_variance
+        + scintillation_variance
     )
 
     return NoiseTerms(
@@ -688,6 +775,7 @@ def calculate_single_noise_components(
         dark_variance=background_pixels * dark_variance_pixel,
         readout_variance=background_pixels * readout_variance_pixel,
         flatness_variance=flatness_variance,
+        scintillation_variance=scintillation_variance,
         total_variance=total_variance,
         num_pixels_background=background_pixels,
     )
@@ -702,7 +790,8 @@ def calculate_total_noise_components(
     total_exp_time: Numeric,
     num_exposures: Numeric,
     num_pixels_sky_estimate: Numeric = 0.0,
-    background_flatness_fraction: Numeric = 0.0
+    background_flatness_fraction: Numeric = 0.0,
+    scintillation_fraction: Numeric = 0.0
 ) -> NoiseTerms:
     """
     Calculate the signal and each noise variance term of a stack of exposures.
@@ -736,9 +825,13 @@ def calculate_total_noise_components(
         sky_count_rate, total_exp_time, num_pixels_aperture, background_flatness_fraction
     )
     # One expression in its original order, as in calculate_single_noise_components.
+    # Scintillation is independent frame to frame, so each frame adds its own
+    # (sigma_scint * frame signal)^2; it averages down with N like photon noise.
+    scintillation_variance = num_exposures * (
+        scintillation_fraction * source_count_rate * single_exp_time) ** 2.0
     total_variance = source_variance + (background_pixels * sky_variance_pixel) + \
                      (num_exposures * background_pixels * (dark_variance_frame + readout_variance_frame)) + \
-                     flatness_variance
+                     flatness_variance + scintillation_variance
 
     return NoiseTerms(
         signal=signal,
@@ -747,6 +840,7 @@ def calculate_total_noise_components(
         dark_variance=num_exposures * background_pixels * dark_variance_frame,
         readout_variance=num_exposures * background_pixels * readout_variance_frame,
         flatness_variance=flatness_variance,
+        scintillation_variance=scintillation_variance,
         total_variance=total_variance,
         num_pixels_background=background_pixels,
     )
@@ -759,7 +853,8 @@ def calculate_single_snr(
     num_pixels_aperture: Numeric,
     single_exp_time: Numeric,
     num_pixels_sky_estimate: Numeric = 0.0,
-    background_flatness_fraction: Numeric = 0.0
+    background_flatness_fraction: Numeric = 0.0,
+    scintillation_fraction: Numeric = 0.0
 ) -> Numeric:
     """
     Calculate the Signal-to-Noise Ratio (SNR) for a single exposure frame.
@@ -791,6 +886,9 @@ def calculate_single_snr(
         Flat-field/background-gradient residual, see
         calculate_background_flatness_variance. Zero (the default) means not
         modelled, the behaviour before this term existed.
+    scintillation_fraction : Numeric
+        Fractional scintillation of this frame, from
+        calculate_scintillation_fraction. Zero (the default) means not modelled.
 
     Returns
     -------
@@ -800,7 +898,7 @@ def calculate_single_snr(
     terms = calculate_single_noise_components(
         source_count_rate, sky_count_rate, dark_current_rate, readout_noise,
         num_pixels_aperture, single_exp_time, num_pixels_sky_estimate,
-        background_flatness_fraction
+        background_flatness_fraction, scintillation_fraction
     )
     return terms.signal / np.sqrt(terms.total_variance)
 
@@ -814,7 +912,8 @@ def calculate_total_snr(
     total_exp_time: Numeric,
     num_exposures: Numeric,
     num_pixels_sky_estimate: Numeric = 0.0,
-    background_flatness_fraction: Numeric = 0.0
+    background_flatness_fraction: Numeric = 0.0,
+    scintillation_fraction: Numeric = 0.0
 ) -> Numeric:
     """
     Calculate the Total Signal-to-Noise Ratio (SNR) across multiple exposures.
@@ -844,6 +943,16 @@ def calculate_total_snr(
         stack's total accumulated background, not by how many frames composed
         it. Zero (the default) means not modelled.
 
+        That holds when every frame lands on the same pixels. A dithered stack
+        moves the target across the flat between frames, so part of this
+        residual decorrelates and averages down; the model does not know the
+        dither pattern and keeps the undithered, pessimistic case. The 2%
+        measured for SLT/DU934P came from undithered frames.
+    scintillation_fraction : Numeric
+        Fractional scintillation of one frame, from
+        calculate_scintillation_fraction. Charged once per frame, so it
+        averages down with the stack. Zero (the default) means not modelled.
+
     Returns
     -------
     Numeric
@@ -852,7 +961,7 @@ def calculate_total_snr(
     terms = calculate_total_noise_components(
         source_count_rate, sky_count_rate, dark_current_rate, readout_noise,
         num_pixels_aperture, single_exp_time, total_exp_time, num_exposures,
-        num_pixels_sky_estimate, background_flatness_fraction
+        num_pixels_sky_estimate, background_flatness_fraction, scintillation_fraction
     )
     return terms.signal / np.sqrt(terms.total_variance)
 
@@ -957,6 +1066,37 @@ def solve_required_exposures(
     # denominator <= 0 means the target is at or above the ceiling: unreachable.
     return np.where(np.asarray(denominator) > 0.0, required, np.inf)
 
+def calculate_saturation_level(
+    full_well_capacity: Numeric,
+    readout_saturation_level: Numeric | None = None
+) -> Numeric:
+    """
+    Calculate the pixel count at which a frame stops recording light faithfully.
+
+    Corresponds to ATBD Section 4.3.4. The full well is only one ceiling: the
+    readout chain often clips first. A 16-bit converter tops out at
+    65535 ADU x gain, which for LOT/SOPHIA (0.92 e-/ADU) is 60292 e-, well under
+    its 150000 e- well — and the end-to-end validation found exactly that clip in
+    real frames (ATBD 5.3). Whichever comes first is the one that saturates.
+
+    Parameters
+    ----------
+    full_well_capacity : Numeric
+        Charge a pixel holds [e-].
+    readout_saturation_level : Numeric or None
+        Count where the readout clips or leaves its linear range [e-], or None
+        when it is not known, in which case the full well alone sets the limit.
+
+    Returns
+    -------
+    Numeric
+        Saturation level [e-].
+    """
+    if readout_saturation_level is None:
+        return full_well_capacity
+    return np.minimum(full_well_capacity, readout_saturation_level)
+
+
 def calculate_saturation_time(
     full_well_capacity: Numeric,
     peak_pixel_rate: Numeric,
@@ -972,7 +1112,8 @@ def calculate_saturation_time(
     Parameters
     ----------
     full_well_capacity : Numeric
-        Maximum electron capacity per pixel before saturation [e-].
+        Count per pixel at which the frame saturates [e-]: the full well, or
+        the lower readout clip from calculate_saturation_level.
     peak_pixel_rate : Numeric
         Peak photoelectron count rate on the central pixel [e-/s/pix].
     sky_count_rate : Numeric

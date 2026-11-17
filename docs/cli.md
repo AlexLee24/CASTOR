@@ -176,7 +176,7 @@ needs it should read the JSON rather than parse the text:
 | `response.noise.single`, `response.noise.total` | The signal and each variance term behind both SNRs ([ATBD](ATBD.md) §4.3.6). `signal / sqrt(total_variance)` is the SNR exactly. |
 | `response.core.total_exp_time` | t_single × N, integration only — no readout overhead. |
 | `response.core.background_dominance_factor` | The k `optimal_exposure_time` was solved for, echoed at the default too; the text names it only off the default. |
-| `response.diagnostics.airmass`, `.sky_surface_brightness` | The airmass (after the 89° clamp) and the μ_sky the calculation actually used. |
+| `response.diagnostics.airmass`, `.sky_surface_brightness` | The airmass (Kasten & Young, zenith angle clamped at 90°) and the μ_sky the calculation actually used. |
 | `response.ephemeris` | Target and moon elevation, lunar phase angle and separation. A target below the horizon has a negative elevation here, while its airmass is clamped. |
 
 Adding these left the text rows exactly as they were (`tests/test_cli.py` pins
