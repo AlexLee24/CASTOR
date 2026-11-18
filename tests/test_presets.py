@@ -141,13 +141,14 @@ def test_a_site_fills_in_its_sky_and_location(shipped):
     Resolving with no filter named lands on the first listed, which for Lulin is
     Sloan r' and carries its own measured mu_dark — the local-only baseline, with
     zodiacal light split back out (validation/QUESTIONS.md 9/10), not the 20.92
-    that was actually measured. Extinction is the other way round: no band has a
-    trustworthy one, so all of them still inherit the site's 0.17.
+    that was actually measured. Extinction is the band's own too, from the 2026-11-10
+    SLT night (validation/slt_dz936.py); the site's 0.17 is only a fallback now.
     """
     environment = shipped.resolve("lulin")["environment"]
 
     assert environment["location"]["elevation_m"] == 2862.0
-    assert environment["extinction_coeff"] == 0.17               # site fallback
+    assert shipped.profile("lulin").environment.extinction_coeff == 0.17  # fallback
+    assert environment["extinction_coeff"] == 0.07               # r', measured
     assert shipped.profile("lulin").environment.mu_dark == 21.5
     assert environment["mu_dark"] == 21.26                       # r', local only
     assert environment["zodiacal_share"] == 0.267                # r'
@@ -261,35 +262,36 @@ def test_choosing_a_filter_changes_the_throughput_in_front_of_it(shipped):
 
 
 def test_a_filter_without_a_measurement_leaves_the_site_values_alone(shipped):
-    """Lulin u' has an SLT throughput now, but no mu_dark and no LOT throughput,
-    so those still inherit.
+    """Lulin u' has an SLT throughput, a sky and an extinction now, but no
+    zodiacal split and no LOT throughput, so those still inherit.
 
-    The point of overriding per field rather than per section: a band can carry a
-    telescope-scoped throughput without also claiming a sky brightness nobody
-    measured for it, or a throughput for a telescope it was never measured on.
+    The point of overriding per field rather than per section: a band can carry
+    what was measured without also claiming a split nobody made for it, or a
+    throughput for a telescope it was never measured on.
     """
-    site = shipped.profile("lulin").environment
-
     fragment = shipped.resolve("lulin", optic_filter="Sloan_u")  # LOT is the default
-    assert fragment["environment"]["mu_dark"] == site.mu_dark
-    assert fragment["environment"]["extinction_coeff"] == site.extinction_coeff
+    assert fragment["environment"]["mu_dark"] == 22.73                 # u', measured
+    assert fragment["environment"].get("zodiacal_share") is None       # never split
     assert fragment["instrument"]["telescope"]["optical_throughput"] == (
         shipped.profile("lulin").telescopes["LOT"].telescope.optical_throughput)
 
 
-def test_every_lulin_band_still_inherits_the_site_extinction(shipped):
-    """Extinction is band-dependent, and Lulin's is still not measured well enough.
+def test_every_lulin_band_carries_its_own_extinction(shipped):
+    """Extinction is band-dependent, and every Lulin band now says so.
 
-    The 2024-04-14 SLT night swept airmass 1.81-3.72 and still could not deliver
-    it: the sky faded 0.1-0.4 mag between the halves of the night at matched
-    airmass, degenerate with the airmass term because the target was setting.
-    See validation/slt.py WHY_NO_EXTINCTION. The field exists on BandSky and is
-    deliberately unset, so the site value stands.
+    The 2024-04-14 SLT night swept airmass 1.81-3.72 and could not deliver it:
+    the sky faded 0.1-0.4 mag between the halves of the night, degenerate with
+    the airmass term because the target only set (validation/slt.py
+    WHY_NO_EXTINCTION). 2026-11-10's field rose and set, the two branches agree,
+    and those values are what the bands carry (validation/slt_dz936.py). The
+    site's 0.17 stays as the fallback for a filter added without one.
     """
     site = shipped.profile("lulin").environment
-    for band in shipped.profile("lulin").filters:
+    for band, entry in shipped.profile("lulin").filters.items():
         fragment = shipped.resolve("lulin", optic_filter=band)
-        assert fragment["environment"]["extinction_coeff"] == site.extinction_coeff
+        assert entry.environment.extinction_coeff is not None
+        assert fragment["environment"]["extinction_coeff"] == entry.environment.extinction_coeff
+        assert fragment["environment"]["extinction_coeff"] != site.extinction_coeff
 
 
 def test_a_hardware_family_cannot_be_given_a_sky(tmp_path):

@@ -19,7 +19,8 @@ nuisance terms: in Model B it reaches 0.98, i.e. k is not identified. Several
 bands return negative k (stars brightening as they set), which is unphysical and
 is transparency improving faster than the air dims. Only the *ordering*
 (extinction falls towards the red) survives, matching slt.py's single-night
-finding. presets.json therefore keeps its site-wide 0.17 fallback.
+finding, so none of these k reached presets.json; its per-band values came
+from 2026-11-10's rising-and-setting field instead (slt_dz936.py).
 
 Run: `uv run --with numpy --with pandas python validation/analyze_slt_extinction.py`
 """

@@ -192,7 +192,25 @@ the telescope's and has been for twenty years. Absent an answer, the honest
 default is the weaker reading: `lulin_prototype.py`'s comparison stays what
 README.md already calls it — "weakly corroborated," not confirmed.
 
-## 4. What is the extinction in each band? — OBSERVE
+## 4. What is the extinction in each band? — CLOSED for one night
+
+**2026-11-10 delivered it.** SLT + DZ936, AT2026afqt: the field rose from X 1.64
+to the meridian (1.107, ~15:45 UTC) and set to 4.9, so airmass stopped tracking
+time — the first condition asked for below. The night was photometric and the
+check asked for below passes: the rising and setting branches give the same k
+to 0.01 in g'r' and 0.05 in u'i'z'.
+
+| | u' | g' | r' | i' | z' |
+|---|---|---|---|---|---|
+| k, both branches | 0.443 | 0.158 | 0.071 | 0.038 | 0.051 |
+| rising only | 0.381 | 0.162 | 0.062 | 0.093 | 0.082 |
+| setting only | 0.433 | 0.153 | 0.073 | 0.042 | 0.052 |
+
+Each Sloan filter in `presets.json` now carries its k (rounded to 0.01); 0.17
+stays as the site fallback. One night: whether Lulin's extinction moves night to
+night is not known, and a second rising-and-setting night is what would say.
+`slt_dz936.py`, `test_slt_dz936.py`. What follows is the history of the
+attempts that could not.
 
 **Attempted and failed, on a night that had everything except photometric
 conditions.** SLT/SN2024ggi, 2024-04-14: 241 frames, five bands, airmass 1.81
@@ -735,8 +753,6 @@ without the fix: `noise.single.signal / sqrt(noise.single.flatness_variance)` is
 S/F (ATBD 4.3.6), and a caller can compare it with `target_snr` before trusting
 `required_exposures`.
 
----
-
 ## 19. SLT is 30-70% more efficient than question 5 measured; QE per band — PARTLY CLOSED
 
 **Measured (2026-11-18), with Kinder's own photometry** (`validation/slt_2026.py`).
@@ -778,8 +794,27 @@ frames from 2026-07-12 to 2026-11-02. The DZ936 is the one on the telescope now.
 **No coating loss.** LOT's best nights *rise* from 2025-11 to 2026-09/10.
 
 **Still open:**
-- k = 0.17 in every band is a guess. One SLT night gives slopes of about 0.16
-  in g' and 0.09 in r' (question 4).
+- **k, and an estimate standing in for it.** The optics above were inverted with
+  k = 0.17 in every band. presets.json now carries the k measured on the DZ936's
+  2026-11-10 night (`slt_dz936.py`: g' 0.16, r' 0.07, i' 0.04, z' 0.05), and
+  pairing that k with optics inverted at 0.17 would remove the atmosphere twice.
+  So the preset moves each band to the measured k at one assumed airmass, X = 1.3
+  (`slt_2026.k_rescale`): g' 0.404, r' 0.565, i' 0.438, z' 0.251, fallback 0.349.
+  For X between 1.1 and 1.5 the moved DZ936 values are g' 0.405-0.407, r'
+  0.526-0.546, i' 0.363-0.380, z' 0.197-0.205, against the 2026-11-10 night's
+  own 0.411 / 0.539 / 0.401 / 0.206 at the same band QE: the gap between the two
+  measurements is mostly k. What replaces the estimate: Kinder's per-frame zero
+  points and airmasses, inverted with the measured k. Whether k changes from
+  night to night is still unknown (question 4).
+- **The DZ936 against its own night.** Counts above the atmosphere on
+  2026-11-10, against the preset as it now stands: u' 1.8, g' 1.02, r' 0.96,
+  i' 0.91, z' 0.82. g'r'i' are within 10%. z' is ~1.2x optimistic, because the
+  preset is the two cameras' mean and the DU934P is stronger there; u' is ~1.8x
+  pessimistic, because 0.205 comes from the 2024 DU934P night through the
+  DZ936's BV QE (0.19), and the 2026-11-10 u' rests on SkyMapper with no colour
+  term. Band QE (`filters.*.camera`) cannot hold a per-pair optical train, so a
+  camera-keyed throughput override would close this; until then
+  `test_slt_dz936.py` keeps the night's band response out of presets.json.
 - u' has no 2026 measurement.
 - i' and z' on the DZ936 rest on one frame each.
 - SOPHIA's QE is still one flat number (question 13). LOT's band values were

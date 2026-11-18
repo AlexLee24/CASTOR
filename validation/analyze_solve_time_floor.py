@@ -286,6 +286,8 @@ def write_report(table):
         rows.append(f"| {band}' | {row['asymptotic_snr_ceiling']:.2f} | {frames} | {outcome} |")
     table_rows = "\n".join(rows)
     g_frames = int(example.loc["g", "exact_exposures"])
+    r_ceiling = float(example.loc["r", "asymptotic_snr_ceiling"])
+    r_frames = int(example.loc["r", "exact_exposures"])
     text = f"""# Solve-for-time versus the correlated background floor
 
 The SLT DU934P preset carries the 2% background-flatness residual measured from
@@ -310,12 +312,15 @@ near zenith, and requested SNR 20.
 |---|---:|---:|---|
 {table_rows}
 
-The r' request sits above its own ceiling: the response now returns
+The i' request sits above its own ceiling: the response returns
 `target_reachable = false`, `required_exposures = null`, `total_snr` = the
-ceiling, and a warning, rather than the six frames / SNR 14.44 the square-root
-law used to claim. The i' target is farther beyond its ceiling. The g' target is
-reachable and now takes {g_frames} frames — enough to actually clear SNR 20 —
-where the old solver returned 4 and reached only 17.35.
+ceiling, and a warning. r' was the case that exposed the bug — the square-root
+law claimed six frames / SNR 14.44 against a ceiling of 18.46 — and it sat above
+its ceiling until r' carried its own measured extinction (0.07 for the site's
+0.17, 2026-11, `slt_dz936.py`). Its ceiling is now {r_ceiling:.2f}, just over the
+request, and clearing it takes {r_frames} frames: what standing just under a
+correlated floor costs. The g' target takes {g_frames} frames — enough to
+actually clear SNR 20 — where the old solver returned 4 and reached only 17.35.
 
 LOT is the control: Sophia's preset has `background_flatness_fraction = 0`, so
 the ceiling is infinite, the inverse collapses to the exact square-root law, and

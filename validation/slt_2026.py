@@ -35,7 +35,21 @@ SLT_2026_NIGHTS = {"SLT_DU934P": ["2026-10-04"], "SLT_DZ936": ["2026-11-09", "20
 LOT_2026 = {"g": {"median": 0.326}, "r": {"median": 0.577}, "i": {"median": 0.338}}
 
 
+#: The optics above are inverted with k = 0.17 in every band. presets.json now carries the measured k from
+#: slt_dz936.py (2026-11-10), and pairing that k with optics inverted at 0.17 would remove the atmosphere twice. Until
+#: Kinder's per-frame zero points and airmasses are in hand, the optics are moved to the measured k at one assumed
+#: airmass: T(k_meas) = T(0.17) * 10^(0.4 (k_meas - 0.17) X). An ESTIMATE; QUESTIONS.md 19.
+K_INVERTED = 0.17
+X_ASSUMED = 1.3
+
+
+def k_rescale(band):
+    """Factor that moves an optics value inverted at K_INVERTED to slt_dz936's measured k, at X_ASSUMED."""
+    import slt_dz936
+    return 10 ** (0.4 * (slt_dz936.EXTINCTION[band]["k"] - K_INVERTED) * X_ASSUMED)
+
+
 def preset_value(band):
-    """SLT's band optical train in presets.json: the two cameras' mean."""
+    """SLT's band optical train in presets.json: the two cameras' mean, moved to the measured k."""
     a, b = SLT_OPTICS_2026[band]["SLT_DU934P"], SLT_OPTICS_2026[band]["SLT_DZ936"]
-    return round((a + b) / 2, 3)
+    return round((a + b) / 2 * k_rescale(band), 3)

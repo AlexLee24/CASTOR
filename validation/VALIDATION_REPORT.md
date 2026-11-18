@@ -215,8 +215,9 @@ Each of these is asserted by a test, so it either stays true or announces itself
   degenerate with the airmass term and inflates every k. The band that faded
   most is the band inflated most, which is what identifies it as weather. The
   *ordering* survives — extinction falls towards the red on every cut — and no
-  absolute value does, so presets.json keeps the site-wide 0.17 and `test_slt.py`
-  asserts the per-band values stay out. Calibrated against SkyMapper DR4, not
+  absolute value does, so `test_slt.py` asserts that night's per-band values
+  stay out. (The per-band k presets.json now carries came later, from a field
+  that rose and set — see the SLT + DZ936 finding below.) Calibrated against SkyMapper DR4, not
   Pan-STARRS DR2 — this field's declination (-32.8°) is outside PS1's
   footprint — so it carries an uncorrected systematic on top of the fit error
   from the two systems' natural photometric bands not being identical.
@@ -232,9 +233,25 @@ Each of these is asserted by a test, so it either stays true or announces itself
   Apogee model, 2048x2048 at 13.5um — but the frames themselves are 3056x3056
   at 12um, U9000's geometry exactly. The name is stale, not the hardware; only
   the pixel geometry, read straight from the detector, can be trusted. Both
-  retired cameras are now in `presets.json` (`SLT_DZ936`, `SLT_U9000`) so
-  frames from those eras can still be reduced, sourced from Andor's own iKon
-  brochure and a U9000 datasheet Lulin hosts itself.
+  older cameras are in `presets.json` (`SLT_DZ936`, `SLT_U9000`) so frames
+  from those eras can still be reduced, sourced from Andor's own iKon brochure
+  and a U9000 datasheet Lulin hosts itself. The DZ936 went back on SLT in Nov
+  2026 as a stand-in for the DU934P, and is now checked on its own frames:
+
+- **SLT + DZ936, 2026-11-10: the night that finally measured extinction.**
+  AT2026afqt, 139 frames; the field rose to the meridian (X 1.107) and set to
+  4.9, so the rising and setting branches separate the airmass term from any
+  drift — what SN2024ggi's setting-only nights could not. They agree (0.01 in
+  g'r', 0.05 elsewhere): k = 0.44 / 0.16 / 0.07 / 0.04 / 0.05 in u'g'r'i'z',
+  now on each filter in presets.json with 0.17 as the fallback. The same night
+  measured u' and z' sky for the first time (22.73 and 18.71; both had the
+  site-wide 21.5, z' 2.8 mag too dark), the DZ936's read noise (5.92, not the
+  brochure's 7.0), and SLT's focal length (3.523 m, not 3.414; both cameras'
+  plate scales agree). Field-star scatter matches the noise model within ~10%
+  where it is well measured. Not in presets.json: the camera's band response
+  (counts 0.78 / 1.23 / 1.20 / 0.98 / 0.62 of predicted), because the file can
+  key a band's throughput by telescope but not by camera (QUESTIONS.md 19).
+  `slt_dz936.py`, `test_slt_dz936.py`.
 
 - **SOPHIA's dark current at -80°C is now bounded by a real dark frame, not
   guessed.** 20 real -80°C, 300s frames (QUESTIONS.md 6) — no bias frame to
@@ -260,7 +277,7 @@ Each of these is asserted by a test, so it either stays true or announces itself
 
 ### Open questions
 
-**[QUESTIONS.md](QUESTIONS.md)** is the single index: seventeen items, two of
+**[QUESTIONS.md](QUESTIONS.md)** is the single index: nineteen items, two of
 them already marked CLOSED, each labelled with who can close it — the
 observatory, a night of telescope time, us, or a decision. Nothing open is
 recorded only here, in a `GUESS` row, or in an xfail reason; if it is open, it
@@ -290,8 +307,9 @@ and a validation test; the observatory's FITS files remain ignored.
 |---|---|---|
 | LOT r' per-star SNR | 261 stars below 60 ke- give median observed/predicted SNR **1.011**, bootstrap 95% CI 0.980–1.050; no resolved flux, colour, or detector-radius trend | End-to-end residuals |
 | LOT r' colour term | `+0.0182 mag per mag` in Pan-STARRS g-r (95% CI +0.0036 to +0.0423); only 1.5% across the central 90% colour range, far too small to explain the r' throughput excess | Colour term |
-| Correlated-noise inverse audit | Fixed: solve-for-time now inverts the full stacked-SNR relation and reports SLT r' AB=20 SNR 20 as **unreachable** (ceiling **18.46**) instead of the old six-frame / SNR 14.44 answer | Solve-for-time flatness |
-| Forward performance | Under the stated standard scene, one-hour SNR=5 limits are LOT g/r/i = **23.91/23.84/23.04**, SLT = **21.84/21.36/20.51** AB mag | Forward performance |
+| Correlated-noise inverse audit | Fixed: solve-for-time now inverts the full stacked-SNR relation; the case that exposed it, SLT r' AB=20 SNR 20, was reported **unreachable** (ceiling 18.46) instead of the old six-frame / SNR 14.44 answer, and with r' carrying its measured extinction now clears a ceiling of **20.27** in 148 frames; i' (ceiling 9.33) is the unreachable case | Solve-for-time flatness |
+| Forward performance | Under the stated standard scene, one-hour SNR=5 limits are LOT g/r/i = **23.92/23.94/23.17**, SLT = **21.84/21.46/20.65** AB mag | Forward performance |
+| SLT + DZ936 (2026-11-10) | First night on the stand-in camera; field rose and set, so **per-band extinction** finally measured (u' 0.44 → z' 0.05, branches agree); u'/z' sky measured (22.73 / 18.71, z' was 2.8 mag too dark); read noise 5.92; SLT focal length 3.523 m. The camera's band response (u' 0.78, z' 0.62 of predicted) is recorded, not yet in presets | SLT + DZ936 |
 | Extended-source noise | NGC 3621 SLT r': the fixed model (RN 9.28 e- + 2% flatness) tracks measured aperture noise to **~1%** to 12"; the shipped RN-3.3 model ran 1.5–3.2x low | Extended-source noise |
 
 Four further figures draw data the tables only summarise: the
@@ -333,7 +351,7 @@ SLT carries a measured 2% correlated background residual. Sophia currently
 carries zero, meaning unmeasured rather than absent, so the long-integration
 LOT/SLT gap is partly a model-completeness gap. The atlas is also conditional
 on one pointing, 1.421 arcsec image FWHM (1.4 arcsec seeing plus instrument terms), 120 s frames, the top-hat passbands and the
-site-wide extinction fallback. It is a planning baseline, not an empirical
+per-band extinction from one night (2026-11-10). It is a planning baseline, not an empirical
 limiting-magnitude claim.
 
 ### Recommended order from here
@@ -521,16 +539,19 @@ near zenith, and requested SNR 20.
 
 | Band | Asymptotic SNR ceiling | Exposures CASTOR now returns | Outcome |
 |---|---:|---:|---|
-| g' | 29.78 | 7 | reaches SNR 20 |
-| r' | 18.46 | unreachable | ceiling 18.46 < 20, reported unreachable |
-| i' | 8.27 | unreachable | ceiling 8.27 < 20, reported unreachable |
+| g' | 30.06 | 7 | reaches SNR 20 |
+| r' | 20.27 | 148 | reaches SNR 20 |
+| i' | 9.33 | unreachable | ceiling 9.33 < 20, reported unreachable |
 
-The r' request sits above its own ceiling: the response now returns
+The i' request sits above its own ceiling: the response returns
 `target_reachable = false`, `required_exposures = null`, `total_snr` = the
-ceiling, and a warning, rather than the six frames / SNR 14.44 the square-root
-law used to claim. The i' target is farther beyond its ceiling. The g' target is
-reachable and now takes 7 frames — enough to actually clear SNR 20 —
-where the old solver returned 4 and reached only 17.35.
+ceiling, and a warning. r' was the case that exposed the bug — the square-root
+law claimed six frames / SNR 14.44 against a ceiling of 18.46 — and it sat above
+its ceiling until r' carried its own measured extinction (0.07 for the site's
+0.17, 2026-11, `slt_dz936.py`). Its ceiling is now 20.27, just over the
+request, and clearing it takes 148 frames: what standing just under a
+correlated floor costs. The g' target takes 7 frames — enough to
+actually clear SNR 20 — where the old solver returned 4 and reached only 17.35.
 
 LOT is the control: Sophia's preset has `background_flatness_fraction = 0`, so
 the ceiling is infinite, the inverse collapses to the exact square-root law, and
@@ -616,12 +637,12 @@ Lulin, no lunar term, and each filter's current preset sky and throughput.
 
 | Telescope | Band | SNR=5, 120 s | SNR=5, 1 h | SNR=5, 4 h | SNR=10, 1 h |
 |---|---|---:|---:|---:|---:|
-| LOT | g' | 22.03 | 23.91 | 24.66 | 23.15 |
-| LOT | r' | 21.98 | 23.84 | 24.60 | 23.09 |
-| LOT | i' | 21.17 | 23.04 | 23.79 | 22.28 |
-| SLT | g' | 20.82 | 21.84 | 21.91 | 21.08 |
-| SLT | r' | 20.60 | 21.36 | 21.40 | 20.61 |
-| SLT | i' | 19.97 | 20.51 | 20.54 | 19.76 |
+| LOT | g' | 22.05 | 23.92 | 24.67 | 23.16 |
+| LOT | r' | 22.08 | 23.94 | 24.70 | 23.19 |
+| LOT | i' | 21.31 | 23.17 | 23.93 | 22.41 |
+| SLT | g' | 20.82 | 21.84 | 21.92 | 21.08 |
+| SLT | r' | 20.69 | 21.46 | 21.50 | 20.71 |
+| SLT | i' | 20.09 | 20.65 | 20.67 | 19.89 |
 
 The one-hour curves show the expected aperture advantage of LOT. They also
 show the consequence of model completeness: SLT carries a measured 2%
@@ -732,3 +753,90 @@ Regenerate the figure from the committed per-radius aggregate with:
 ```bash
 uv run --with pandas --with matplotlib python validation/analyze_extended_noise.py
 ```
+
+---
+
+## SLT + DZ936 on its first night back
+
+The Andor DZ936 went back on SLT in Nov 2026 as a stand-in while the DU934P's
+shutter is repaired. Until this night every number presets.json held for it was
+Andor's brochure. 2026-11-10, AT2026afqt: 139 calibrated frames, 150 s in
+g'r'i'z', 150 and 300 s in u', moon below the horizon throughout. The field rose
+from airmass 1.64 to the meridian (1.107, ~15:45 UTC) and set to 4.9.
+
+Frames, reduction and per-frame tables stay out of the repository
+(`data/raw/slt_at2026afqt/`). The scripts are `reduce_slt_afqt.py` and
+`analyze_slt_afqt.py`; the numbers are in `slt_dz936.py` and asserted by
+`test_slt_dz936.py`.
+
+### Extinction, separated from the weather
+
+ZP = ZP0 − kX over 124 good frames, X < 3. PS1 DR2 references in g'r'i'z',
+SkyMapper DR4 in u' (no colour terms).
+
+| Band | k | rising only | setting only | fit rms | in presets.json |
+|---|---:|---:|---:|---:|---:|
+| u' | 0.443 | 0.381 | 0.433 | 0.024 | 0.44 |
+| g' | 0.158 | 0.162 | 0.153 | 0.007 | 0.16 |
+| r' | 0.071 | 0.062 | 0.073 | 0.005 | 0.07 |
+| i' | 0.038 | 0.093 | 0.042 | 0.013 | 0.04 |
+| z' | 0.051 | 0.082 | 0.052 | 0.014 | 0.05 |
+
+Two branches observing the same airmass at different times would disagree if
+the sky had drifted. They agree to within 0.01 in g'r' and 0.05 in u'i'z', so
+the slope is extinction rather than drift. This is what SN2024ggi's
+setting-only nights could not show. It is one night's worth.
+
+### Sky, read noise, plate scale
+
+| | u' | g' | r' | i' | z' |
+|---|---:|---:|---:|---:|---:|
+| sky, mag/arcsec², X < 1.6, astronomical night | 22.73 | 21.63 | 20.77 | 19.86 | 18.71 |
+| what presets.json gave | 21.50 | 21.46 | 20.94 | 20.05 | 21.50 |
+
+u' and z' had only the site-wide fallback, and z' was 2.8 mag too dark: 7.5×
+too little sky. Both now carry this night's value. g'r'i' came from LOT on a
+different sightline and still hold to within 0.2 mag.
+
+Read noise is 5.92 e- (frame RMSNOISE). The u' 150 s frames carry only 6 e-/pix
+of sky, and their local sky noise gives 5.7 e-. The brochure figure was 7.0. In
+g'r'i'z' each pixel has another 7–8.5 e- of noise beyond sky Poisson and read
+noise. Its cause is unknown, and CASTOR does not model it.
+
+Every frame plate-solves to 0.790″/pix at 13.5 µm. The DU934P solved to
+0.76″/pix at 13 µm. Both scales give SLT a focal length of 3.52 m, as does the
+header's FOCALLEN of 3522.8 mm. presets.json had 3.414, which is f/8.4 × 0.406 m
+from the site pages, so every SLT prediction used a pixel 3% too large.
+
+### Noise model
+
+Field stars present on every frame of one pier side, with each frame's
+transparency divided out. Where the bins hold 25 or more stars, the
+frame-to-frame SNR is 0.92–1.02 of what `calculate_single_snr` predicts from the
+star's own flux and sky. The brightest stars level off at 0.4–0.85, which is a
+per-frame floor of roughly 0.5% that CASTOR does not model. With only 8–9 frames,
+each star's scatter is uncertain by about 25%, so the small bins are recorded
+but not asserted on.
+
+### Not in presets.json: the camera's band response
+
+Measured counts above the atmosphere against CASTOR's prediction are u' 0.78,
+g' 1.23, r' 1.20, i' 0.98, z' 0.62. presets.json keys a band's throughput by
+telescope and holds a camera's QE as one number. Storing this response would
+therefore move every DU934P prediction as well. QUESTIONS.md 19 has what it
+would take. Until then, SLT + DZ936 is optimistic in source counts by about 1.6×
+in z' and 1.3× in u'.
+
+### Problems in the delivered frames
+
+These are not CASTOR's, but anyone reducing these frames should know them:
+
+* 12 i'/z' frames have bright stars erased. All are after the meridian flip, and
+  all have the night's sharpest seeing (FWHM ≤ 2.26 px). The stars' pixels hold
+  runs of repeated neighbouring values. No header records it.
+* The WCS keys are renamed with a leading underscore (`_RVAL1`, `_C1_1`, ...).
+* BUNIT says adu, but GAINCOR has been applied, so the pixels are e-.
+* Two u' frames have no plate solution.
+
+The supernova itself tests nothing here. Its aperture flux follows the frame's
+FWHM (r = −0.96) because of host light.

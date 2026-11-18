@@ -37,6 +37,7 @@ ORDER = [
     "performance.md",
     "noise_budget.md",
     "extended.md",
+    "slt_dz936.md",
 ]
 
 PREAMBLE = (
