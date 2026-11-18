@@ -261,19 +261,39 @@ def test_choosing_a_filter_changes_the_throughput_in_front_of_it(shipped):
     assert throughput("Sloan_r") > throughput("Sloan_i")
 
 
+def test_lot_u_and_z_carry_their_own_throughput_not_the_band_free_one(shipped):
+    """LOT u' and z' deliver a ninth and a fifth of what the band-free 0.381 predicted.
+
+    Calibrated LOT frames from 2026-10-10/11 (u' 5, z' 36), against Gaia's
+    synthetic SDSS magnitudes and corrected to total flux, put them at 0.043 and
+    0.075; SkyMapper agrees in both, and Pan-STARRS in z' to 6%
+    (validation/reduce_lot_calibrated.py). Left on the fallback, a 300 s frame's
+    SNR 5 limit read about 2 mag too deep in u' and 0.9 mag in z'.
+    """
+    fallback = shipped.profile("lulin").telescopes["LOT"].telescope.optical_throughput
+
+    def lot(band):
+        fragment = shipped.resolve("lulin", telescope="LOT", optic_filter=band)
+        return fragment["instrument"]["telescope"]["optical_throughput"]
+
+    assert lot("Sloan_u") == pytest.approx(0.113 * fallback, rel=0.05)
+    assert lot("Sloan_z") == pytest.approx(0.197 * fallback, rel=0.05)
+
+
 def test_a_filter_without_a_measurement_leaves_the_site_values_alone(shipped):
-    """Lulin u' has an SLT throughput, a sky and an extinction now, but no
-    zodiacal split and no LOT throughput, so those still inherit.
+    """Lulin z' carries its own throughput, sky and extinction, but no zodiacal
+    split, so that still inherits.
 
     The point of overriding per field rather than per section: a band can carry
-    what was measured without also claiming a split nobody made for it, or a
-    throughput for a telescope it was never measured on.
+    what was measured without also claiming a split nobody made for it. Every
+    Lulin band now has a throughput for both telescopes, so the other half — a
+    telescope a band was never measured on keeps its own number — is held by the
+    borrowed-telescope tests below.
     """
-    fragment = shipped.resolve("lulin", optic_filter="Sloan_u")  # LOT is the default
-    assert fragment["environment"]["mu_dark"] == 22.73                 # u', measured
+    fragment = shipped.resolve("lulin", optic_filter="Sloan_z")  # LOT is the default
+    assert fragment["environment"]["mu_dark"] == 18.71                 # z', measured
     assert fragment["environment"].get("zodiacal_share") is None       # never split
-    assert fragment["instrument"]["telescope"]["optical_throughput"] == (
-        shipped.profile("lulin").telescopes["LOT"].telescope.optical_throughput)
+    assert fragment["instrument"]["telescope"]["optical_throughput"] == 0.075
 
 
 def test_every_lulin_band_carries_its_own_extinction(shipped):
