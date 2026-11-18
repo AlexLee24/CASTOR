@@ -60,6 +60,15 @@ class CameraSchema(StrictModel):
             "0.0 means not modelled, the behaviour before this field existed."
         )
     )
+    readout_saturation_level: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "Count per pixel at which the readout clips or stops being linear, in e-, when that "
+            "comes before the full well — for a 16-bit converter 65535 ADU x gain, less any bias "
+            "offset. The frame saturates at whichever of this and full_well_capacity is lower. "
+            "None (the default) means the full well alone sets the limit. (ATBD: N_sat, 4.3.4)"
+        )
+    )
 
 class FilterSchema(StrictModel):
     central_wavelength: PositiveFloat = Field(
@@ -220,6 +229,16 @@ class EnvironmentCondition(StrictModel):
     extinction_coeff: float = Field(
         ..., 
         description="Atmospheric attenuation per unit airmass in mag/airmass. (ATBD: k_ext)"
+    )
+    scintillation_coefficient: float = Field(
+        default=0.09,
+        ge=0,
+        allow_inf_nan=False,
+        description=(
+            "Young's (1967) scintillation coefficient C, dimensionless. 0.09 is Young's typical "
+            "site; Osborn et al. (2015) find real sites' median about 1.5 times higher. 0 switches "
+            "scintillation off, the behaviour before this field existed. (ATBD: C_scint, 4.3.1b)"
+        )
     )
     
     total_fwhm: PositiveFloat = Field(
@@ -437,9 +456,10 @@ class PhysicalDiagnostics(StrictModel):
     airmass: float = Field(
         ...,
         description=(
-            "Airmass the target's extinction was computed at: sec(z), with the zenith angle clamped "
-            "to at most 89° to keep it finite. A target below the horizon therefore reads as about "
-            "57, not as an error — ephemeris.target_elevation_deg is the unclamped check. "
+            "Airmass the target's extinction was computed at: Kasten & Young (1989), with the zenith "
+            "angle clamped to at most 90°. A target below the horizon therefore reads as about 38, "
+            "not as an error — ephemeris.target_elevation_deg is the unclamped check, and "
+            "flags.warnings says so. "
             "(ATBD: X) [dimensionless]"
         )
     )
@@ -450,6 +470,21 @@ class PhysicalDiagnostics(StrictModel):
             "by its zodiacal term when zodiacal_share is set, plus the moon when "
             "auto_calc_background is True. Converted to flux as an AB magnitude, although the "
             "lunar term is Krisciunas & Schaefer's Johnson V. (ATBD: mu_sky) [mag/arcsec²]"
+        )
+    )
+    saturation_level: float = Field(
+        ...,
+        description=(
+            "Count per pixel at which a frame saturates: the lower of full_well_capacity and "
+            "readout_saturation_level. core.saturation_time_limit is reached here. (ATBD: N_sat) [e-]"
+        )
+    )
+    scintillation_fraction: float = Field(
+        ...,
+        description=(
+            "Fractional scintillation of one frame of t_single; 1 / this is the most SNR one "
+            "frame can reach however bright the target. Zero when scintillation_coefficient is 0. "
+            "(ATBD: sigma_scint) [dimensionless]"
         )
     )
 
@@ -487,11 +522,15 @@ class NoiseComponents(StrictModel):
         ...,
         description="Correlated flat-field/background residual; zero unless background_flatness_fraction is set. (ATBD: V_flat) [e-²]"
     )
+    scintillation_variance: float = Field(
+        ...,
+        description="Atmospheric scintillation, N_exp · (sigma_scint · Rate_src · t_single)². (ATBD: V_scint) [e-²]"
+    )
     total_variance: float = Field(
         ...,
         description=(
             "The variance the SNR divides by: signal / sqrt(total_variance) is the SNR exactly. Equal "
-            "to the sum of the five terms above to rounding, not bit for bit. [e-²]"
+            "to the sum of the six terms above to rounding, not bit for bit. [e-²]"
         )
     )
     num_pixels_background: float = Field(
@@ -535,6 +574,14 @@ class ObservationEphemeris(StrictModel):
     moon_separation_deg: float = Field(
         ...,
         description="Angular distance between the target and the moon. (Krisciunas & Schaefer 1991: rho) [deg]"
+    )
+    sun_elevation_deg: float = Field(
+        ...,
+        description=(
+            "Sun's altitude above the horizon, in degrees. The sky model is a night sky: above "
+            "-18° (twilight) it is too faint, and above 0° (day) far too faint; flags.warnings "
+            "says which."
+        )
     )
 
 class SystemFlags(StrictModel):
@@ -610,6 +657,16 @@ class TimeSeriesEnvironment(StrictModel):
     extinction_coeff: float = Field(
         ...,
         description="Atmospheric attenuation per unit airmass in mag/airmass."
+    )
+    scintillation_coefficient: float = Field(
+        default=0.09,
+        ge=0,
+        allow_inf_nan=False,
+        description=(
+            "Young's (1967) scintillation coefficient C, dimensionless. 0.09 is Young's typical "
+            "site; Osborn et al. (2015) find real sites' median about 1.5 times higher. 0 switches "
+            "scintillation off, the behaviour before this field existed. (ATBD: C_scint, 4.3.1b)"
+        )
     )
 
     total_fwhm: PositiveFloat = Field(
@@ -743,8 +800,8 @@ class BatchPhysicalDiagnostics(StrictModel):
     airmass: list[float] = Field(
         ...,
         description=(
-            "Airmass the target's extinction was computed at, at each timestamp: sec(z) with the "
-            "zenith angle clamped to at most 89°. ephemeris.target_elevation_deg is the unclamped "
+            "Airmass the target's extinction was computed at, at each timestamp: Kasten & Young "
+            "(1989) with the zenith angle clamped to at most 90°. ephemeris.target_elevation_deg is the unclamped "
             "check. (ATBD: X) [dimensionless]"
         )
     )
@@ -780,6 +837,9 @@ class BatchNoiseComponents(StrictModel):
     readout_variance: list[float | None] = Field(..., description="Read noise, N_exp · N_bkg · RON². [e-²]")
     flatness_variance: list[float | None] = Field(
         ..., description="Correlated flat-field/background residual; zero unless background_flatness_fraction is set. (ATBD: V_flat) [e-²]"
+    )
+    scintillation_variance: list[float | None] = Field(
+        ..., description="Atmospheric scintillation, N_exp · (sigma_scint · Rate_src · t_single)². (ATBD: V_scint) [e-²]"
     )
     total_variance: list[float | None] = Field(
         ..., description="The variance each SNR divides by: signal / sqrt(total_variance) is that SNR exactly. [e-²]"

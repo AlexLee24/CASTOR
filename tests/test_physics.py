@@ -18,7 +18,10 @@ from castor.physics import (
     calculate_total_snr,
     calculate_flatness_snr_ceiling,
     solve_required_exposures,
-    calculate_optimal_exposure_time
+    calculate_optimal_exposure_time,
+    calculate_peak_pixel_rate,
+    calculate_scintillation_fraction,
+    calculate_saturation_level,
 )
 
 # ==========================================
@@ -28,7 +31,7 @@ from castor.physics import (
 def test_vectorization_support():
     """Ensures the core function fully supports NumPy arrays without raising TypeError."""
     zenith_angles = np.array([0.0, 60.0])
-    expected_airmass = np.array([1.0, 2.0])
+    expected_airmass = np.array([0.99971, 1.99429])
     
     result = calculate_airmass(zenith_angles)
     
@@ -40,9 +43,63 @@ def test_vectorization_support():
 # ==========================================
 
 def test_calculate_airmass():
-    """Baseline and boundary test: 0° is 1.0, 60° is 2.0"""
-    assert calculate_airmass(0.0) == pytest.approx(1.0)
-    assert calculate_airmass(60.0) == pytest.approx(2.0, rel=1e-5)
+    """Kasten & Young (1989): within 0.3% of sec(z) to z = 60, finite (about 38) at
+    the horizon where the secant diverges."""
+    assert calculate_airmass(0.0) == pytest.approx(1.0, abs=5e-4)
+    assert calculate_airmass(60.0) == pytest.approx(1.9943, rel=1e-4)
+    assert calculate_airmass(80.0) == pytest.approx(5.5910, rel=1e-3)
+    assert calculate_airmass(90.0) == pytest.approx(37.92, rel=1e-3)
+    for z in (0.0, 30.0, 45.0, 60.0):
+        assert calculate_airmass(z) == pytest.approx(1.0 / np.cos(np.radians(z)), rel=3e-3)
+
+def test_peak_pixel_fraction_is_the_gaussian_integrated_over_the_pixel():
+    """Pixel-centred Gaussian: erf(S / (2 sqrt 2 sigma))^2, never above 1 — the
+    small-pixel S^2 / (2 pi sigma^2) it replaced exceeds 1 when S > FWHM."""
+    from math import erf, sqrt, log
+    for fwhm, scale in [(1.4, 0.785), (1.0, 0.785), (2.5, 0.384), (0.5, 2.0)]:
+        sigma = fwhm / (2 * sqrt(2 * log(2)))
+        expected = erf(scale / (2 * sqrt(2) * sigma)) ** 2
+        assert calculate_peak_pixel_rate(1.0, fwhm, scale) == pytest.approx(expected, rel=1e-12)
+    assert calculate_peak_pixel_rate(1.0, 0.5, 5.0) <= 1.0
+    # Small pixels recover the old approximation.
+    small = calculate_peak_pixel_rate(1.0, 3.0, 0.05)
+    sigma = 3.0 / (2 * sqrt(2 * log(2)))
+    assert small == pytest.approx(0.05 ** 2 / (2 * np.pi * sigma ** 2), rel=1e-3)
+    npt.assert_allclose(calculate_peak_pixel_rate(np.array([1.0, 2.0]), 1.4, 0.785),
+                        [0.24095, 0.48190], rtol=1e-4)
+
+def test_scintillation_follows_young():
+    """sigma = 0.09 D_cm^-2/3 X^1.75 exp(-h/8000) (2t)^-1/2."""
+    sigma = calculate_scintillation_fraction(0.406, 2.0, 2862.0, 15.0)
+    expected = 0.09 * 40.6 ** (-2 / 3) * 2.0 ** 1.75 * np.exp(-2862.0 / 8000.0) / np.sqrt(30.0)
+    assert sigma == pytest.approx(expected, rel=1e-12)
+    assert calculate_scintillation_fraction(0.406, 2.0, 2862.0, 15.0, coefficient=0.0) == 0.0
+    # Four times the exposure halves it; a bigger mirror lowers it.
+    assert calculate_scintillation_fraction(0.406, 2.0, 2862.0, 60.0) == pytest.approx(sigma / 2)
+    assert calculate_scintillation_fraction(1.02, 2.0, 2862.0, 15.0) < sigma
+
+def test_scintillation_caps_one_frame_and_averages_down_over_a_stack():
+    """Bright and scintillation-limited: one frame stops near 1/sigma, and N frames
+    gain sqrt(N) because each frame scintillates independently."""
+    sigma = 0.005
+    single = calculate_single_snr(1e8, 1.0, 0.0, 1.0, 10.0, 10.0, scintillation_fraction=sigma)
+    assert single == pytest.approx(1 / sigma, rel=0.01)
+    stacked = calculate_total_snr(1e8, 1.0, 0.0, 1.0, 10.0, 10.0, 160.0, 16,
+                                  scintillation_fraction=sigma)
+    assert stacked == pytest.approx(4 * single, rel=0.01)
+    terms = calculate_total_noise_components(1e8, 1.0, 0.0, 1.0, 10.0, 10.0, 160.0, 16,
+                                             scintillation_fraction=sigma)
+    assert terms.scintillation_variance == pytest.approx(16 * (sigma * 1e9) ** 2)
+
+def test_scintillation_off_changes_no_bit():
+    args = (500.0, 20.0, 0.01, 7.0, 30.0, 60.0)
+    assert calculate_single_snr(*args) == calculate_single_snr(*args, 0.0, 0.0, 0.0)
+
+def test_saturation_level_is_the_lower_ceiling():
+    assert calculate_saturation_level(150000.0) == 150000.0
+    assert calculate_saturation_level(150000.0, None) == 150000.0
+    assert calculate_saturation_level(150000.0, 60292.0) == 60292.0
+    assert calculate_saturation_level(50000.0, 60292.0) == 50000.0
 
 def test_calculate_effective_area():
     """Tests the area calculation with/without secondary mirror obstruction"""

@@ -90,6 +90,14 @@ and selecting SLT with a filter LOT had measured silently returned LOT's number.
 `castor check` now catches an override naming a telescope the profile does not
 list — see [CLI](cli.md).
 
+**A filter may also give a camera's QE in its band**, keyed by camera id the same
+way (`"camera": {"SLT_DZ936": {"quantum_efficiency": 0.33}}`). A CCD's QE is not
+flat across u' to z': SLT's BV sensor runs from 0.19 to 0.95 across those bands
+and its deep-depletion one from 0.42 to 0.935, and with one number per camera
+the optical train measured through one sensor cannot predict the other. A camera
+the band names no QE for keeps its own `quantum_efficiency`. `castor check`
+catches a QE given for a camera the profile does not list. See QUESTIONS.md 19.
+
 **Only a real site may have its sky overridden this way.** Giving an
 `environment` to a filter in a hardware-family profile is refused when the file
 is read, rather than being quietly ignored: an unapplied number in a data file is

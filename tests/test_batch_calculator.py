@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from datetime import datetime, timezone
 
-from castor import schema
+from castor import physics, schema
 from castor.batch_calculator import run_batch_calculation, _expand_time_series
 from castor.calculator import run_calculation
 
@@ -301,7 +301,7 @@ def test_each_step_reports_the_airmass_sky_and_moon_it_used(mock_moon_batch, bat
     response = run_batch_calculation(batch_base_request)
     zenith = np.linspace(30.0, 60.0, 13)
 
-    np.testing.assert_allclose(response.diagnostics.airmass, 1.0 / np.cos(np.radians(zenith)), rtol=1e-12)
+    np.testing.assert_allclose(response.diagnostics.airmass, physics.calculate_airmass(zenith), rtol=1e-12)
     assert set(response.diagnostics.sky_surface_brightness) == {21.0}
     assert set(response.ephemeris.moon_phase_angle_deg) == {0.0}
     assert set(response.ephemeris.moon_separation_deg) == {90.0}
@@ -360,6 +360,7 @@ SINGLE_ONLY = {
     "diagnostics.total_fwhm", "diagnostics.effective_area", "diagnostics.pixel_scale",
     "diagnostics.total_throughput", "diagnostics.enclosed_flux_fraction",
     "diagnostics.num_pixels_aperture", "diagnostics.num_pixels_sky_estimate",
+    "diagnostics.saturation_level", "diagnostics.scintillation_fraction",
     "core.snr_ceiling", "core.target_reachable",
 }
 

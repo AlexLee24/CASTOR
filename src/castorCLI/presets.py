@@ -146,6 +146,21 @@ class BandTelescope(BaseModel):
     optical_throughput: float | None = None
 
 
+class BandCamera(BaseModel):
+    """A camera's quantum efficiency in one band.
+
+    CASTOR's request carries one quantum_efficiency per camera, and a CCD's QE is
+    anything but flat across u' to z': SLT's BV sensor (DZ936) reads about 0.19 in u'
+    and 0.33 in z' against 0.95 in r', its deep-depletion one (DU934P) 0.42 and 0.50.
+    With a flat number the optical train measured through one camera could not
+    predict the other (QUESTIONS.md 19). Keyed by camera catalogue key, the way
+    BandTelescope is keyed by telescope: a band's QE is one sensor's, not the filter's.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    quantum_efficiency: float | None = Field(default=None, ge=0, le=1)
+
+
 class FilterEntry(_NamedEntry):
     optic_filter: schema.FilterSchema
 
@@ -165,6 +180,8 @@ class FilterEntry(_NamedEntry):
     # qualified name matches none of them.
     environment: BandSky | None = None
     telescope: dict[str, BandTelescope] | None = None
+    # Keyed by camera catalogue key, like `telescope`: the selected camera's QE in this band.
+    camera: dict[str, BandCamera] | None = None
 
 class SiteEnvironment(BaseModel):
     """The slice of EnvironmentCondition that belongs to a place rather than a night.
@@ -249,7 +266,11 @@ class PresetFile(BaseModel):
         selection = self._selection(profile_id, telescope, camera, optic_filter)
         for section, (_, _, entry) in selection.items():
             if entry is not None:
-                instrument[section] = getattr(entry, section).model_dump()
+                # An optional hardware field the entry leaves unset (None) is left out
+                # rather than sent as null: the request's own default is the same
+                # None, and the browser form, which posts nothing for an empty field,
+                # then builds the identical request.
+                instrument[section] = getattr(entry, section).model_dump(exclude_none=True)
 
         # The chosen filter has the last word on anything that depends on the band.
         # Applied after the site and the rig so it overrides them, and only for the
@@ -268,6 +289,10 @@ class PresetFile(BaseModel):
             if filter_owner == telescope_owner:
                 telescope_override = (chosen.telescope or {}).get(telescope_key)
                 _overlay(instrument.get("telescope"), telescope_override)
+            # Camera-keyed the same way: the selected sensor's QE in this band.
+            camera_owner, camera_key, _ = selection["camera"]
+            if filter_owner == camera_owner:
+                _overlay(instrument.get("camera"), (chosen.camera or {}).get(camera_key))
 
         if instrument:
             fragment["instrument"] = instrument

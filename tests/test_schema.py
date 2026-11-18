@@ -296,6 +296,7 @@ class TestResponseContract:
         assert set(defs["NoiseBudget"]["required"]) == {"single", "total"}
         assert set(defs["ObservationEphemeris"]["required"]) == {
             "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+            "sun_elevation_deg",
         }
 
     def test_every_noise_term_says_its_unit(self):
@@ -312,7 +313,8 @@ class TestResponseContract:
     def test_a_noise_block_refuses_unknown_terms(self):
         terms = dict(exp_time=60.0, num_exposures=1, signal=1.0, source_variance=1.0,
                      sky_variance=1.0, dark_variance=1.0, readout_variance=1.0,
-                     flatness_variance=0.0, total_variance=4.0, num_pixels_background=3.0)
+                     flatness_variance=0.0, scintillation_variance=0.0, total_variance=4.0,
+                     num_pixels_background=3.0)
         NoiseComponents(**terms)
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-            NoiseComponents(**terms, scintillation_variance=1.0)
+            NoiseComponents(**terms, cosmic_ray_variance=1.0)

@@ -160,7 +160,7 @@ def _mark_modified(labels: dict[str, str], preset_instrument: dict[str, Any],
     """
     marked = dict(labels)
     for section, preset_values in preset_instrument.items():
-        if section in marked and getattr(request.instrument, section).model_dump() != preset_values:
+        if section in marked and getattr(request.instrument, section).model_dump(exclude_none=True) != preset_values:
             marked[section] = f"{marked[section]} (modified)"
     return marked
 
@@ -473,6 +473,12 @@ def check_file(catalogue: presets.PresetFile) -> tuple[int, list[str]]:
                     problems.append(
                         f"{profile_id}: filter {filter_id!r} overrides telescope "
                         f"{telescope_id!r}, which this profile does not list — it applies to nothing"
+                    )
+            for camera_id in (entry.camera or {}):
+                if camera_id not in set(profile.cameras):
+                    problems.append(
+                        f"{profile_id}: filter {filter_id!r} gives a QE for camera "
+                        f"{camera_id!r}, which this profile does not list — it applies to nothing"
                     )
 
         for telescope_id in (profile.telescopes or {None}):

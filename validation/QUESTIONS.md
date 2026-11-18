@@ -753,30 +753,72 @@ without the fix: `noise.single.signal / sqrt(noise.single.flatness_variance)` is
 S/F (ATBD 4.3.6), and a caller can compare it with `target_snr` before trusting
 `required_exposures`.
 
-## 19. A band's throughput cannot depend on the camera — BUILD
+## 19. SLT is 30-70% more efficient than question 5 measured; QE per band — PARTLY CLOSED
 
-**Found 2026-11-13**, on the DZ936's first night back on SLT (`slt_dz936.py`).
-Measured counts above the atmosphere against what CASTOR predicts for SLT +
-DZ936: u' 0.78, g' 1.23, r' 1.20, i' 0.98, z' 0.62. presets.json stores a band's
-throughput per telescope (`Sloan_z.telescope.SLT`) and a camera's QE as one
-number for every band, so there is nowhere to put a response that belongs to
-one camera on one telescope: writing it on SLT would move every DU934P
-prediction too. `test_slt_dz936.py` asserts the values are absent.
+**Measured (2026-11-18), with Kinder's own photometry** (`validation/slt_2026.py`).
+Kinder ran AutoPhOT on calibrated frames with PSF photometry against Pan-STARRS
+DR2, and its zero point inverts to T_sys. Two corrections went into that
+inversion:
 
-**Two complications before building anything.** g' and r' come out *above*
-prediction, which a per-band QE cannot express (it would need QE > 1): part of
-the gap is SLT's own band throughput, fitted in `slt.py` on a night whose zero
-point is uncertain by up to 15%, and part is the catalogue (PS1 here, SkyMapper
-there). Only z' (and less surely u') is clearly the camera.
+- **Gain.** The pixels are not what AutoPhOT took them for. Lulin's reduction
+  divides back to ADU (`BUNIT adu`), and only an older version kept electrons.
+  AutoPhOT read LOT's 0.92 but fell back to 1 for SLT's `'0.95 [electrons/ADU]'`.
+- **QE per band** (new: `filters.*.camera` in presets.json). These values are
+  read off Andor's published curves: BV for the DZ936, BEX2-DD for the DU934P.
 
-**What closes it.** A camera-keyed band override — most simply nested under the
-telescope one, `Sloan_z.telescope.SLT.camera.SLT_DZ936.optical_throughput`,
-holding the implied optical train for that pair — in `castorCLI/presets.py`,
-the GUI's `applyRig`, `castor check` and docs/presets.md together, since Kinder
-serves the file as-is. Meanwhile SLT + DZ936 predictions in z' are ~1.6x
-optimistic in source counts and in u' ~1.3x.
+| band | QE DZ936 / DU934P | optics via DU934P (2026-10-04) | via DZ936 (2026-11-09/16) | preset now | 2024-04-14 |
+|---|---|---|---|---|---|
+| u' | 0.19 / 0.42 | — | — | 0.205 (2024 T_sys 0.086) | 0.101 at flat QE |
+| g' | 0.87 / 0.90 | 0.409 | 0.411 | **0.41** | 0.323 |
+| r' | 0.95 / 0.91 | 0.669 | 0.604 | **0.636** | 0.474 |
+| i' | 0.82 / 0.935 | 0.591 | 0.434 (1 frame) | **0.512** | 0.373 |
+| z' | 0.33 / 0.50 | 0.347 | 0.232 (1 frame) | **0.29** | 0.122 |
 
----
+**g' is the clean check.** Through each camera's own QE, the two cameras give
+the same telescope to 0.5%. In i' and z', band QE shrinks the gap between
+cameras from 1.6× and 2.3× (flat QE) to 1.4× and 1.5×. The rest probably comes
+from the single DZ936 frame in each of those bands.
+
+**The method was checked on LOT:** on a year of SOPHIA frames (SN2025wny) it
+lands within 2–8% of LOT's 14-night presets.
+
+**Same camera against itself:** the DU934P's 2026 T_sys is 1.3–1.7× its
+2024-04-14 value. That night was calibrated against SkyMapper with no colour
+term, and its transparency drifted by about 15%. Both are reasons it could read
+low; together they still fall short of the difference.
+
+**The camera history was wrong.** "DU934P, 2023-present" no longer holds.
+Calibrated_Science has DZ936 frames from 2026-03-17 to 2026-11-16 and DU934P
+frames from 2026-07-12 to 2026-11-02. The DZ936 is the one on the telescope now.
+
+**No coating loss.** LOT's best nights *rise* from 2025-11 to 2026-09/10.
+
+**Still open:**
+- **k, and an estimate standing in for it.** The optics above were inverted with
+  k = 0.17 in every band. presets.json now carries the k measured on the DZ936's
+  2026-11-10 night (`slt_dz936.py`: g' 0.16, r' 0.07, i' 0.04, z' 0.05), and
+  pairing that k with optics inverted at 0.17 would remove the atmosphere twice.
+  So the preset moves each band to the measured k at one assumed airmass, X = 1.3
+  (`slt_2026.k_rescale`): g' 0.404, r' 0.565, i' 0.438, z' 0.251, fallback 0.349.
+  For X between 1.1 and 1.5 the moved DZ936 values are g' 0.405-0.407, r'
+  0.526-0.546, i' 0.363-0.380, z' 0.197-0.205, against the 2026-11-10 night's
+  own 0.411 / 0.539 / 0.401 / 0.206 at the same band QE: the gap between the two
+  measurements is mostly k. What replaces the estimate: Kinder's per-frame zero
+  points and airmasses, inverted with the measured k. Whether k changes from
+  night to night is still unknown (question 4).
+- **The DZ936 against its own night.** Counts above the atmosphere on
+  2026-11-10, against the preset as it now stands: u' 1.8, g' 1.02, r' 0.96,
+  i' 0.91, z' 0.82. g'r'i' are within 10%. z' is ~1.2x optimistic, because the
+  preset is the two cameras' mean and the DU934P is stronger there; u' is ~1.8x
+  pessimistic, because 0.205 comes from the 2024 DU934P night through the
+  DZ936's BV QE (0.19), and the 2026-11-10 u' rests on SkyMapper with no colour
+  term. Band QE (`filters.*.camera`) cannot hold a per-pair optical train, so a
+  camera-keyed throughput override would close this; until then
+  `test_slt_dz936.py` keeps the night's band response out of presets.json.
+- u' has no 2026 measurement.
+- i' and z' on the DZ936 rest on one frame each.
+- SOPHIA's QE is still one flat number (question 13). LOT's band values were
+  derived with it, so they stay consistent.
 
 ## Traps
 

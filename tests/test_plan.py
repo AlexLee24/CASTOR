@@ -252,3 +252,43 @@ def test_an_empty_body_is_refused():
 
     assert status == 400
     assert body == {"error": "No data provided"}
+
+
+def test_each_coordinate_keeps_its_own_unit():
+    """A decimal RA beside a sexagesimal Dec is degrees: reading both as hours put
+    150.5 at 150.5 h, which wraps to 97.5 deg."""
+    assert parse_coordinates("150.5", "-2:30:00") == pytest.approx((150.5, -2.5))
+    assert parse_coordinates("25.0", "10 00 00") == pytest.approx((25.0, 10.0))
+    assert parse_coordinates("10:00:00", "-5.5") == pytest.approx((150.0, -5.5))
+    assert parse_coordinates("10h00m00s", "+05d30m") == pytest.approx((150.0, 5.5))
+    assert parse_coordinates("150d30m", "5") == pytest.approx((150.5, 5.0))
+
+
+@pytest.mark.parametrize("ra, dec", [("25:00:00", "0"), ("360", "0"), ("-1", "0"),
+                                     ("10", "91"), ("10:00:00", "-90:30:00")])
+def test_coordinates_out_of_range_are_refused(ra, dec):
+    with pytest.raises(QuickInputError):
+        parse_coordinates(ra, dec)
+
+
+def test_daytime_is_not_planned(catalogue):
+    """06:00 UTC is mid-afternoon at Lulin; the night-sky model has no answer."""
+    for result in (plan(catalogue, observing_time_utc="2025-09-28T06:00:00Z", dec=60.0),
+                   compute_snr(catalogue, site="lulin", telescope="LOT", camera="Sophia",
+                               optic_filter="Sloan_r", ra=330.0, dec=60.0, mag=18.0,
+                               single_exp_time=60.0, num_exposures=1,
+                               observing_time_utc="2025-09-28T06:00:00Z", fwhm=1.4)):
+        assert result["conditions"]["sun_elevation_deg"] > 0
+        assert result["status"] == "daylight"
+
+
+def test_bright_lot_frames_stay_under_the_16bit_clip(catalogue):
+    """SOPHIA's readout clips at 60292 e-, well under its 150000 e- well: no
+    recommended frame may be longer than the time to reach the clip."""
+    for mag in (11.0, 12.0, 13.0):
+        result = plan(catalogue, mag=mag, target_snr=300.0)
+        assert result["status"] == "ok"
+        assert result["recommended"]["exp_s"] < result["conditions"]["saturation_time_s"]
+    # With the well alone as the ceiling this star "lasted" 17.5 s and was given 15 s
+    # frames, which the converter clips at about 7 s.
+    assert plan(catalogue, mag=11.0, target_snr=300.0)["recommended"]["exp_s"] < 7.0

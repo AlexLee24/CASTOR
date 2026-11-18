@@ -363,13 +363,15 @@ def test_json_carries_the_noise_budget_and_the_pointing(run, lulin):
     for block in ("single", "total"):
         assert set(response["noise"][block]) == {
             "exp_time", "num_exposures", "signal", "source_variance", "sky_variance",
-            "dark_variance", "readout_variance", "flatness_variance", "total_variance",
+            "dark_variance", "readout_variance", "flatness_variance", "scintillation_variance",
+            "total_variance",
             "num_pixels_background",
         }
     assert response["noise"]["total"]["num_exposures"] == 10
     assert response["ephemeris"]["target_elevation_deg"] == pytest.approx(81.5, abs=0.5)   # WELL_PLACED
     assert set(response["ephemeris"]) == {
         "target_elevation_deg", "moon_elevation_deg", "moon_phase_angle_deg", "moon_separation_deg",
+        "sun_elevation_deg",
     }
 
 @pytest.mark.parametrize("question, rows", [

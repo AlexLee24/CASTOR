@@ -51,7 +51,7 @@
             "primary_mirror_diameter": 0.406,
             "secondary_mirror_diameter": 0.12,
             "focal_length": 3.523,
-            "optical_throughput": 0.234
+            "optical_throughput": 0.349
           }
         }
       },
@@ -63,28 +63,31 @@
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.001,
             "readout_noise": 7.9,
-            "full_well_capacity": 150000
+            "full_well_capacity": 150000,
+            "readout_saturation_level": 60292
+          }
+        },
+        "SLT_DZ936": {
+          "name": "SLT camera, 2021-2022 and again in 2026 (Andor iKon-L 936)",
+          "camera": {
+            "pixel_pitch": 13.5,
+            "quantum_efficiency": 0.9,
+            "dark_current_rate": 0.00013,
+            "readout_noise": 5.92,
+            "full_well_capacity": 100000,
+            "readout_saturation_level": 62258
           }
         },
         "SLT_DU934P": {
-          "name": "SLT camera, 2023-present (Andor DU934P-BEX2-DD)",
+          "name": "SLT camera, 2023-2026 (Andor DU934P-BEX2-DD)",
           "camera": {
             "pixel_pitch": 13.0,
             "quantum_efficiency": 0.85,
             "dark_current_rate": 0.017,
             "readout_noise": 9.3,
             "full_well_capacity": 130000,
-            "background_flatness_fraction": 0.02
-          }
-        },
-        "SLT_DZ936": {
-          "name": "SLT camera, 2021-2022 and stand-in since Nov 2026 (Andor iKon-L 936)",
-          "camera": {
-            "pixel_pitch": 13.5,
-            "quantum_efficiency": 0.9,
-            "dark_current_rate": 0.00013,
-            "readout_noise": 5.92,
-            "full_well_capacity": 100000
+            "background_flatness_fraction": 0.02,
+            "readout_saturation_level": 71302
           }
         },
         "SLT_U9000": {
@@ -116,7 +119,15 @@
               "optical_throughput": 0.568
             },
             "SLT": {
-              "optical_throughput": 0.474
+              "optical_throughput": 0.565
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.95
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.91
             }
           }
         },
@@ -133,7 +144,15 @@
           },
           "telescope": {
             "SLT": {
-              "optical_throughput": 0.101
+              "optical_throughput": 0.205
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.19
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.42
             }
           }
         },
@@ -154,7 +173,15 @@
               "optical_throughput": 0.313
             },
             "SLT": {
-              "optical_throughput": 0.323
+              "optical_throughput": 0.404
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.87
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.9
             }
           }
         },
@@ -175,7 +202,15 @@
               "optical_throughput": 0.312
             },
             "SLT": {
-              "optical_throughput": 0.373
+              "optical_throughput": 0.438
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.82
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.935
             }
           }
         },
@@ -192,7 +227,15 @@
           },
           "telescope": {
             "SLT": {
-              "optical_throughput": 0.122
+              "optical_throughput": 0.251
+            }
+          },
+          "camera": {
+            "SLT_DZ936": {
+              "quantum_efficiency": 0.33
+            },
+            "SLT_DU934P": {
+              "quantum_efficiency": 0.5
             }
           }
         }
