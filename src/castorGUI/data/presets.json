@@ -143,6 +143,9 @@
             "extinction_coeff": 0.44
           },
           "telescope": {
+            "LOT": {
+              "optical_throughput": 0.043
+            },
             "SLT": {
               "optical_throughput": 0.205
             }
@@ -226,6 +229,9 @@
             "extinction_coeff": 0.05
           },
           "telescope": {
+            "LOT": {
+              "optical_throughput": 0.075
+            },
             "SLT": {
               "optical_throughput": 0.251
             }

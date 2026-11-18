@@ -53,7 +53,7 @@ PROVENANCE = {
     "lulin.telescopes.LOT.primary_mirror_diameter": (1.02, DOCUMENT, "Trebur offer, optical specified >1020 mm; 1030 outside. \"1 m\" is the name"),
     "lulin.telescopes.LOT.secondary_mirror_diameter": (0.36, DOCUMENT, "Trebur offer, outside 360 mm; the whole disc obstructs, not the figured 350"),
     "lulin.telescopes.LOT.focal_length": (8.054, DERIVED, "reproduces the 0.3841\"/pix the frames solve"),
-    "lulin.telescopes.LOT.optical_throughput": (0.381, MEASURED, "geometric mean; g'r'i' carry their own"),
+    "lulin.telescopes.LOT.optical_throughput": (0.381, MEASURED, "geometric mean; every Sloan band now carries its own, so this is the fallback for a filter added without one"),
 
     # ---- Lulin, SLT ---------------------------------------------------------
     "lulin.telescopes.SLT.primary_mirror_diameter": (0.406, DOCUMENT, "site pages, 16 inch"),
@@ -134,6 +134,8 @@ PROVENANCE = {
     "lulin.filters.Sloan_g.telescope.LOT.optical_throughput": (0.313, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
     "lulin.filters.Sloan_r.telescope.LOT.optical_throughput": (0.568, MEASURED, "Pan-STARRS photometry, T_sys 0.480"),
     "lulin.filters.Sloan_i.telescope.LOT.optical_throughput": (0.312, MEASURED, "Pan-STARRS photometry, T_sys 0.265"),
+    "lulin.filters.Sloan_u.telescope.LOT.optical_throughput": (0.043, MEASURED, "reduce_lot_calibrated.py up, 5 calibrated 300 s frames 2026-10-10/11, X 1.22-1.50, Gaia GSPC u_sdss, corrected 2.5 -> 6 FWHM (0.91); SkyMapper u agrees. Above the atmosphere with SLT's k 0.44, not LOT's own; T_sys 0.037"),
+    "lulin.filters.Sloan_z.telescope.LOT.optical_throughput": (0.075, MEASURED, "reduce_lot_calibrated.py zp, 36 calibrated frames 2026-10-10/11, X 1.16-1.65, Gaia GSPC z_sdss, corrected 2.5 -> 6 FWHM (0.95); SkyMapper 0.076, Pan-STARRS z 0.080. k 0.057 from the 10-11 frames alone, as the preset's 0.05; T_sys 0.064"),
 
     # ---- Lulin, SLT throughput and extinction (2024-04-14, SN2024ggi) --------
     # A single photometric night with a real airmass sweep (1.81-3.72), the

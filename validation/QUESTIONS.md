@@ -96,7 +96,7 @@ validation result.
 | 4 | What is the extinction in each band? | OBSERVE | still open — four setting nights are degenerate, not just 2024-04-14 |
 | 5 | SLT has no photometry at all | OBSERVE | **CLOSED** — SN2024ggi/SLT, 2024-04-14 |
 | 6 | SOPHIA's dark current at −80 °C | OBSERVE | **Closed to an upper limit** — see below |
-| 7 | LOT's own u' filter is still unmeasured | DECIDE | — |
+| 7 | LOT's own u' filter is still unmeasured | DECIDE | **CLOSED for throughput** — 0.043, 5 frames 2026-10-10/11 (z' too: 0.075); why so low is open |
 | 8 | Sky and throughput are tables where the physics is a curve | BUILD | strict xfail, `test_eso.py` |
 | 9 | Zodiacal light is not modelled | BUILD | Partly closed |
 | 10 | Galactic background is not modelled | BUILD | Partly closed |
@@ -108,6 +108,7 @@ validation result.
 | 16 | Everything measured here looks in one direction | OBSERVE | `test_lulin.py` |
 | 17 | Solve-for-time ignores the correlated flatness-noise ceiling | BUILD | Closed — `test_solve_time_floor.py` |
 | 18 | Colour (Bayer) cameras are modelled as monochrome | BUILD | caveat on the `other` profile |
+| 20 | Older throughputs are aperture fluxes, not total fluxes | BUILD | `lulin.py`, `slt.py`, `slt_dz936.py` |
 
 ---
 
@@ -355,23 +356,59 @@ replaces the guess as DERIVED rather than staying a GUESS. As before: very
 little in practice either way — at 300s even the old 0.01 e-/s contributed only
 3 e- against a sky of ~750.
 
-## 7. LOT's own u' filter is still unmeasured — DECIDE
+## 7. LOT's own u' filter is still unmeasured — CLOSED for throughput
 
-**Half closed.** Lulin's filter inventory turns out to publish more than the LOT
-griz set: SLT carries an Astrodon 2018 *ugriz* set with a u' curve, and a 2018
-UBVRI set. The preset's u' now carries that measurement — 353.4 nm at an
-equivalent width of 64.8 nm and unit peak — against a placeholder 354/56/0.9
-that was 14% narrow and 10% dim.
+**Measured, and a ninth of what was assumed.** The pipeline's
+`Calibrated_Science` folder holds LOT u' frames the 123-frame set did not:
+EP261006a 2026-10-10 (1 x 300 s, X 1.22) and GRB261011A 2026-10-11 (4 x 300 s,
+X 1.50 -> 1.41), moon down on both. Against Gaia DR3 synthetic SDSS u (GSPC),
+8 isolated stars a frame, corrected from the 2.5-FWHM aperture to total flux
+(0.91, question 20), the zero point above the atmosphere is 21.03-21.07 on both
+nights: 0.11 of what CASTOR predicted from LOT's band-free 0.381. SkyMapper u
+agrees to 1-2%. The sky is down by about the same factor (0.085 of predicted
+counts, 22.9-23.2 mag/arcsec² against the preset's 22.73), so the deficit is in
+what the telescope collects, not in the sky or the units: the calibrated sky
+matches raw minus dark times 0.92 e-/ADU.
 
-**What is left.** LOT's u' is a third filter again, `up_Astrondon_2017`, and
-Lulin publishes no curve for it. Two Astrodon u' filters bought a year apart are
-close but not identical, so LOT u' predictions should be read as *an* Astrodon
-u' rather than as this telescope's. There is also no photometry: none of the 123
-frames is u'.
+`presets.json` now carries `Sloan_u.telescope.LOT.optical_throughput` 0.043
+(T_sys 0.037), and with it CASTOR reproduces all five frames' zero points to
+2%. Before it, a 300 s LOT u' frame at X 1.4 and 1.4" seeing read an SNR 5 limit of
+u' 22.5; with it, 20.45, and u' = 23 at SNR 5 takes about 100 such frames.
+`reduce_lot_calibrated.py up` and `fetch_lot_catalogs.py` reproduce the
+numbers; the frames stay out of the repository.
 
-**The decision.** u' is the band where a 1 m struggles most. If nobody observes
-in it, this is now good enough and the remaining gap can simply be labelled. If
-somebody does, it needs a night — and the same night would settle question 4.
+**z' came with it, and fell back to the same 0.381.** The same two nights hold
+36 calibrated LOT z' frames (`zp_Astrodon_2019`; 10-10 1 x 300 s, 10-11 5 x 60 s
+and 30 x 90 s, X 1.41 -> 1.65). Against Gaia synthetic SDSS z, ~19 stars a
+frame, corrected to total flux (0.95), the throughput is 0.075; SkyMapper z
+gives 0.076 and Pan-STARRS z 0.080, the last narrower than SDSS z and the LOT
+filter. The 10-11 frames alone fit k 0.057 against the preset's 0.05, and the
+sky is 18.75 mag/arcsec² against 18.71, so only the throughput was wrong. It is
+`Sloan_z.telescope.LOT.optical_throughput` 0.075 now (T_sys 0.064); the 300 s
+SNR 5 limit at X 1.4 and 1.05" moves from z' 21.9 to 21.0. Most of the factor
+five is question 13: the datasheet puts SOPHIA at 28% in z', not 0.85, and what
+remains (~0.6) is near SLT's own z' ratio (0.251 / 0.349 = 0.72; 0.52 before
+question 19). With this every Sloan band carries a LOT throughput, and LOT's
+0.381 is only a fallback.
+
+**What is left.**
+
+- k is SLT's 0.44, not LOT's. Two nights alone imply 0.50, which is no fit. The
+  EP260321a run (19 nights, 2-6 u' frames each, 2026-03-22 to 04-26) is the set
+  that would give LOT its own, and it is not yet in hand. A k of 0.50 instead of
+  0.44 moves the throughput by about 8% at X 1.4.
+- u' has not converged by 6 FWHM: 5 -> 6 FWHM still gains 3% (z' 0.6%), so
+  0.043 may be 2-3% low.
+- Why u' is so low — ASK. SLT's u' is 0.205 against its own band-free 0.349, a
+  factor 1.7 (2.3 before question 19); LOT's is a factor 9. Candidates are the SOPHIA CCD's response at
+  350 nm (the preset's QE is one flat 0.85, question 13), the corrector glass, the
+  mirror coating, or `up_Astrodon_2017` itself. Whoever looks after LOT is who
+  can say.
+- The filter curve: Lulin still publishes none for `up_Astrondon_2017`, so the
+  bandpass is SLT's 2018 u'. The measured throughput absorbs any difference, at
+  the colours of the reference stars.
+- Single-frame sky noise is 15-30% above what read noise and sky predict
+  (9-10 e- against 7.8), not yet explained.
 
 ## 8. Sky and throughput are tables where the physics is a curve — BUILD
 
@@ -480,10 +517,11 @@ with the reference that justifies it.
 28% at g' r' i' z'. The datasheet is now pinned to the right column — the -152,
 whose sensor is the 15 µm one — but its QE curves are a chart, not a table, so
 the four numbers above remain read off a rendered page. In g'r'i' this is harmless because the measured band
-throughputs absorb it. In **u' and z' it is not** — those two have no measured
-throughput, so they inherit the site value and multiply it by a QE that is wrong
-by a factor of three in z'. Fixing it properly is part of question 8; labelling
-it is not.
+throughputs absorb it. Since 2026-11-18 so do u' and z' on LOT (question 7): z'
+measures 0.20 of the fallback, which the 28% QE explains most of. What is still
+exposed is a band or telescope with no measured throughput, multiplied by a QE
+that is wrong by a factor of three in z'. Fixing it properly is part of
+question 8; labelling it is not.
 
 ## 14. The VLT profile is mostly invention — DECIDE
 
@@ -819,6 +857,24 @@ frames from 2026-07-12 to 2026-11-02. The DZ936 is the one on the telescope now.
 - i' and z' on the DZ936 rest on one frame each.
 - SOPHIA's QE is still one flat number (question 13). LOT's band values were
   derived with it, so they stay consistent.
+
+## 20. Older throughputs are aperture fluxes, not total fluxes — BUILD
+
+**Found 2026-11-18**, measuring LOT u' and z' (question 7). CASTOR's throughput
+is for a star's total flux; the engine works out itself what fraction lands in
+the user's aperture. On the LOT u' and z' frames a 2.5-FWHM aperture holds 0.91
+(u') and 0.95 (z') of the flux inside 6 FWHM, so `reduce_lot_calibrated.py`
+now corrects to 6 FWHM. The earlier reductions do not: `lulin.py` (LOT g'r'i',
+3 FWHM), `slt.py` and `slt_dz936.py` (2.5 FWHM) take the aperture flux as the
+total, so those throughputs are probably 3-9% low, by an amount that depends on
+the band's PSF wings.
+
+**What closes it.** The same curve of growth in those reductions, from the
+frames they already use (`data/raw/lot_sn2025wny`, `slt_sn2024ggi`,
+`slt_at2026afqt`), and the presets, tests and report moved with it. A
+re-reduction of every Lulin throughput, so it was left out of the u'/z' change.
+
+---
 
 ## Traps
 
