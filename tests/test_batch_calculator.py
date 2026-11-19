@@ -364,7 +364,8 @@ SINGLE_ONLY = {
     "core.snr_ceiling", "core.target_reachable",
 }
 
-def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
+@pytest.mark.parametrize("throughput_correction", [1.0, 0.6])
+def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request, throughput_correction):
     """The same physics in two orchestrators drifts unless a test holds them
     together (LESSONS.md). Unmocked, at one pinned instant, with the moon on in
     both, everything the two responses share must agree.
@@ -381,9 +382,10 @@ def test_a_batch_step_is_the_single_request_at_that_instant(batch_base_request):
     so that t_opt and its echoed k are held to the same convention in both
     orchestrators rather than agreeing only because both fell back to 1.0.
 
-    throughput_correction stays at 1.0 here: the batch calculator does not apply
-    it (the single one does), which is a separate fix this test does not cover."""
-    assert batch_base_request.instrument.throughput_correction == 1.0
+    throughput_correction is run off 1.0 as well: the batch calculator once
+    skipped it while the single one applied it, so the two disagreed by exactly
+    that factor whenever a caller set one."""
+    batch_base_request.instrument.throughput_correction = throughput_correction
     batch_base_request.instrument.camera.background_flatness_fraction = 0.02
     batch_base_request.options = schema.BatchSolveForTime(
         aperture_factor=0.85, single_exp_time=120.0, target_snr=40.0,
