@@ -74,7 +74,12 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
 
     eff_area = float(physics.calculate_effective_area(inst.telescope.primary_mirror_diameter, inst.telescope.secondary_mirror_diameter))
     photon_energy = float(physics.calculate_photon_energy(inst.optic_filter.central_wavelength))
-    total_throughput = float(physics.calculate_total_throughput(inst.telescope.optical_throughput, inst.optic_filter.filter_transmission, inst.camera.quantum_efficiency))
+    # throughput_correction multiplies the product of the three, as in calculator.py.
+    total_throughput = float(physics.calculate_total_throughput(
+        inst.telescope.optical_throughput,
+        inst.optic_filter.filter_transmission,
+        inst.camera.quantum_efficiency
+    )) * inst.throughput_correction
     pixel_scale = float(physics.calculate_pixel_scale(inst.camera.pixel_pitch, inst.telescope.focal_length))
     total_fwhm = env.total_fwhm
     n_pix, f_enc = physics.calculate_aperture_geometry(opt.aperture_factor, total_fwhm, pixel_scale)
