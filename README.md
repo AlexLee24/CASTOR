@@ -27,15 +27,15 @@ Install it like any Python package, and the `castor` command works from any
 directory:
 
 ```bash
-pip install git+https://github.com/happpycorn/CASTOR.git
+pip install git+https://github.com/AlexLee24/CASTOR.git
 ```
 
 Either of these does the same, keeping CASTOR in an environment of its own so it
 cannot clash with your other packages:
 
 ```bash
-pipx install git+https://github.com/happpycorn/CASTOR.git
-uv tool install git+https://github.com/happpycorn/CASTOR.git
+pipx install git+https://github.com/AlexLee24/CASTOR.git
+uv tool install git+https://github.com/AlexLee24/CASTOR.git
 ```
 
 Then check it runs:
@@ -55,7 +55,7 @@ line.
 Clone the repository and let `uv` install the exact locked versions:
 
 ```bash
-git clone https://github.com/happpycorn/CASTOR.git
+git clone https://github.com/AlexLee24/CASTOR.git
 cd CASTOR
 uv sync
 ```
