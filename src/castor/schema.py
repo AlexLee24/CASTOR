@@ -230,6 +230,30 @@ class EnvironmentCondition(StrictModel):
         ..., 
         description="Atmospheric attenuation per unit airmass in mag/airmass. (ATBD: k_ext)"
     )
+    moon_scale: float = Field(
+        default=1.0,
+        ge=0,
+        allow_inf_nan=False,
+        description=(
+            "Multiplier on the Krisciunas & Schaefer (1991) scattered-moonlight term, dimensionless. "
+            "KS91 is a V-band model of one site's sky; a band's colour (moonlight scatters bluer than "
+            "V predicts) and a telescope's own stray light make the real moonlit sky brighter or "
+            "fainter than it. 1 is the model as published, the behaviour before this field existed. "
+            "Measured per band and telescope from calibrated frames (validation/QUESTIONS.md 21)."
+        )
+    )
+    moon_extinction_coeff: float | None = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+        description=(
+            "V-band extinction per airmass used inside the KS91 scattering term, mag/airmass. KS91 "
+            "was fitted with the site's V extinction; feeding it a red band's much smaller "
+            "extinction_coeff shrinks the scattered moonlight by that ratio (r' 0.07 against 0.17 "
+            "is 2.4 times too faint). None uses extinction_coeff, the behaviour before this field "
+            "existed."
+        )
+    )
     scintillation_coefficient: float = Field(
         default=0.09,
         ge=0,
@@ -657,6 +681,30 @@ class TimeSeriesEnvironment(StrictModel):
     extinction_coeff: float = Field(
         ...,
         description="Atmospheric attenuation per unit airmass in mag/airmass."
+    )
+    moon_scale: float = Field(
+        default=1.0,
+        ge=0,
+        allow_inf_nan=False,
+        description=(
+            "Multiplier on the Krisciunas & Schaefer (1991) scattered-moonlight term, dimensionless. "
+            "KS91 is a V-band model of one site's sky; a band's colour (moonlight scatters bluer than "
+            "V predicts) and a telescope's own stray light make the real moonlit sky brighter or "
+            "fainter than it. 1 is the model as published, the behaviour before this field existed. "
+            "Measured per band and telescope from calibrated frames (validation/QUESTIONS.md 21)."
+        )
+    )
+    moon_extinction_coeff: float | None = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+        description=(
+            "V-band extinction per airmass used inside the KS91 scattering term, mag/airmass. KS91 "
+            "was fitted with the site's V extinction; feeding it a red band's much smaller "
+            "extinction_coeff shrinks the scattered moonlight by that ratio (r' 0.07 against 0.17 "
+            "is 2.4 times too faint). None uses extinction_coeff, the behaviour before this field "
+            "existed."
+        )
     )
     scintillation_coefficient: float = Field(
         default=0.09,

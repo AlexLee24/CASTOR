@@ -52,7 +52,7 @@ def _flat(fragment, prefix=""):
 
 #: Every environment field a preset can set. All are compared, so a field the form
 #: sends and the CLI would not (a band's zodiacal share left behind) is a mismatch.
-SKY = ("location", "mu_dark", "extinction_coeff", "zodiacal_share")
+SKY = ("location", "mu_dark", "extinction_coeff", "zodiacal_share", "moon_scale", "moon_extinction_coeff")
 
 def assert_sent_as_resolved(request, fragment, context=None):
     """The request carries exactly the preset values resolve() gives for it.
@@ -196,7 +196,7 @@ def test_a_loaded_sky_stays_when_a_family_is_chosen(with_family):
 
     request = drive(document, [{"load": opening}, select("profile", "backyard")])[-1]
 
-    assert request["environment"]["mu_dark"] == opening["environment"]["mu_dark"] == 21.26
+    assert request["environment"]["mu_dark"] == opening["environment"]["mu_dark"] == 21.21
     assert request["environment"]["zodiacal_share"] == 0.267
 
 def test_a_loaded_null_clears_the_field_instead_of_keeping_the_last_value(shipped):

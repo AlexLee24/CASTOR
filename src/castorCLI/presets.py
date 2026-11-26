@@ -125,6 +125,11 @@ class BandSky(BaseModel):
     mu_dark: float | None = None
     zodiacal_share: float | None = None
     extinction_coeff: float | None = None
+    # The V-band extinction the KS91 moonlight term was fitted with (a band's own
+    # extinction_coeff shrinks red bands' moonlight by k_band / k_V), and a measured
+    # multiplier on that moonlight. See validation/QUESTIONS.md 21.
+    moon_extinction_coeff: float | None = None
+    moon_scale: float | None = None
 
 
 class BandTelescope(BaseModel):
@@ -179,6 +184,11 @@ class FilterEntry(_NamedEntry):
     # in the filter's own profile, so a telescope taken from another profile by a
     # qualified name matches none of them.
     environment: BandSky | None = None
+    # The sky one telescope actually sees through this band, keyed like `telescope`
+    # and laid over `environment`: two telescopes on one mountain share the sky but
+    # not their stray light, so the measured moonless sky and the moonlight that
+    # reaches the detector differ between them (validation/QUESTIONS.md 21).
+    sky: dict[str, BandSky] | None = None
     telescope: dict[str, BandTelescope] | None = None
     # Keyed by camera catalogue key, like `telescope`: the selected camera's QE in this band.
     camera: dict[str, BandCamera] | None = None
@@ -282,6 +292,8 @@ class PresetFile(BaseModel):
             # another site's, it would be a number measured somewhere else.
             if filter_owner == profile_id:
                 _overlay(fragment.get("environment"), chosen.environment)
+                if filter_owner == telescope_owner:
+                    _overlay(fragment.get("environment"), (chosen.sky or {}).get(telescope_key))
             # Telescope-keyed: a filter's band-dependent efficiency belongs to
             # whichever telescope it was actually measured on, not to the filter
             # in the abstract — see FilterEntry.telescope's docstring. Its keys
@@ -514,7 +526,7 @@ def _check_profile(source: Path, profile_id: str, profile: Profile) -> None:
     if profile.environment is not None:
         return
     for filter_id, entry in profile.filters.items():
-        if entry.environment is not None:
+        if entry.environment is not None or entry.sky:
             raise PresetError(
                 f"{source}: profile {profile_id!r} has no environment of its own, "
                 f"so filter {filter_id!r} cannot override one. A profile without "

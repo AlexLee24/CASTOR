@@ -135,6 +135,8 @@
                 time_step_minutes: batch.time_step_minutes,
                 mu_dark: env.mu_dark,
                 zodiacal_share: env.zodiacal_share,
+                moon_scale: env.moon_scale,
+                moon_extinction_coeff: env.moon_extinction_coeff,
                 extinction_coeff: env.extinction_coeff,
                 total_fwhm: env.total_fwhm
             },
@@ -1120,6 +1122,18 @@
         bandSky = {};
     }
 
+    /* The chosen filter's sky as the selected telescope sees it: the band's own,
+       then whatever that telescope measured through it (FilterEntry.sky, keyed by
+       telescope like FilterEntry.telescope). One fragment, laid once, so lifting it
+       puts the site's numbers back rather than the previous telescope's. */
+    function filterSky(entry) {
+        var sky = {};
+        if (entry && entry.environment) { Object.assign(sky, entry.environment); }
+        var own = ((entry && entry.sky) || {})[el('select-telescope').value];
+        if (own) { Object.assign(sky, own); }
+        return sky;
+    }
+
     /* A filter may also speak for the sky it looks through and for the efficiency of
        everything in front of it, because both depend on the band while the request has
        one number for each. Mirrors _overlay in castorCLI/presets.py.
@@ -1143,7 +1157,7 @@
         liftBandSky();
         if (profile.environment) {
             applyFragment('environment', profile.environment);
-            if (entry && entry.environment) { layBandSky(entry.environment); }
+            layBandSky(filterSky(entry));
         }
 
         applyRig(profile, entry);
@@ -1250,9 +1264,15 @@
                 if (preset) {
                     applyFragment(section, preset[key], true);
                     if (kind === 'filters') { applyBand(preset); }
-                    // The telescope's slice only: the filter's sky stays as it is.
+                    // The telescope's slice, and the filter's sky as this telescope sees it
+                    // (its own stray light); the site's sky is not re-applied.
                     if (kind === 'telescopes') {
-                        applyRig(profiles()[profileSelect.value], catalogue('filters')[el('select-filter').value]);
+                        var chosenFilter = catalogue('filters')[el('select-filter').value];
+                        applyRig(profiles()[profileSelect.value], chosenFilter);
+                        if ((profiles()[profileSelect.value] || {}).environment) {
+                            liftBandSky();
+                            layBandSky(filterSky(chosenFilter));
+                        }
                     }
                     // The camera's slice: its QE in the band already chosen.
                     if (kind === 'cameras') {

@@ -876,6 +876,47 @@ re-reduction of every Lulin throughput, so it was left out of the u'/z' change.
 
 ---
 
+## 21. Lulin's sky is brighter than the presets, and moonlight far brighter — CLOSED
+
+Measured on 1267 calibrated LOT and SLT frames (2026-03 to 2026-11, up to two
+frames per target, band and night) against CASTOR's sky for the same frame and
+pointing: the sigma-clipped median of the central 1024 px, converted to e-/s/pix
+with each frame's gain and BUNIT, over CASTOR's `sky_count_rate`. The zero points
+of 125 Kinder AutoPhOT detections agree with CASTOR to 0.05 mag (g' -0.03,
+r' -0.08, i' -0.05, z' +0.01), so a sky ratio is a sky brightness and not a
+throughput error, and the pixel-to-pixel noise is photon plus read noise
+(0.95-1.08 of it), so nothing else was missing from the noise model.
+
+**The moon term was fed the wrong extinction.** KS91 is a V-band model and its
+scattered light scales with the V extinction it was fitted with; CASTOR passed
+each band's own `extinction_coeff`, so r' (0.07), i' (0.04) and z' (0.05) got
+2.4-4 times too little moonlight. `moon_extinction_coeff` (0.17 for Lulin) now
+feeds KS91 instead, and None keeps the old behaviour for every other site.
+
+**Even with that, moonlight is a multiple of KS91, and per telescope.**
+`moon_scale` multiplies the KS91 term; it is fitted so the median moonlit
+residual is zero: LOT 3.1 / 2.9 in g'/r' (i', z' and u' borrow these; under 7
+moonlit frames each), SLT 2.9 g', 1.7 r', 1.4 i', 1.6 z', 2.1 u'. LOT's larger
+multiple at the same site and band is stray light, so the sky is telescope-keyed
+(`FilterEntry.sky`). Frame to frame KS91's shape still scatters by 0.3-0.7 mag.
+
+**The moonless sky differs by telescope too.** Against the shared band values
+SLT's moonless sky is 0.08 / 0.28 / 0.23 / 0.07 / 0.71 mag brighter in
+g' r' i' z' u'; LOT's agrees in g' r' (+0.04, -0.05) and is 0.2 mag darker in
+i' z' (19 and 18 frames). LOT u' has 3 moonless frames and keeps the band value.
+
+| sky, measured - CASTOR (median mag) | moonless before | after | moonlit before | after |
+|---|---|---|---|---|
+| LOT g' / r' | +0.04 / -0.03 | 0.00 / +0.02 | -0.65 / -1.00 | 0.00 / -0.01 |
+| SLT g' / r' / i' / z' / u' | -0.08 / -0.28 / -0.23 / -0.05 / -0.71 | 0.00 / 0.00 / 0.00 / +0.02 / 0.00 | -0.62 / -0.63 / -0.65 / -0.33 / -0.68 | +0.01 / +0.01 / 0.00 / 0.00 / 0.00 |
+
+What it buys: measured S/N (AutoPhOT PSF, its sqrt(chi2_nu) error inflation
+removed) over CASTOR's for SLT DZ936 single frames without template
+subtraction on clear frames went from 0.74 / 0.81 / 0.91 / 0.90 to
+1.11 / 1.12 / 0.97 / 0.93 in g' r' i' z', and the 5 sigma limit from 0.4-0.7 mag
+shallower than predicted to 0.1-0.3. Template-subtracted points stay well
+below CASTOR (0.3-0.7): the template's noise is not in the model, by design.
+
 ## Traps
 
 Not open questions. Recorded because each one looks like a source and is not, and

@@ -190,3 +190,23 @@ def test_zodiacal_share_brightens_the_sky_relative_to_local_only():
     with_zodiacal = calculate_sky_brightness(**kwargs, zodiacal_share=0.274)
 
     assert with_zodiacal < local_only
+
+
+def test_moonlight_uses_the_v_extinction_and_its_measured_multiple():
+    """QUESTIONS.md 21: KS91 scales with the V extinction it was fitted with, so a red
+    band's own k must not shrink its moonlight, and moon_scale multiplies what is left.
+    Defaults keep the old sky exactly."""
+    from castor import moon as m
+    geo = (30.0, 40.0, 40.0, 30.0)           # gibbous moon, 40 deg away, both well up
+    args = dict(target_ra=10.0, target_dec=20.0, obs_time_utc="2026-11-20T15:00:00Z",
+                mu_dark=21.0, extinction_coeff=0.07, geometry=geo)
+    nl = lambda mu: 10 ** (0.4 * (22.5 - mu))
+    dark = nl(21.0)
+    old = nl(m.calculate_sky_brightness(**args)) - dark
+    with_v = nl(m.calculate_sky_brightness(**args, moon_extinction_coeff=0.17)) - dark
+    scaled = nl(m.calculate_sky_brightness(**args, moon_extinction_coeff=0.17, moon_scale=2.0)) - dark
+    assert m.calculate_sky_brightness(**args, moon_scale=1.0, moon_extinction_coeff=None) == m.calculate_sky_brightness(**args)
+    assert with_v / old == pytest.approx(
+        (1 - 10 ** (-0.4 * 0.17 * 1.1547)) / (1 - 10 ** (-0.4 * 0.07 * 1.1547))
+        * 10 ** (-0.4 * (0.17 - 0.07) * 1.3054), rel=1e-6)
+    assert scaled / with_v == pytest.approx(2.0, rel=1e-9)

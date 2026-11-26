@@ -112,7 +112,18 @@
           "environment": {
             "mu_dark": 21.26,
             "zodiacal_share": 0.267,
-            "extinction_coeff": 0.07
+            "extinction_coeff": 0.07,
+            "moon_extinction_coeff": 0.17
+          },
+          "sky": {
+            "LOT": {
+              "mu_dark": 21.21,
+              "moon_scale": 2.9
+            },
+            "SLT": {
+              "mu_dark": 20.98,
+              "moon_scale": 1.7
+            }
           },
           "telescope": {
             "LOT": {
@@ -140,7 +151,17 @@
           },
           "environment": {
             "mu_dark": 22.73,
-            "extinction_coeff": 0.44
+            "extinction_coeff": 0.44,
+            "moon_extinction_coeff": 0.17
+          },
+          "sky": {
+            "LOT": {
+              "moon_scale": 3.1
+            },
+            "SLT": {
+              "mu_dark": 22.02,
+              "moon_scale": 2.1
+            }
           },
           "telescope": {
             "LOT": {
@@ -169,7 +190,18 @@
           "environment": {
             "mu_dark": 21.79,
             "zodiacal_share": 0.274,
-            "extinction_coeff": 0.16
+            "extinction_coeff": 0.16,
+            "moon_extinction_coeff": 0.17
+          },
+          "sky": {
+            "LOT": {
+              "mu_dark": 21.83,
+              "moon_scale": 3.1
+            },
+            "SLT": {
+              "mu_dark": 21.71,
+              "moon_scale": 2.9
+            }
           },
           "telescope": {
             "LOT": {
@@ -198,7 +230,18 @@
           "environment": {
             "mu_dark": 20.2,
             "zodiacal_share": 0.137,
-            "extinction_coeff": 0.04
+            "extinction_coeff": 0.04,
+            "moon_extinction_coeff": 0.17
+          },
+          "sky": {
+            "LOT": {
+              "mu_dark": 20.41,
+              "moon_scale": 2.9
+            },
+            "SLT": {
+              "mu_dark": 19.97,
+              "moon_scale": 1.4
+            }
           },
           "telescope": {
             "LOT": {
@@ -226,7 +269,18 @@
           },
           "environment": {
             "mu_dark": 18.71,
-            "extinction_coeff": 0.05
+            "extinction_coeff": 0.05,
+            "moon_extinction_coeff": 0.17
+          },
+          "sky": {
+            "LOT": {
+              "mu_dark": 18.89,
+              "moon_scale": 2.9
+            },
+            "SLT": {
+              "mu_dark": 18.64,
+              "moon_scale": 1.6
+            }
           },
           "telescope": {
             "LOT": {

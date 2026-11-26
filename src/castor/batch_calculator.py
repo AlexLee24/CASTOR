@@ -69,6 +69,7 @@ def run_batch_calculation(request: schema.BatchObservationRequest) -> schema.Bat
         lon=env.location.longitude_deg, lat=env.location.latitude_deg,
         elevation=env.location.elevation_m,
         zodiacal_share=env.zodiacal_share,
+        moon_scale=env.moon_scale, moon_extinction_coeff=env.moon_extinction_coeff,
         geometry=geometry
     )
 

@@ -402,6 +402,10 @@
                              other; PayloadBuilder skips it whenever it's left empty, which is
                              every profile that has never had this measured. -->
                         <input type="number" name="environment.zodiacal_share" step="any" min="0" max="0.999" hidden>
+                        <!-- Preset-only too: the moonlight multiplier a telescope measured
+                             through a band, and the V extinction the KS91 moonlight term uses. -->
+                        <input type="number" name="environment.moon_scale" step="any" min="0" hidden>
+                        <input type="number" name="environment.moon_extinction_coeff" step="any" min="0" hidden>
 
                         <hr class="etc-divider">
 

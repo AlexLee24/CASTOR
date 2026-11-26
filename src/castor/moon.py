@@ -313,6 +313,8 @@ def calculate_sky_brightness(
     elevation: float = 2862.0,
     zodiacal_share: float | None = None,
     geometry: tuple | None = None,
+    moon_scale: float = 1.0,
+    moon_extinction_coeff: float | None = None,
 ) -> Numeric:
     """
     Calculate total sky surface brightness including lunar contribution.
@@ -320,6 +322,10 @@ def calculate_sky_brightness(
     `geometry` is the (alpha, rho, z_moon, z_target) a caller already has from
     `get_moon_and_target_geometry` for this same time and place; passing it
     saves computing the ephemeris a second time. None computes it here.
+
+    `moon_extinction_coeff` is the V-band extinction KS91 was fitted with; None
+    falls back to `extinction_coeff` (the band's own, as before it existed).
+    `moon_scale` multiplies the scattered moonlight (1 = KS91 as published).
 
     `zodiacal_share` adds a third, pointing-dependent term on top of the moon
     and `mu_dark` — see `calculate_zodiacal_brightness_nl`. `None` (the default)
@@ -337,7 +343,8 @@ def calculate_sky_brightness(
         )
     alpha, rho, z_moon, z_target = geometry
 
-    B_moon_nl = krisciunas_schaefer_1991(alpha, rho, z_moon, z_target, k_ext_v=extinction_coeff)
+    k_moon = extinction_coeff if moon_extinction_coeff is None else moon_extinction_coeff
+    B_moon_nl = moon_scale * krisciunas_schaefer_1991(alpha, rho, z_moon, z_target, k_ext_v=k_moon)
 
     mu_local = apply_zodiacal_baseline(mu_dark, target_ra, target_dec, zodiacal_share)
     B_local_nl = 34.08 * (10.0 ** (0.4 * (22.5 - mu_local)))
