@@ -68,7 +68,7 @@
           }
         },
         "SLT_DZ936": {
-          "name": "SLT camera, 2021-2022 and again in 2026 (Andor iKon-L 936)",
+          "name": "Andor936",
           "camera": {
             "pixel_pitch": 13.5,
             "quantum_efficiency": 0.9,
@@ -79,7 +79,7 @@
           }
         },
         "SLT_DU934P": {
-          "name": "SLT camera, 2023-2026 (Andor DU934P-BEX2-DD)",
+          "name": "Andor934",
           "camera": {
             "pixel_pitch": 13.0,
             "quantum_efficiency": 0.85,
