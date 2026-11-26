@@ -267,6 +267,9 @@ def test_the_measured_throughput_reproduces_the_measured_sky(lot, band):
     assert rate == pytest.approx(m["sky_rate"], rel=0.02)
 
 
+BAND_KEY = {"u": "Sloan_u", "g": "Sloan_g", "r": "Sloan_r", "i": "Sloan_i", "z": "Sloan_z"}
+
+
 @pytest.mark.parametrize("band", ["g", "r", "i"])
 def test_preset_mu_dark_plus_zodiacal_reproduces_the_sky_that_was_measured(band):
     """And each band carries the sky that was measured through it — split in two.
@@ -280,7 +283,9 @@ def test_preset_mu_dark_plus_zodiacal_reproduces_the_sky_that_was_measured(band)
     in background flux. It survives as the fallback for bands nobody has measured,
     and carries no zodiacal_share to split.
     """
-    env = _resolved(band)["environment"]
+    # The band's own sky, as measured: a telescope's sky.<TEL> override (QUESTIONS.md 21)
+    # is a later, separate measurement laid over it and is not what this records.
+    env = presets.load().profile("lulin").filters[BAND_KEY[band]].environment.model_dump()
     b_local = 34.08 * (10.0 ** (0.4 * (22.5 - env["mu_dark"])))
     share = env["zodiacal_share"]
     b_zodi_at_reference = b_local * share / (1.0 - share)

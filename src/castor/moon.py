@@ -66,9 +66,6 @@ __all__ = [
     "apply_zodiacal_baseline",
 ]
 
-# Krisciunas & Schaefer (1991), foot-candles/sr to nanoLamberts.
-KS91_FC_TO_NL_CONVERSION = 1e5
-
 # ==========================================
 # Ephemeris — where things are
 # ==========================================
@@ -169,9 +166,21 @@ def krisciunas_schaefer_1991(
     k_ext_v: float = 0.17
 ) -> Numeric:
     """
-    Krisciunas and Schaefer (1991) empirical model for lunar sky brightness.
-    Calculates the scattered lunar flux contribution in the direction of the target.
-    
+    Krisciunas and Schaefer (1991) empirical model for lunar sky brightness,
+    PASP 103, 1033, eqs. 3, 15, 20 and 21, as published.
+
+        B_moon = f(rho) I* 10^(-0.4 k X_moon) [1 - 10^(-0.4 k X)]
+        f(rho) = 10^5.36 (1.06 + cos^2 rho) + 10^(6.15 - rho/40)     (rho >= 10 deg)
+                 6.2e7 rho^-2                                          (rho < 10 deg)
+        X      = (1 - 0.96 sin^2 Z)^-1/2
+
+    The first term of f is Rayleigh scattering and does not fall off with
+    separation: it is what keeps the whole sky bright under a gibbous moon. An
+    earlier version used a scattering function with no such constant, which
+    matches this one near 30 deg and is 4 times too faint at 90 deg and 16 at
+    120; 1267 Lulin frames show the published form holds at every separation
+    (validation/QUESTIONS.md 21).
+
     Returns
     -------
     Numeric
@@ -181,20 +190,19 @@ def krisciunas_schaefer_1991(
     rho = np.clip(rho_deg, 1e-2, 180.0)
     z_moon = np.clip(z_moon_deg, 0.0, 89.9)
     z_target = np.clip(z_target_deg, 0.0, 89.9)
-    
-    X_moon = 1.0 / np.cos(np.radians(z_moon))
-    X_target = 1.0 / np.cos(np.radians(z_target))
-    
+
+    X_moon = 1.0 / np.sqrt(1.0 - 0.96 * np.sin(np.radians(z_moon)) ** 2.0)
+    X_target = 1.0 / np.sqrt(1.0 - 0.96 * np.sin(np.radians(z_target)) ** 2.0)
+
     V_m = -12.73 + 0.026 * np.abs(alpha_deg) + (4e-9 * (alpha_deg ** 4.0))
     I_star = 10.0 ** (-0.4 * (V_m + 16.57))
-    
-    cos_rho2 = np.cos(np.radians(rho)) ** 2.0
-    f_rho = 1e5 * (2.28e-5 * (rho ** -2.5) + 2.22e-4 * (10.0 ** (-0.0173 * rho)) + 2.13e-6 * cos_rho2)
-    
-    B_moon_raw = f_rho * I_star * (10.0 ** (-0.4 * k_ext_v * X_moon)) * (1.0 - 10.0 ** (-0.4 * k_ext_v * X_target))
 
-    B_moon = B_moon_raw * KS91_FC_TO_NL_CONVERSION
-    
+    f_rayleigh = (10.0 ** 5.36) * (1.06 + np.cos(np.radians(rho)) ** 2.0)
+    f_mie = np.where(rho >= 10.0, 10.0 ** (6.15 - rho / 40.0), 6.2e7 * rho ** -2.0)
+    f_rho = f_rayleigh + f_mie
+
+    B_moon = f_rho * I_star * (10.0 ** (-0.4 * k_ext_v * X_moon)) * (1.0 - 10.0 ** (-0.4 * k_ext_v * X_target))
+
     return B_moon
 
 #: Ecliptic latitude our own Lulin photometry looks down, degrees — the

@@ -236,10 +236,10 @@ class EnvironmentCondition(StrictModel):
         allow_inf_nan=False,
         description=(
             "Multiplier on the Krisciunas & Schaefer (1991) scattered-moonlight term, dimensionless. "
-            "KS91 is a V-band model of one site's sky; a band's colour (moonlight scatters bluer than "
-            "V predicts) and a telescope's own stray light make the real moonlit sky brighter or "
-            "fainter than it. 1 is the model as published, the behaviour before this field existed. "
-            "Measured per band and telescope from calibrated frames (validation/QUESTIONS.md 21)."
+            "KS91 is a V-band model of one site's sky, so a band's colour leaves the real moonlit sky "
+            "somewhat brighter or fainter than it (Lulin: 0.8 in i' to 1.2 in g'). 1 is the model as "
+            "published, the behaviour before this field existed. Measured per band from calibrated "
+            "frames (validation/QUESTIONS.md 21)."
         )
     )
     moon_extinction_coeff: float | None = Field(
@@ -688,10 +688,10 @@ class TimeSeriesEnvironment(StrictModel):
         allow_inf_nan=False,
         description=(
             "Multiplier on the Krisciunas & Schaefer (1991) scattered-moonlight term, dimensionless. "
-            "KS91 is a V-band model of one site's sky; a band's colour (moonlight scatters bluer than "
-            "V predicts) and a telescope's own stray light make the real moonlit sky brighter or "
-            "fainter than it. 1 is the model as published, the behaviour before this field existed. "
-            "Measured per band and telescope from calibrated frames (validation/QUESTIONS.md 21)."
+            "KS91 is a V-band model of one site's sky, so a band's colour leaves the real moonlit sky "
+            "somewhat brighter or fainter than it (Lulin: 0.8 in i' to 1.2 in g'). 1 is the model as "
+            "published, the behaviour before this field existed. Measured per band from calibrated "
+            "frames (validation/QUESTIONS.md 21)."
         )
     )
     moon_extinction_coeff: float | None = Field(

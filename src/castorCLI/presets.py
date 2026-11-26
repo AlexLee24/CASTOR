@@ -186,8 +186,8 @@ class FilterEntry(_NamedEntry):
     environment: BandSky | None = None
     # The sky one telescope actually sees through this band, keyed like `telescope`
     # and laid over `environment`: two telescopes on one mountain share the sky but
-    # not their stray light, so the measured moonless sky and the moonlight that
-    # reaches the detector differ between them (validation/QUESTIONS.md 21).
+    # not their stray light, and Lulin's SLT measures a moonless r' 0.23 mag brighter
+    # than LOT does (validation/QUESTIONS.md 21).
     sky: dict[str, BandSky] | None = None
     telescope: dict[str, BandTelescope] | None = None
     # Keyed by camera catalogue key, like `telescope`: the selected camera's QE in this band.

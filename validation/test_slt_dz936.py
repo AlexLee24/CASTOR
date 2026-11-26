@@ -74,8 +74,10 @@ def test_u_and_z_carry_their_measured_sky(shipped, band):
 def test_gri_sky_from_lot_holds_on_this_sightline(shipped, band):
     """g'r'i' were measured from LOT down one sightline (ecliptic +16). Rebuilt
     at this night's pointing (ecliptic -19) through CASTOR's own zodiacal
-    baseline, they have to land within this night's scatter, plus margin."""
-    env = _resolved(shipped, band)["environment"]
+    baseline, they have to land within this night's scatter, plus margin.
+    The band's value, that is: SLT's own sky.SLT (QUESTIONS.md 21) is a median over
+    134-159 frames and nights and is held to those, not to this one night."""
+    env = shipped.profile(PROFILE).filters[{"g": "Sloan_g", "r": "Sloan_r", "i": "Sloan_i"}[band]].environment.model_dump()
     predicted = moon.apply_zodiacal_baseline(
         env["mu_dark"], dz.NIGHT["ra_deg"], dz.NIGHT["dec_deg"], env["zodiacal_share"])
     assert predicted == pytest.approx(dz.SKY[band]["mu"], abs=0.25)
