@@ -190,3 +190,43 @@ def test_zodiacal_share_brightens_the_sky_relative_to_local_only():
     with_zodiacal = calculate_sky_brightness(**kwargs, zodiacal_share=0.274)
 
     assert with_zodiacal < local_only
+
+
+def test_moonlight_uses_the_v_extinction_and_its_measured_multiple():
+    """QUESTIONS.md 21: KS91 scales with the V extinction it was fitted with, so a red
+    band's own k must not shrink its moonlight, and moon_scale multiplies what is left.
+    Defaults keep the old sky exactly."""
+    from castor import moon as m
+    geo = (30.0, 40.0, 40.0, 30.0)           # gibbous moon, 40 deg away, both well up
+    args = dict(target_ra=10.0, target_dec=20.0, obs_time_utc="2026-11-20T15:00:00Z",
+                mu_dark=21.0, extinction_coeff=0.07, geometry=geo)
+    nl = lambda mu: 10 ** (0.4 * (22.5 - mu))
+    XT = (1 - 0.96 * np.sin(np.radians(30.0)) ** 2) ** -0.5     # KS91 eq. 3
+    XM = (1 - 0.96 * np.sin(np.radians(40.0)) ** 2) ** -0.5
+    dark = nl(21.0)
+    old = nl(m.calculate_sky_brightness(**args)) - dark
+    with_v = nl(m.calculate_sky_brightness(**args, moon_extinction_coeff=0.17)) - dark
+    scaled = nl(m.calculate_sky_brightness(**args, moon_extinction_coeff=0.17, moon_scale=2.0)) - dark
+    assert m.calculate_sky_brightness(**args, moon_scale=1.0, moon_extinction_coeff=None) == m.calculate_sky_brightness(**args)
+    assert with_v / old == pytest.approx(
+        (1 - 10 ** (-0.4 * 0.17 * XT)) / (1 - 10 ** (-0.4 * 0.07 * XT))
+        * 10 ** (-0.4 * (0.17 - 0.07) * XM), rel=1e-6)
+    assert scaled / with_v == pytest.approx(2.0, rel=1e-9)
+
+
+def test_ks91_is_the_published_formula():
+    """KS91 eqs. 15, 20, 21 as printed, Rayleigh constant included: far from the moon
+    the sky stays lit (QUESTIONS.md 21). Full moon, both at Z = 30 deg, k = 0.172."""
+    from castor.moon import krisciunas_schaefer_1991 as ks
+    def published(rho):
+        X = (1 - 0.96 * np.sin(np.radians(30.0)) ** 2) ** -0.5
+        f = 10 ** 5.36 * (1.06 + np.cos(np.radians(rho)) ** 2) + 10 ** (6.15 - rho / 40)
+        return f * 10 ** (-0.4 * (-12.73 + 16.57)) * 10 ** (-0.4 * 0.172 * X) * (1 - 10 ** (-0.4 * 0.172 * X))
+    for rho in (15.0, 45.0, 90.0, 120.0, 170.0):
+        assert ks(0.0, rho, 30.0, 30.0, k_ext_v=0.172) == pytest.approx(published(rho), rel=1e-9)
+    # Rayleigh floor: 90 and 120 deg from a full moon differ by under 30%, not by 4x.
+    assert ks(0.0, 120.0, 30.0, 30.0) / ks(0.0, 90.0, 30.0, 30.0) > 0.7
+    assert ks(0.0, 5.0, 30.0, 30.0) == pytest.approx(
+        (10 ** 5.36 * (1.06 + np.cos(np.radians(5.0)) ** 2) + 6.2e7 * 5.0 ** -2)
+        / (10 ** 5.36 * (1.06 + np.cos(np.radians(15.0)) ** 2) + 10 ** (6.15 - 15.0 / 40))
+        * ks(0.0, 15.0, 30.0, 30.0), rel=1e-9)

@@ -66,9 +66,6 @@ __all__ = [
     "apply_zodiacal_baseline",
 ]
 
-# Krisciunas & Schaefer (1991), foot-candles/sr to nanoLamberts.
-KS91_FC_TO_NL_CONVERSION = 1e5
-
 # ==========================================
 # Ephemeris — where things are
 # ==========================================
@@ -169,9 +166,21 @@ def krisciunas_schaefer_1991(
     k_ext_v: float = 0.17
 ) -> Numeric:
     """
-    Krisciunas and Schaefer (1991) empirical model for lunar sky brightness.
-    Calculates the scattered lunar flux contribution in the direction of the target.
-    
+    Krisciunas and Schaefer (1991) empirical model for lunar sky brightness,
+    PASP 103, 1033, eqs. 3, 15, 20 and 21, as published.
+
+        B_moon = f(rho) I* 10^(-0.4 k X_moon) [1 - 10^(-0.4 k X)]
+        f(rho) = 10^5.36 (1.06 + cos^2 rho) + 10^(6.15 - rho/40)     (rho >= 10 deg)
+                 6.2e7 rho^-2                                          (rho < 10 deg)
+        X      = (1 - 0.96 sin^2 Z)^-1/2
+
+    The first term of f is Rayleigh scattering and does not fall off with
+    separation: it is what keeps the whole sky bright under a gibbous moon. An
+    earlier version used a scattering function with no such constant, which
+    matches this one near 30 deg and is 4 times too faint at 90 deg and 16 at
+    120; 1267 Lulin frames show the published form holds at every separation
+    (validation/QUESTIONS.md 21).
+
     Returns
     -------
     Numeric
@@ -181,20 +190,19 @@ def krisciunas_schaefer_1991(
     rho = np.clip(rho_deg, 1e-2, 180.0)
     z_moon = np.clip(z_moon_deg, 0.0, 89.9)
     z_target = np.clip(z_target_deg, 0.0, 89.9)
-    
-    X_moon = 1.0 / np.cos(np.radians(z_moon))
-    X_target = 1.0 / np.cos(np.radians(z_target))
-    
+
+    X_moon = 1.0 / np.sqrt(1.0 - 0.96 * np.sin(np.radians(z_moon)) ** 2.0)
+    X_target = 1.0 / np.sqrt(1.0 - 0.96 * np.sin(np.radians(z_target)) ** 2.0)
+
     V_m = -12.73 + 0.026 * np.abs(alpha_deg) + (4e-9 * (alpha_deg ** 4.0))
     I_star = 10.0 ** (-0.4 * (V_m + 16.57))
-    
-    cos_rho2 = np.cos(np.radians(rho)) ** 2.0
-    f_rho = 1e5 * (2.28e-5 * (rho ** -2.5) + 2.22e-4 * (10.0 ** (-0.0173 * rho)) + 2.13e-6 * cos_rho2)
-    
-    B_moon_raw = f_rho * I_star * (10.0 ** (-0.4 * k_ext_v * X_moon)) * (1.0 - 10.0 ** (-0.4 * k_ext_v * X_target))
 
-    B_moon = B_moon_raw * KS91_FC_TO_NL_CONVERSION
-    
+    f_rayleigh = (10.0 ** 5.36) * (1.06 + np.cos(np.radians(rho)) ** 2.0)
+    f_mie = np.where(rho >= 10.0, 10.0 ** (6.15 - rho / 40.0), 6.2e7 * rho ** -2.0)
+    f_rho = f_rayleigh + f_mie
+
+    B_moon = f_rho * I_star * (10.0 ** (-0.4 * k_ext_v * X_moon)) * (1.0 - 10.0 ** (-0.4 * k_ext_v * X_target))
+
     return B_moon
 
 #: Ecliptic latitude our own Lulin photometry looks down, degrees — the
@@ -313,6 +321,8 @@ def calculate_sky_brightness(
     elevation: float = 2862.0,
     zodiacal_share: float | None = None,
     geometry: tuple | None = None,
+    moon_scale: float = 1.0,
+    moon_extinction_coeff: float | None = None,
 ) -> Numeric:
     """
     Calculate total sky surface brightness including lunar contribution.
@@ -320,6 +330,10 @@ def calculate_sky_brightness(
     `geometry` is the (alpha, rho, z_moon, z_target) a caller already has from
     `get_moon_and_target_geometry` for this same time and place; passing it
     saves computing the ephemeris a second time. None computes it here.
+
+    `moon_extinction_coeff` is the V-band extinction KS91 was fitted with; None
+    falls back to `extinction_coeff` (the band's own, as before it existed).
+    `moon_scale` multiplies the scattered moonlight (1 = KS91 as published).
 
     `zodiacal_share` adds a third, pointing-dependent term on top of the moon
     and `mu_dark` — see `calculate_zodiacal_brightness_nl`. `None` (the default)
@@ -337,7 +351,8 @@ def calculate_sky_brightness(
         )
     alpha, rho, z_moon, z_target = geometry
 
-    B_moon_nl = krisciunas_schaefer_1991(alpha, rho, z_moon, z_target, k_ext_v=extinction_coeff)
+    k_moon = extinction_coeff if moon_extinction_coeff is None else moon_extinction_coeff
+    B_moon_nl = moon_scale * krisciunas_schaefer_1991(alpha, rho, z_moon, z_target, k_ext_v=k_moon)
 
     mu_local = apply_zodiacal_baseline(mu_dark, target_ra, target_dec, zodiacal_share)
     B_local_nl = 34.08 * (10.0 ** (0.4 * (22.5 - mu_local)))

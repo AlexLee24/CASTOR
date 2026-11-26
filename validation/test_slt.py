@@ -123,6 +123,13 @@ def test_the_fade_is_what_disqualified_the_extinction():
     assert excess["z"] < 0.05
 
 
+#: Bands whose 2024 throughput a later measurement has since corrected, by what factor.
+#: u': 1.9 (0.7 mag), from SLT + DZ936 zero points on Gaia XP u stars, the transients'
+#: zero points and the stars' S/N, and the sky on both cameras agreeing only once the
+#: factor sits in the optical train rather than a QE — validation/QUESTIONS.md 21.
+LATER = {"u": 0.39 / 0.205}
+
+
 @pytest.mark.parametrize("band", BANDS_2024)
 def test_preset_throughput_reproduces_the_measured_total(shipped, band):
     """The loop closes: what the file stores, multiplied back out by the engine's
@@ -136,7 +143,7 @@ def test_preset_throughput_reproduces_the_measured_total(shipped, band):
     reassembled = (instrument["telescope"]["optical_throughput"]
                    * instrument["camera"]["quantum_efficiency"]
                    * instrument["optic_filter"]["filter_transmission"])
-    assert reassembled == pytest.approx(slt.MEASURED[band]["throughput"], rel=0.02)
+    assert reassembled == pytest.approx(slt.MEASURED[band]["throughput"] * LATER.get(band, 1.0), rel=0.02)
 
 
 @pytest.mark.parametrize("band", BANDS_2024)
@@ -148,7 +155,7 @@ def test_the_file_stores_the_optical_train_not_the_total(shipped, band):
         instrument["camera"]["quantum_efficiency"],
         instrument["optic_filter"]["filter_transmission"],
     )
-    assert instrument["telescope"]["optical_throughput"] == pytest.approx(expected, abs=0.002)
+    assert instrument["telescope"]["optical_throughput"] == pytest.approx(expected * LATER.get(band, 1.0), rel=0.01)
 
 
 def test_the_telescope_fallback_is_the_geometric_mean_of_its_bands(shipped):

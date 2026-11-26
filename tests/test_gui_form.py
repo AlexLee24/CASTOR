@@ -52,7 +52,7 @@ def _flat(fragment, prefix=""):
 
 #: Every environment field a preset can set. All are compared, so a field the form
 #: sends and the CLI would not (a band's zodiacal share left behind) is a mismatch.
-SKY = ("location", "mu_dark", "extinction_coeff", "zodiacal_share")
+SKY = ("location", "mu_dark", "extinction_coeff", "zodiacal_share", "moon_scale", "moon_extinction_coeff")
 
 def assert_sent_as_resolved(request, fragment, context=None):
     """The request carries exactly the preset values resolve() gives for it.

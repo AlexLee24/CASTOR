@@ -876,6 +876,75 @@ re-reduction of every Lulin throughput, so it was left out of the u'/z' change.
 
 ---
 
+## 21. Lulin's sky: KS91 had lost its Rayleigh term, SLT u' was 0.7 mag low — CLOSED
+
+Measured on 1718 calibrated LOT and SLT frames (2025-01 to 2026-11, up to four
+per target, band and night; `validation/lulin_recent.py measure`): the
+sigma-clipped median sky of the central 1024 px in e-/s/pix, from each frame's
+gain and BUNIT, against CASTOR's `sky_count_rate` for the same frame, time and
+pointing. Pixel-to-pixel noise is 0.95-1.08 of photon plus read noise, so the
+noise model was missing nothing but sky.
+
+**The moonlight model was not KS91.** Its scattering function matched the
+published f(rho) near 30 deg but had no Rayleigh constant (10^5.36 x 1.06), so
+it fell to a quarter of KS91 at 90 deg and a sixteenth at 120: measured
+moonlight over CASTOR rose from about 1 near the moon to 5-30 far from it, the
+same in every band on both telescopes (an apparent "LOT stray light" of 2-3x
+was this). `krisciunas_schaefer_1991` is now the published eqs. 3, 15, 20, 21;
+measured over model is then flat at 0.8-1.2 across separation, phase and moon
+altitude.
+
+**And it was fed the wrong extinction.** KS91 scales with the V extinction it
+was fitted with; CASTOR passed the band's own (r' 0.07, i' 0.04), cutting red
+moonlight by 2.4-4. `moon_extinction_coeff` (Lulin 0.17) feeds it now; None
+keeps the old behaviour elsewhere. The moon's colour is left to `moon_scale`:
+u' 0.50, g' 1.20, r' 0.84, i' 0.80, z' 0.89 (median moonlit residual zero, LOT
+and SLT pooled; they agree).
+
+**SLT u' throughput was 0.7 mag low.** Three independent looks agree: SLT +
+DZ936 zero points from Kinder AutoPhOT calibration stars on Gaia XP u (+0.72,
+two frames, 12-13 stars each), transient zero points (+0.67), and the stars'
+S/N at 11-17 mag (1.3x, source-limited). Put into the DZ936's QE, it made the u'
+sky on that camera 0.73 mag too bright while the DU934P's stayed right; put
+into SLT's u' optical train (0.205 -> 0.39) both cameras' skies agree. The
+first pass had fitted SLT u' sky 0.71 mag bright: it was this throughput, which
+is why `lulin_recent.py fit` goes throughput -> moonless sky -> moonlight.
+
+**The moonless sky differs by telescope, a little.** `FilterEntry.sky` keeps a
+telescope's own `mu_dark` where it differs from the band's by more than 0.05:
+SLT g' 21.69, r' 20.96, i' 19.99; LOT i' 20.39, z' 18.89. Everything else runs
+under the band's measured value.
+
+Hold-out (fit on odd nights, judged on even, and the reverse), moonlit median
+residual: -0.56..-1.05 mag before, -0.09..+0.14 after; typical |residual| per
+frame 0.6-0.9 -> 0.12-0.26.
+
+All 1718 frames, median [typical |residual|], mag:
+
+| | moonless before | after | moonlit before | after |
+|---|---|---|---|---|
+| SLT g' r' i' | -0.11 / -0.29 / -0.21 | -0.01 / +0.01 / 0.00 [0.16-0.21] | -0.64 / -0.68 / -0.73 | -0.02 / +0.02 / -0.01 [0.14-0.16] |
+| SLT u' z' | -0.71 / -0.01 | -0.02 / -0.01 | -0.68 / -0.33 | -0.01 / -0.07 [0.20-0.22] |
+| LOT g' r' | +0.04 / -0.01 | +0.04 / -0.01 | -0.65 / -0.91 | +0.06 / 0.00 [0.14-0.22] |
+| LOT i' z' | +0.19 / +0.18 | 0.00 / 0.00 | -0.70 (14) | -0.21 (14) |
+
+Star test, independent of every fit: 9261 AutoPhOT calibration stars on 131
+frames (blank sky, no host, no template), measured PSF S/N (sqrt(chi2_nu)
+inflation removed) over CASTOR's, 14-20 mag: SLT u' 1.56 -> 0.92, g' 0.85 ->
+0.95, r' 0.80 -> 0.90, i' 0.81 -> 0.89, z' 0.82 -> 0.84; LOT g' 0.72 -> 1.02,
+r' 0.78 -> 0.96, i' 0.95 -> 1.03. Fainter than 20 the ratio climbs above 1
+because only stars that scattered up pass AutoPhOT's S/N > 3 cut.
+
+Transients (125 Kinder AutoPhOT points), SLT clear frames without template
+subtraction: g' 0.74 -> 0.86, r' 0.81 -> 0.92, i' 0.94 -> 1.03, z' 0.93 -> 0.95.
+Template-subtracted points stay at 0.3-0.6: the template's noise is not in the
+model, by design. AutoPhOT's aperture S/N is 0.4-0.6 of CASTOR's because its
+aperture is larger than 0.85 FWHM.
+
+Open: LOT u' (5 moonless frames, +0.38) and LOT i'/z' moonlit (14 and 3) are
+too thin to fit; SLT z' throughput reads -0.14 from 7 frames of stars but 0.0
+from the transients, below `fit`'s 5-frame / 0.15 mag bar, and is kept.
+
 ## Traps
 
 Not open questions. Recorded because each one looks like a source and is not, and

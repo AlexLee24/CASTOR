@@ -150,8 +150,10 @@ def test_a_site_fills_in_its_sky_and_location(shipped):
     assert shipped.profile("lulin").environment.extinction_coeff == 0.17  # fallback
     assert environment["extinction_coeff"] == 0.07               # r', measured
     assert shipped.profile("lulin").environment.mu_dark == 21.5
-    assert environment["mu_dark"] == 21.26                       # r', local only
+    assert environment["mu_dark"] == 21.26                       # r', local only (LOT's agrees)
     assert environment["zodiacal_share"] == 0.267                # r'
+    assert environment["moon_extinction_coeff"] == 0.17          # KS91's V, not r's 0.07
+    assert environment["moon_scale"] == 0.84                     # moonlit r' over published KS91
 
 def test_a_hardware_family_invents_no_location():
     """A profile with no environment block is a hardware family, and resolving it
@@ -291,7 +293,7 @@ def test_a_filter_without_a_measurement_leaves_the_site_values_alone(shipped):
     borrowed-telescope tests below.
     """
     fragment = shipped.resolve("lulin", optic_filter="Sloan_z")  # LOT is the default
-    assert fragment["environment"]["mu_dark"] == 18.71                 # z', measured
+    assert fragment["environment"]["mu_dark"] == 18.89                 # z' on LOT, its own sky
     assert fragment["environment"].get("zodiacal_share") is None       # never split
     assert fragment["instrument"]["telescope"]["optical_throughput"] == 0.075
 
@@ -602,4 +604,38 @@ def test_a_band_qe_must_be_a_fraction(tmp_path):
     path = tmp_path / "bad.json"
     path.write_text(json.dumps(bad))
     with pytest.raises((presets.PresetError, ValidationError)):
+        presets.load(path)
+
+
+def test_a_bands_sky_is_the_selected_telescopes(shipped):
+    """FilterEntry.sky: one band, two telescopes on one mountain, two moonless skies.
+    SLT's r' is 0.30 mag brighter than the band's, LOT's within 0.05 of it (QUESTIONS.md 21); the moon,
+    the zodiacal split and the extinction are the band's and shared."""
+    lot = shipped.resolve("lulin", "LOT", optic_filter="Sloan_r")["environment"]
+    slt = shipped.resolve("lulin", "SLT", optic_filter="Sloan_r")["environment"]
+    assert lot["mu_dark"] == 21.26 and slt["mu_dark"] == 20.96     # LOT: the band's own
+    assert lot["moon_scale"] == slt["moon_scale"] == 0.84
+    assert lot["zodiacal_share"] == slt["zodiacal_share"] == 0.267
+    assert lot["extinction_coeff"] == slt["extinction_coeff"] == 0.07
+
+
+def test_a_telescope_without_a_measured_sky_keeps_the_bands(shipped):
+    """LOT u' has too few moonless frames for a sky of its own, and SLT's agrees with the
+    band's within 0.05: both run under the band's measured u' sky."""
+    for tel in ("LOT", "SLT"):
+        env = shipped.resolve("lulin", tel, optic_filter="Sloan_u")["environment"]
+        assert env["mu_dark"] == 22.73
+        assert env["moon_scale"] == 0.5
+
+
+def test_a_family_may_not_carry_a_sky(tmp_path):
+    """A hardware family has no sky, telescope-keyed or not."""
+    doc = {"profiles": {"family": {"telescopes": {"T": {"telescope": {
+        "primary_mirror_diameter": 1.0, "secondary_mirror_diameter": 0.1, "focal_length": 8.0,
+        "optical_throughput": 0.5}}}, "filters": {"F": {"optic_filter": {
+        "central_wavelength": 600.0, "filter_bandwidth": 100.0, "filter_transmission": 0.9},
+        "sky": {"T": {"mu_dark": 21.0}}}}}}}
+    path = tmp_path / "family.json"
+    path.write_text(json.dumps(doc))
+    with pytest.raises(presets.PresetError):
         presets.load(path)

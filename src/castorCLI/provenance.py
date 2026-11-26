@@ -116,6 +116,7 @@ def walk(profiles: Mapping[str, Any]) -> dict[str, Any]:
         <profile>.median_seeing_fwhm
         <profile>.telescopes.<id>.<field>      (and cameras, filters)
         <profile>.filters.<id>.environment.<field>
+        <profile>.filters.<id>.sky.<telescope id>.<field>
         <profile>.filters.<id>.telescope.<telescope id>.<field>
         <profile>.filters.<id>.camera.<camera id>.<field>
 
@@ -147,6 +148,10 @@ def walk(profiles: Mapping[str, Any]) -> dict[str, Any]:
                     continue
                 for key, value in (entry.get("environment") or {}).items():
                     out[f"{profile_id}.{catalogue}.{entry_id}.environment.{key}"] = value
+                # sky, keyed by telescope (FilterEntry.sky): what that telescope's own frames measured
+                for tel_key, sky_value in (entry.get("sky") or {}).items():
+                    for key, value in sky_value.items():
+                        out[f"{profile_id}.{catalogue}.{entry_id}.sky.{tel_key}.{key}"] = value
                 # telescope is keyed by which telescope the override belongs to
                 # (FilterEntry.telescope in castorCLI/presets.py) — one extra
                 # level deeper than environment, which is site-wide and needs no key.
